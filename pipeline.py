@@ -20,7 +20,7 @@ import shlex
 import subprocess
 import time
 from subprocess import Popen
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import requests
 from PIL import Image
@@ -200,9 +200,29 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
     except FileNotFoundError:
         pass
     lines = []
+    # Resolve transitions directory relative to the cache directory so checks are accurate
+    cache_abs = os.path.abspath(cache)
+    transitions_abs = os.path.abspath(os.path.join(cache_abs, '..', 'transitions'))
+    # Compute the relative path from concat file location (cache) to transitions for ffmpeg concat entries
+    rel_trans_dir = os.path.relpath(transitions_abs, start=cache_abs).replace('\\', '/')
+    # Guard intro/transition/outro against missing files so ffmpeg concat doesn't fail
     if intro:
-        lines.append(f'file ../transitions/{intro}')
-    lines.append(f'file ../transitions/{transition}')
+        _intro_path = os.path.join(transitions_abs, intro)
+        if os.path.exists(_intro_path):
+            lines.append(f'file {rel_trans_dir}/{intro}')
+        else:
+            try:
+                log("{@yellow}{@bold}WARN{@reset} Missing intro clip; skipping", 2)
+            except Exception:
+                pass
+    _trans_path = os.path.join(transitions_abs, transition)
+    if os.path.exists(_trans_path):
+        lines.append(f'file {rel_trans_dir}/{transition}')
+    else:
+        try:
+            log("{@yellow}{@bold}WARN{@reset} Missing transition clip; proceeding without separators", 2)
+        except Exception:
+            pass
     total = len(compilation)
     for pos, clip in enumerate(compilation, start=1):
         clip_folder = os.path.join(cache, str(clip[0]))
@@ -212,9 +232,17 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
         log(f"{{@green}}Downloading clip {{@white}}({pos}{{@reset}}/{{@white}}{total}{{@reset}}){{@reset}} {{@cyan}}{clip[5]}", 1)
         if download_clip(clip) != 1 and process_clip(clip) != 1:
             lines.append(f'file {clip[0]}/{clip[0]}.mp4')
-            lines.append(f'file ../transitions/{transition}')
+            if os.path.exists(_trans_path):
+                lines.append(f'file ../transitions/{transition}')
     if outro:
-        lines.append(f'file ../transitions/{outro}')
+        _outro_path = os.path.join(transitions_abs, outro)
+        if os.path.exists(_outro_path):
+            lines.append(f'file {rel_trans_dir}/{outro}')
+        else:
+            try:
+                log("{@yellow}{@bold}WARN{@reset} Missing outro clip; skipping", 2)
+            except Exception:
+                pass
     with open(path, 'w') as f:
         f.write('\n'.join(lines) + '\n')
 
@@ -225,14 +253,17 @@ def stage_one(compilations: List[List[ClipRow]]):
         write_concat_file(idx, comp)
 
 
-def stage_two(compilations: List[List[ClipRow]]):
+def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]] = None):
     for idx, _ in enumerate(compilations):
         # Compute the expected output filename for logging
         date_str = time.strftime('%d_%m_%y')
         out_tmpl = '{cache}/complete_{date}_{idx}.{ext}'.replace('{idx}', str(idx)).replace('{date}', date_str)
         out_path = replace_vars(out_tmpl, (str(idx), 0, '', '', 0, ''))
         out_name = os.path.basename(out_path)
-        log(f"{{@green}}Compiling{{@reset}} {{@white}}{out_name}", 1)
+        if final_names and idx < len(final_names):
+            log(f"{{@green}}Compiling{{@reset}} {{@white}}{out_name}{{@reset}} -> {{@white}}{final_names[idx]}", 1)
+        else:
+            log(f"{{@green}}Compiling{{@reset}} {{@white}}{out_name}", 1)
         # Prepare template with index/date and run through replace_vars to fill all tokens
         tmpl = (ffmpegBuildSegments
             .replace('{idx}', str(idx))

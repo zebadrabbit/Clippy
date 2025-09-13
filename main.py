@@ -193,7 +193,7 @@ def _sanitize_filename(s: str) -> str:
     return re.sub(r'[^A-Za-z0-9._-]+', '_', s)[:80]
 
 
-def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str]], compilation_count: int, keep_cache: bool):
+def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str]], compilation_count: int, keep_cache: bool) -> List[str]:
     """Move compiled files from cache to output with improved naming then optionally clean cache."""
     from utils import log  # local import to avoid circular
     log("{@green}Finalizing outputs", 1)
@@ -212,28 +212,45 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
             date_range = f"{s_part}_to_{e_part}"
         else:
             date_range = datetime.utcnow().strftime('%Y-%m-%d')
-        moved = 0
-        # identify compiled files
-        for fname in sorted(os.listdir(cache)):
-            if not fname.startswith('complete_') or not fname.endswith('.mp4'):
-                continue
-            src = os.path.join(cache, fname)
-            part_index = moved + 1
+        # Build final names in index order
+        try:
+            from config import container_ext as _ext
+        except Exception:
+            _ext = 'mp4'
+        final_names: List[str] = []
+        for i in range(compilation_count):
             if compilation_count == 1:
-                new_name = f"{b_name}_{date_range}_compilation.mp4"
+                final_names.append(f"{b_name}_{date_range}_compilation.{_ext}")
             else:
-                new_name = f"{b_name}_{date_range}_part{part_index}.mp4"
-            dest = os.path.join(output, new_name)
-            shutil.move(src, dest)
-            moved += 1
+                final_names.append(f"{b_name}_{date_range}_part{i+1}.{_ext}")
+
+        moved = 0
+        # Move cache outputs to output dir with final names using their index
+        for i in range(compilation_count):
+            # cache file pattern produced by ffmpegBuildSegments
+            # It uses: {cache}/complete_{date}_{idx}.{ext}
+            # Recreate the expected cache filename for idx i
+            date_str = time.strftime('%d_%m_%y')
+            cache_name = f"complete_{date_str}_{i}.{_ext}"
+            src = os.path.join(cache, cache_name)
+            if not os.path.exists(src):
+                # If file wasn't found (e.g., different date formatting), fallback: scan for matching idx
+                for fname in os.listdir(cache):
+                    if fname.startswith(f"complete_") and fname.endswith(f"_{i}.{_ext}"):
+                        src = os.path.join(cache, fname)
+                        break
+            if os.path.exists(src):
+                dest = os.path.join(output, final_names[i])
+                shutil.move(src, dest)
+                moved += 1
         log("{@blue}Moved {@white}" + str(moved) + "{@blue} file(s) to {@cyan}output", 2)
     except Exception as e:  # pragma: no cover
         log("{@redbright}{@bold}Finalize failed:{@reset} {@white}" + str(e), 5)
-        return
+        return []
 
     if keep_cache:
         log('{@green}Cache retained{@reset} ({@cyan}--keep-cache set{@reset})', 0)
-        return
+    return final_names
 
     # clean cache except leave directory itself
     log('{@green}Cleaning cache', 1)
@@ -250,6 +267,7 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
         log('{@blue}Cache cleaned', 2)
     except Exception as e:  # pragma: no cover
         log("{@redbright}{@bold}Cache cleanup failed:{@reset} {@white}" + str(e), 5)
+    return final_names
 
 
 def _load_env_if_present():
@@ -456,7 +474,41 @@ def main():  # noqa: C901
             log("  {@green}Keep cache{@reset}: {@white}" + ("true" if args.keep_cache else "false"), 1)
             log("  {@green}Overlay{@reset}: {@white}" + ("enabled" if enable_overlay else "disabled"), 1)
             log("  {@green}Rebuild{@reset}: {@white}" + ("true" if rebuild else "false"), 1)
-            ans = input("Proceed? [Y/n]: ").strip().lower()
+            # Verify intro/outro presence if configured (empty disables)
+            try:
+                from config import intro as _cfg_intro, outro as _cfg_outro  # type: ignore
+            except Exception:
+                _cfg_intro, _cfg_outro = intro, outro
+            import os as _os
+            _warnings: list[str] = []
+            _t_dir = _os.path.join('.', 'transitions')
+            if _cfg_intro:
+                if not _os.path.exists(_os.path.join(_t_dir, _cfg_intro)):
+                    _warnings.append(f"Intro file missing: transitions/{_cfg_intro}")
+            if _cfg_outro:
+                if not _os.path.exists(_os.path.join(_t_dir, _cfg_outro)):
+                    _warnings.append(f"Outro file missing: transitions/{_cfg_outro}")
+            if _warnings:
+                for w in _warnings:
+                    log("{@yellow}{@bold}WARN{@reset} " + w, 1)
+                log("{@cyan}You can continue without intro/outro or place the files and rerun.", 1)
+                ans = input("Proceed anyway? [y/N]: ").strip().lower()
+                if ans in ("n", "no", ""):
+                    raise SystemExit("Aborted by user (missing intro/outro)")
+                # User chose to proceed: disable whichever are missing so pipeline will skip them
+                try:
+                    if _cfg_intro and not _os.path.exists(_os.path.join(_t_dir, _cfg_intro)):
+                        log("{@cyan}Proceeding without intro clip (will be skipped)", 1)
+                        intro = ''
+                        pipeline_mod.intro = ''
+                    if _cfg_outro and not _os.path.exists(_os.path.join(_t_dir, _cfg_outro)):
+                        log("{@cyan}Proceeding without outro clip (will be skipped)", 1)
+                        outro = ''
+                        pipeline_mod.outro = ''
+                except Exception:
+                    pass
+            else:
+                ans = input("Proceed? [Y/n]: ").strip().lower()
             if ans in ("n", "no"):
                 raise SystemExit("Aborted by user")
         except EOFError:
@@ -582,7 +634,30 @@ def main():  # noqa: C901
     log("{@blue}Stage 1{@reset} {@green}(processing clips)", 1)
     stage_one(comps)
     log("{@blue}Stage 2{@reset} {@green}(concatenate)", 1)
-    stage_two(comps)
+    # Build the final filenames for display during compilation
+    b_name = _sanitize_filename(args.broadcaster.lower()) or 'broadcaster'
+    start_iso, end_iso = window
+    def _date_part(iso_str: Optional[str]) -> Optional[str]:
+        if not iso_str:
+            return None
+        return iso_str.split('T', 1)[0]
+    if start_iso or end_iso:
+        s_part = _date_part(start_iso) or 'unknown'
+        e_part = _date_part(end_iso) or s_part
+        date_range = f"{s_part}_to_{e_part}"
+    else:
+        date_range = datetime.utcnow().strftime('%Y-%m-%d')
+    try:
+        from config import container_ext as _ext
+    except Exception:
+        _ext = 'mp4'
+    final_names = []
+    for i in range(len(comps)):
+        if len(comps) == 1:
+            final_names.append(f"{b_name}_{date_range}_compilation.{_ext}")
+        else:
+            final_names.append(f"{b_name}_{date_range}_part{i+1}.{_ext}")
+    stage_two(comps, final_names)
     finalize_outputs(args.broadcaster, window, len(comps), args.keep_cache)
     log("{@green}Done", 2)
 
