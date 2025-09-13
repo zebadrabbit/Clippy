@@ -36,6 +36,7 @@ Thumbs.db
 # Cache + build outputs
 /cache/
 /output/
+/build/
 
 # Generated media artifacts (keep transitions originals tracked separately if desired)
 *.mp4
@@ -57,10 +58,6 @@ Thumbs.db
 
 # FFMPEG two-pass logs
 ffmpeg2pass*.log
-
-# Optional: ignore config with secrets (recommend sanitizing instead of ignoring after first commit)
-# config.py
-# If you move secrets out of config.py into .env, you can un-comment the above line.
 
 # Windows specific
 *.exe
