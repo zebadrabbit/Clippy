@@ -1,7 +1,7 @@
 from config import *  # noqa: F401,F403
 
 from yachalk import chalk
-import re, os, sys, subprocess
+import re, os, sys, subprocess, shutil
 
 # Simple opt-in color/style tags using '{@tag}', e.g.
 # "{@blue}this is blue {@green}now green {@reset}back to default".
@@ -181,10 +181,16 @@ def replace_vars(s, m):
 # clean up the cache folders and get ready to do some work
 def prep_work():
     # make our workspace
+    def _display_path(p: str) -> str:
+        # Normalize slashes for the host OS in logs only
+        if os.name == 'nt':
+            return p.replace('/', '\\')
+        return p
+
     def _ensure_dir(path: str, label: str):
         try:
             if not os.path.exists(path):
-                log(f'creating new {label} directory at {path}', 1)
+                log(f"{{@green}}creating new{{@reset}} {{@white}}{label}{{@reset}} {{@green}}directory at{{@reset}} {{@cyan}}" + _display_path(path), 1)
                 os.makedirs(path, exist_ok=True)
         except Exception as e:
             log("{@redbright}{@bold}Failed to create " + str(label) + " dir:{@reset} {@white}" + str(e), 5)
@@ -230,18 +236,37 @@ def prep_work():
         "The pipeline references these by relative path from the cache directory.\n"
     ))
 
-    # Ensure a default static.mp4 exists as a starting point
+    # Ensure we use the real transitions/static.mp4 if available; only create a placeholder as a last resort
     try:
-        static_path = os.path.join(transitions_dir, 'static.mp4')
+        static_name = 'static.mp4'
+        static_path = os.path.join(transitions_dir, static_name)
+        # Candidate source transitions directory (prefer next to executable when frozen; else repo path)
+        try:
+            if getattr(sys, 'frozen', False):
+                src_transitions = os.path.join(os.path.dirname(sys.executable), 'transitions')
+            else:
+                src_transitions = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'transitions')
+        except Exception:
+            src_transitions = None
+
+        # If a real static.mp4 exists at the source and it's different or missing at destination, copy it
+        if src_transitions:
+            src_static = os.path.join(src_transitions, static_name)
+            if os.path.exists(src_static) and not os.path.exists(static_path):
+                try:
+                    shutil.copy2(src_static, static_path)
+                    log('{@blue}Copied transitions/static.mp4 from source', 2)
+                except Exception as _e:
+                    log("{@yellow}{@bold}WARN{@reset} Could not copy transitions/static.mp4 from source: {@white}" + str(_e), 2)
+
+        # If still missing, create a tiny placeholder
         if not os.path.exists(static_path):
             log('{@green}Creating default transitions/static.mp4 placeholder', 1)
-            # Use a tiny 1-second black frame clip; prefer libx264 for compatibility
             cmd = (
                 ffmpeg + ' -y -f lavfi -i "color=c=black:s=' + str(resolution) + ':r=' + str(fps) + ':d=1" '
                 '-c:v libx264 -pix_fmt yuv420p -movflags +faststart "' + static_path + '"'
             )
             try:
-                # Run quietly; errors will be logged below if creation fails
                 subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
             except Exception:
                 pass
