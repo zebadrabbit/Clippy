@@ -4,8 +4,8 @@
 a = Analysis(
     ['..\\main.py'],
     pathex=[],
-    binaries=[('..\\ffmpeg.exe', '.'), ('.\\yt-dlp.exe', '.')],
-    datas=[('..\\transitions', 'transitions'), ('..\\Roboto-Medium.ttf', '.')],
+    binaries=[('..\\bin\\ffmpeg.exe', '.'), ('.\\\\bin\\\\yt-dlp.exe', '.')],
+    datas=[('..\\\\transitions', 'transitions'), ('..\\\\assets\\\\fonts', 'assets/fonts')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

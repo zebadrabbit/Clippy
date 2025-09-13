@@ -236,43 +236,10 @@ def prep_work():
         "The pipeline references these by relative path from the cache directory.\n"
     ))
 
-    # Ensure we use the real transitions/static.mp4 if available; only create a placeholder as a last resort
+    # Require transitions/static.mp4 to be present; do not auto-create or copy
     try:
-        static_name = 'static.mp4'
-        static_path = os.path.join(transitions_dir, static_name)
-        # Candidate source transitions directory (prefer next to executable when frozen; else repo path)
-        try:
-            if getattr(sys, 'frozen', False):
-                src_transitions = os.path.join(os.path.dirname(sys.executable), 'transitions')
-            else:
-                src_transitions = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'transitions')
-        except Exception:
-            src_transitions = None
-
-        # If a real static.mp4 exists at the source and it's different or missing at destination, copy it
-        if src_transitions:
-            src_static = os.path.join(src_transitions, static_name)
-            if os.path.exists(src_static) and not os.path.exists(static_path):
-                try:
-                    shutil.copy2(src_static, static_path)
-                    log('{@blue}Copied transitions/static.mp4 from source', 2)
-                except Exception as _e:
-                    log("{@yellow}{@bold}WARN{@reset} Could not copy transitions/static.mp4 from source: {@white}" + str(_e), 2)
-
-        # If still missing, create a tiny placeholder
+        static_path = os.path.join(transitions_dir, 'static.mp4')
         if not os.path.exists(static_path):
-            log('{@green}Creating default transitions/static.mp4 placeholder', 1)
-            cmd = (
-                ffmpeg + ' -y -f lavfi -i "color=c=black:s=' + str(resolution) + ':r=' + str(fps) + ':d=1" '
-                '-c:v libx264 -pix_fmt yuv420p -movflags +faststart "' + static_path + '"'
-            )
-            try:
-                subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
-            except Exception:
-                pass
-            if os.path.exists(static_path):
-                log('{@blue}Created placeholder static.mp4', 2)
-            else:
-                log('{@redbright}{@bold}Could not create placeholder static.mp4. Ensure ffmpeg is available.', 5)
+            log('{@yellow}{@bold}WARN{@reset} transitions/static.mp4 not found. Place your transition clip in the transitions folder.', 1)
     except Exception as e:
-        log("{@redbright}{@bold}Static placeholder creation error:{@reset} {@white}" + str(e), 5)
+        log("{@redbright}{@bold}Static file check error:{@reset} {@white}" + str(e), 5)
