@@ -26,7 +26,7 @@ import requests
 from PIL import Image
 
 from config import *  # noqa: F401,F403
-from utils import log, replace_vars
+from utils import log, replace_vars, resolve_transitions_dir
 
 ClipRow = Tuple[str, float, str, str, int, str]  # (id, created_ts, author, avatar_url, views, url)
 
@@ -200,9 +200,9 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
     except FileNotFoundError:
         pass
     lines = []
-    # Resolve transitions directory relative to the cache directory so checks are accurate
+    # Resolve transitions directory dynamically and reference it relative to cache for ffmpeg concat
     cache_abs = os.path.abspath(cache)
-    transitions_abs = os.path.abspath(os.path.join(cache_abs, '..', 'transitions'))
+    transitions_abs = os.path.abspath(resolve_transitions_dir())
     # Compute the relative path from concat file location (cache) to transitions for ffmpeg concat entries
     rel_trans_dir = os.path.relpath(transitions_abs, start=cache_abs).replace('\\', '/')
     # Guard intro/transition/outro against missing files so ffmpeg concat doesn't fail

@@ -178,6 +178,64 @@ def replace_vars(s, m):
         pass
     return s
 
+def resolve_transitions_dir() -> str:
+    """Resolve the absolute transitions directory.
+
+    Order of preference:
+    - TRANSITIONS_DIR env var (absolute or relative to CWD)
+    - config.transitions_dir if defined
+    - Next to the executable when frozen: <exe>/transitions, <exe>/_internal/transitions
+    - Project source locations: <repo>/transitions, <repo>/_internal/transitions
+    - Working directory variants: ./transitions, ./_internal/transitions
+    Returns an absolute path; if none exist, returns ./transitions (absolute) as default.
+    """
+    candidates: list[str] = []
+    # Env
+    env_dir = os.getenv('TRANSITIONS_DIR')
+    if env_dir:
+        candidates.append(os.path.abspath(env_dir))
+    # Config-specified dir (optional)
+    try:
+        import config as _cfg  # type: ignore
+        cfg_dir = getattr(_cfg, 'transitions_dir', None)
+        if cfg_dir:
+            candidates.append(os.path.abspath(str(cfg_dir)))
+    except Exception:
+        pass
+    # Frozen bundle locations
+    try:
+        if getattr(sys, 'frozen', False):
+            exe_dir = os.path.dirname(sys.executable)
+            candidates.append(os.path.join(exe_dir, 'transitions'))
+            candidates.append(os.path.join(exe_dir, '_internal', 'transitions'))
+    except Exception:
+        pass
+    # Source tree locations
+    try:
+        repo_dir = os.path.dirname(os.path.abspath(__file__))
+        candidates.append(os.path.join(repo_dir, 'transitions'))
+        candidates.append(os.path.join(repo_dir, '_internal', 'transitions'))
+    except Exception:
+        pass
+    # Working dir variants
+    try:
+        cwd = os.getcwd()
+        candidates.append(os.path.join(cwd, 'transitions'))
+        candidates.append(os.path.join(cwd, '_internal', 'transitions'))
+    except Exception:
+        pass
+    for p in candidates:
+        try:
+            if p and os.path.isdir(p):
+                return os.path.abspath(p)
+        except Exception:
+            continue
+    # Fallback to ./transitions absolute
+    try:
+        return os.path.abspath(os.path.join(os.getcwd(), 'transitions'))
+    except Exception:
+        return os.path.abspath('transitions')
+
 # clean up the cache folders and get ready to do some work
 def prep_work():
     # make our workspace
@@ -223,9 +281,10 @@ def prep_work():
         "- Share or upload these files; contents here are not required for future runs.\n"
     ))
 
-    # transitions dir (sibling of working dir)
-    transitions_dir = os.path.join('.', 'transitions')
-    _ensure_dir(transitions_dir, 'transitions')
+    # transitions dir (resolved dynamically)
+    transitions_dir = resolve_transitions_dir()
+    if not os.path.exists(transitions_dir):
+        _ensure_dir(transitions_dir, 'transitions')
     _ensure_readme(transitions_dir, (
         "# transitions\n\n"
         "Place transition and bumper videos used between clips.\n\n"
