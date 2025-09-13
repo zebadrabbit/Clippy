@@ -1,0 +1,33 @@
+name: Build portable Windows zip
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '**/*.py'
+      - 'build/build.ps1'
+      - 'requirements.txt'
+      - '.github/workflows/build-portable.yml'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build portable
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+          cd build
+          ./build.ps1 -Clean
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Clippy-portable
+          path: build/Clippy-portable.zip

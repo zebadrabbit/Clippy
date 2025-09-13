@@ -1,0 +1,4 @@
+requests>=2.31.0
+Pillow>=10.0.0
+yachalk>=0.1.5
+yt-dlp>=2024.3.10

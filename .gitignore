@@ -1,0 +1,67 @@
+# --- Python cache / artifacts ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual envs
+.env*/
+.venv/
+venv/
+ENV/
+
+# Editors / IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs / temp
+*.log
+*.tmp
+
+# --- Project specific ---
+# Local environment secrets
+.env
+
+# SQLite / local databases
+/db/*.db
+/db/*.sqlite
+/db/*.sqlite3
+
+# Cache + build outputs
+/cache/
+/output/
+
+# Generated media artifacts (keep transitions originals tracked separately if desired)
+*.mp4
+*.mkv
+*.webm
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# If you keep original transition assets under version control, explicitly negate them here:
+# !/transitions/intro_original.mp4
+# !/transitions/outro_original.mp4
+# !/transitions/static_original.mp4
+
+# youtube-dl / yt-dlp download fragments
+*.part
+*.ytdl
+
+# FFMPEG two-pass logs
+ffmpeg2pass*.log
+
+# Optional: ignore config with secrets (recommend sanitizing instead of ignoring after first commit)
+# config.py
+# If you move secrets out of config.py into .env, you can un-comment the above line.
+
+# Windows specific
+*.exe
+# Comment the above line if you actually want ffmpeg.exe & youtube-dl.exe committed.
