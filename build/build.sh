@@ -56,7 +56,10 @@ pyinstaller --noconfirm --clean --onedir --name Clippy \
   --add-binary "$YTDLP_BIN:."
 
 # Build a companion HealthCheck binary
-pyinstaller --noconfirm --clean --onefile --name HealthCheck ../scripts/health_check.py
+pyinstaller --noconfirm --clean --onefile --name HealthCheck \
+  --paths .. \
+  --hidden-import config \
+  ../scripts/health_check.py
 cp -f ./dist/HealthCheck ./dist/Clippy/ || true
 
 # Add helper files

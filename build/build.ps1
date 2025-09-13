@@ -57,9 +57,12 @@ pyinstaller --noconfirm --clean --onedir --name Clippy `
   --add-binary "..\bin\ffmpeg.exe;." `
   --add-binary ".\bin\yt-dlp.exe;."
 
-# Build a companion HealthCheck.exe
+# Build a companion HealthCheck.exe (ensure top-level config is importable)
 Write-Host '==> Building HealthCheck utility'
-pyinstaller --noconfirm --clean --onefile --name HealthCheck ..\scripts\health_check.py
+pyinstaller --noconfirm --clean --onefile --name HealthCheck `
+  --paths .. `
+  --hidden-import config `
+  ..\scripts\health_check.py
 Copy-Item .\dist\HealthCheck.exe .\dist\Clippy\ -Force
 
 # Ensure a default static.mp4 is bundled if present

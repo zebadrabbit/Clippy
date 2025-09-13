@@ -17,10 +17,16 @@ import shutil
 import subprocess
 import sys
 
-# Ensure we can import config when running from scripts/
+# Determine repository root (source) and base directory (runtime)
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+
+# When frozen, prefer the directory of the executable for locating assets
+if getattr(sys, "frozen", False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = ROOT
 
 from config import youtubeDl, ffmpeg, cache, output, fontfile  # noqa: E402
 
@@ -161,7 +167,7 @@ def check_dirs_and_assets(ffmpeg_path: str | None) -> None:
         else:
             print(f"{status_tag('WARN')} {label} dir missing (will be created on run): {paint(os.path.abspath(d), 'gray')}")
     # transitions folder and static.mp4
-    tdir = os.path.abspath(os.path.join(ROOT, "transitions"))
+    tdir = os.path.abspath(os.path.join(BASE_DIR, "transitions"))
     if os.path.isdir(tdir):
         print(f"{status_tag('OK')} transitions dir present: {paint(tdir, 'gray')}")
     else:
@@ -175,7 +181,7 @@ def check_dirs_and_assets(ffmpeg_path: str | None) -> None:
         else:
             print(f"{status_tag('WARN')} transitions/static.mp4 missing and ffmpeg not found; placeholder cannot be auto-generated")
     # font
-    font_abs = os.path.abspath(os.path.join(ROOT, fontfile)) if not os.path.isabs(fontfile) else fontfile
+    font_abs = os.path.abspath(os.path.join(BASE_DIR, fontfile)) if not os.path.isabs(fontfile) else fontfile
     if os.path.exists(font_abs):
         print(f"{status_tag('OK')} font present: {paint(font_abs, 'gray')}")
     else:
@@ -208,6 +214,7 @@ def check_twitch_creds() -> None:
     # Look for .env in common locations: CWD, repo root, and script directory
     candidates = [
         os.path.join(os.getcwd(), ".env"),
+        os.path.join(BASE_DIR, ".env"),
         os.path.join(ROOT, ".env"),
         os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), ".env"),
     ]
