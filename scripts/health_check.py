@@ -29,6 +29,7 @@ else:
     BASE_DIR = ROOT
 
 from config import youtubeDl, ffmpeg, cache, output, fontfile  # noqa: E402
+from utils import resolve_transitions_dir  # noqa: E402
 
 
 def _resolve_exe(name_or_path: str) -> str | None:
@@ -145,6 +146,9 @@ def check_ffmpeg_features(ffmpeg_path: str) -> None:
 
 
 def check_python_packages() -> None:
+    # In frozen/portable mode, Python packages inside the host env are irrelevant to the EXE
+    if getattr(sys, 'frozen', False):
+        return
     pkgs = [
         ("requests", "requests"),
         ("Pillow", "PIL"),
@@ -166,26 +170,47 @@ def check_dirs_and_assets(ffmpeg_path: str | None) -> None:
             print(f"{status_tag('OK')} {label} dir present: {paint(os.path.abspath(d), 'gray')}")
         else:
             print(f"{status_tag('WARN')} {label} dir missing (will be created on run): {paint(os.path.abspath(d), 'gray')}")
-    # transitions folder and static.mp4
-    tdir = os.path.abspath(os.path.join(BASE_DIR, "transitions"))
+    # transitions folder and static.mp4 (use resolver)
+    tdir = os.path.abspath(resolve_transitions_dir())
     if os.path.isdir(tdir):
         print(f"{status_tag('OK')} transitions dir present: {paint(tdir, 'gray')}")
     else:
-        print(f"{status_tag('WARN')} transitions dir missing (will be created on run): {paint(tdir, 'gray')}")
+        print(f"{status_tag('MISSING')} transitions dir missing: {paint(tdir, 'gray')}")
     static_path = os.path.join(tdir, "static.mp4")
     if os.path.exists(static_path):
         print(f"{status_tag('OK')} transitions/static.mp4 present")
     else:
-        if ffmpeg_path:
-            print(f"{status_tag('WARN')} transitions/static.mp4 missing; placeholder will be auto-generated on first run")
-        else:
-            print(f"{status_tag('WARN')} transitions/static.mp4 missing and ffmpeg not found; placeholder cannot be auto-generated")
+        print(f"{status_tag('MISSING')} transitions/static.mp4 missing (required)")
     # font
     font_abs = os.path.abspath(os.path.join(BASE_DIR, fontfile)) if not os.path.isabs(fontfile) else fontfile
     if os.path.exists(font_abs):
         print(f"{status_tag('OK')} font present: {paint(font_abs, 'gray')}")
     else:
-        print(f"{status_tag('WARN')} font missing: {paint(font_abs, 'gray')}")
+        # If running frozen and font is inside _internal, surface it and create dirs
+        # Look for font under various internal locations
+        internal_font_candidates = [
+            os.path.join(BASE_DIR, '_internal', os.path.basename(fontfile)),
+            os.path.join(BASE_DIR, '_internal', 'assets', 'fonts', os.path.basename(fontfile)),
+        ]
+        assets_dir = os.path.join(BASE_DIR, os.path.dirname(fontfile)) if not os.path.isabs(fontfile) else os.path.dirname(fontfile)
+        try:
+            os.makedirs(assets_dir, exist_ok=True)
+        except Exception:
+            pass
+        restored = False
+        for cand in internal_font_candidates:
+            if os.path.exists(cand):
+                try:
+                    target = font_abs
+                    with open(cand, 'rb') as src, open(target, 'wb') as dst:
+                        dst.write(src.read())
+                    print(f"{status_tag('OK')} font restored to: {paint(target, 'gray')}")
+                    restored = True
+                    break
+                except Exception:
+                    pass
+        if not restored:
+            print(f"{status_tag('WARN')} font missing: {paint(font_abs, 'gray')}")
 
 
 def _parse_env_file(path: str) -> dict[str, str]:

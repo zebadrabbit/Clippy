@@ -100,6 +100,7 @@ def parse_args():
     p.add_argument("--intro", type=str, help="Intro clip filename in transitions dir (e.g., intro.mp4 or empty to disable)")
     p.add_argument("--outro", type=str, help="Outro clip filename in transitions dir (e.g., outro.mp4 or empty to disable)")
     p.add_argument("--transition", type=str, help="Transition clip between items (default static.mp4)")
+    p.add_argument("--transitions-dir", dest="transitions_dir", type=str, help="Path to transitions directory (overrides env and defaults)")
     p.add_argument("--no-overlay", action="store_true", help="Disable overlay stage for speed")
     p.add_argument("--rebuild", action="store_true", help="Force rebuild even if intermediate files exist")
     p.add_argument("--yt-format", dest="yt_format", type=str, help="yt-dlp --format string override")
@@ -323,6 +324,34 @@ def ensure_twitch_credentials_if_needed():
         raise SystemExit(2)
 
 
+def ensure_transitions_static_present(transitions_dir: Optional[str] = None):
+    """Resolve transitions directory and require static.mp4 to exist; exit with a helpful error if missing."""
+    try:
+        from utils import resolve_transitions_dir  # type: ignore
+    except Exception:
+        def resolve_transitions_dir():
+            import os
+            return os.path.abspath(os.path.join(os.getcwd(), 'transitions'))
+    # Allow override via CLI-provided transitions_dir
+    if transitions_dir:
+        os.environ['TRANSITIONS_DIR'] = transitions_dir
+    tdir = resolve_transitions_dir()
+    static_path = os.path.join(tdir, 'static.mp4')
+    try:
+        from utils import log as _log  # type: ignore
+    except Exception:
+        def _log(msg, level=0):
+            print(msg)
+    if not os.path.isdir(tdir):
+        _log("{@redbright}{@bold}Transitions directory missing:{@reset} {@white}" + tdir, 5)
+        _log("Place your clips (intro.mp4, static.mp4, outro.mp4) in this folder or provide --transitions-dir.", 1)
+        raise SystemExit(2)
+    if not os.path.exists(static_path):
+        _log("{@redbright}{@bold}Missing required file:{@reset} {@white}static.mp4 {@reset}in {@white}" + tdir, 5)
+        _log("This project requires transitions/static.mp4. Set TRANSITIONS_DIR, use --transitions-dir, or place the file.", 1)
+        raise SystemExit(2)
+
+
 def main():  # noqa: C901
     global amountOfClips, amountOfCompilations, reactionThreshold
     global bitrate, resolution, container_ext, container_flags
@@ -393,6 +422,15 @@ def main():  # noqa: C901
         outro = args.outro or ''
     if args.transition is not None:
         transition = args.transition or transition
+    if args.transitions_dir:
+        # Make resolver see the override
+        os.environ['TRANSITIONS_DIR'] = args.transitions_dir
+        try:
+            from utils import log as _log
+            _log("{@green}Transitions directory override:{@reset} {@cyan}" + os.path.abspath(args.transitions_dir), 1)
+        except Exception:
+            pass
+
     if args.no_overlay:
         enable_overlay = False
     if args.rebuild:
@@ -446,6 +484,9 @@ def main():  # noqa: C901
                 _cfg.youtubeDlOptions = _cfg.youtubeDlOptions.replace("{yt_format}", _cfg.yt_format)
         except Exception:
             pass
+    # Fail fast if required transition is missing
+    ensure_transitions_static_present(getattr(args, 'transitions_dir', None))
+
     # Interactive confirmation (default). Use -y/--yes to skip.
     if not getattr(args, "yes", False):
         try:
