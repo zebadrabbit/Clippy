@@ -36,7 +36,6 @@ Thumbs.db
 # Cache + build outputs
 /cache/
 /output/
-/build/
 
 # Generated media artifacts (keep transitions originals tracked separately if desired)
 *.mp4
