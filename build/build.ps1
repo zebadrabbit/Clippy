@@ -1,5 +1,6 @@
 Param(
-    [switch]$Clean
+  [switch]$Clean,
+  [switch]$FetchFFmpeg
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,6 +31,35 @@ if (-not (Test-Path .\bin\yt-dlp.exe)) {
   Invoke-WebRequest -Uri $ydl -OutFile .\bin\yt-dlp.exe
 }
 
+# Fetch ffmpeg.exe for bundling (used by runtime and placeholder generation)
+function Get-PortableFFmpeg {
+  param([string]$OutPath)
+  $url = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
+  $tmp = Join-Path $env:TEMP ("ffmpeg_dl_" + (Get-Random))
+  New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+  Write-Host "==> Downloading ffmpeg from $url"
+  $zip = Join-Path $tmp 'ffmpeg.zip'
+  Invoke-WebRequest -Uri $url -OutFile $zip
+  Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $tmp 'unz') -Force
+  $ff = Get-ChildItem -Recurse -Filter ffmpeg.exe -Path (Join-Path $tmp 'unz') | Select-Object -First 1
+  if (-not $ff) { throw 'Could not locate ffmpeg.exe in archive.' }
+  Copy-Item $ff.FullName $OutPath -Force
+  # Try to capture a license text file alongside
+  $lic = Get-ChildItem -Recurse -Path (Join-Path $tmp 'unz') -Include 'LICENSE*.txt','COPYING*.txt' | Select-Object -First 1
+  if ($lic) { Copy-Item $lic.FullName (Join-Path (Split-Path -Parent $OutPath) 'ffmpeg-LICENSE.txt') -Force }
+  Write-Host "==> ffmpeg.exe fetched to $OutPath"
+}
+
+# Always ensure ffmpeg.exe is present; download if missing
+if (-not (Test-Path .\bin\ffmpeg.exe)) {
+  try {
+    $out = Join-Path (Resolve-Path .\bin).Path 'ffmpeg.exe'
+    Get-PortableFFmpeg -OutPath $out
+  } catch {
+    Write-Warning "ffmpeg.exe missing and could not be downloaded: $_"
+  }
+}
+
 # Back-compat: if repo has root-level ffmpeg.exe/yt-dlp.exe/Roboto-Medium.ttf, stage them into new layout
 if (Test-Path ..\ffmpeg.exe) {
   Copy-Item ..\ffmpeg.exe .\bin\ffmpeg.exe -Force
@@ -49,20 +79,64 @@ if ($Clean) {
   Remove-Item -Force .\Clippy-portable.zip -ErrorAction SilentlyContinue
 }
 
+Write-Host '==> Preparing assets (transitions/static.mp4)'
+# Ensure transitions/static.mp4 exists before bundling
+New-Item -ItemType Directory -Force -Path ..\transitions | Out-Null
+$tDir = (Resolve-Path ..\transitions).Path
+$staticPath = Join-Path $tDir 'static.mp4'
+if (-not (Test-Path $staticPath)) {
+  # Try to find ffmpeg for placeholder generation
+  $ff = $null
+  if (Test-Path ..\bin\ffmpeg.exe) { $ff = (Resolve-Path ..\bin\ffmpeg.exe).Path }
+  elseif (Test-Path .\bin\ffmpeg.exe) { $ff = (Resolve-Path .\bin\ffmpeg.exe).Path }
+  else {
+    try { $ffCmd = Get-Command ffmpeg -ErrorAction Stop; $ff = $ffCmd.Source } catch { $ff = $null }
+  }
+  if ($ff) {
+    Write-Host '==> Creating default transitions/static.mp4 placeholder (1s 1080p black)'
+    & "$ff" -y -f lavfi -i color=black:s=1920x1080:d=1 -c:v libx264 -pix_fmt yuv420p "$staticPath" | Out-Null
+  } else {
+    Write-Warning 'ffmpeg not available during build; static.mp4 will be generated at runtime if possible.'
+  }
+}
+
 Write-Host '==> Building portable folder with PyInstaller'
-pyinstaller --noconfirm --clean --onedir --name Clippy `
-  ..\main.py `
-  --add-data "..\transitions;transitions" `
-  --add-data "..\assets\fonts;assets/fonts" `
-  --add-binary "..\bin\ffmpeg.exe;." `
-  --add-binary ".\bin\yt-dlp.exe;."
+# Select ffmpeg/yt-dlp binary paths to bundle (support repo bin/ and build/bin/)
+$ffmpegRepo = Join-Path .. 'bin/ffmpeg.exe'
+$ffmpegBuild = '.\\bin\\ffmpeg.exe'
+$ytDlpRepo = Join-Path .. 'bin/yt-dlp.exe'
+$ytDlpBuild = '.\\bin\\yt-dlp.exe'
+
+$pyArgs = @(
+  '--noconfirm','--clean','--onedir','--name','Clippy',
+  '..\\main.py',
+  '--add-data','..\\transitions;transitions',
+  '--add-data','..\\assets\\fonts;assets/fonts'
+)
+if (Test-Path $ffmpegBuild) { $pyArgs += @('--add-binary', "${ffmpegBuild};.") }
+elseif (Test-Path $ffmpegRepo) { $pyArgs += @('--add-binary', "${ffmpegRepo};.") }
+else { Write-Host '(!) ffmpeg.exe not found in ..\bin or .\bin; runtime will try PATH' -ForegroundColor Yellow }
+
+if (Test-Path $ytDlpBuild) { $pyArgs += @('--add-binary', "${ytDlpBuild};.") }
+elseif (Test-Path $ytDlpRepo) { $pyArgs += @('--add-binary', "${ytDlpRepo};.") }
+else { Write-Host '(!) yt-dlp.exe not found in .\bin or ..\bin; runtime will try PATH' -ForegroundColor Yellow }
+
+& pyinstaller @pyArgs
 
 # Build a companion HealthCheck.exe (ensure top-level config is importable)
 Write-Host '==> Building HealthCheck utility'
-pyinstaller --noconfirm --clean --onefile --name HealthCheck `
-  --paths .. `
-  --hidden-import config `
-  ..\scripts\health_check.py
+$hcArgs = @(
+  '--noconfirm','--clean','--onefile','--name','HealthCheck',
+  '--paths','..',
+  '--hidden-import','config',
+  '..\\scripts\\health_check.py'
+)
+& pyinstaller @hcArgs
+
+# Ensure destination exists before copying HealthCheck
+if (-not (Test-Path .\dist\Clippy)) {
+  New-Item -ItemType Directory -Force -Path .\dist\Clippy | Out-Null
+}
 Copy-Item .\dist\HealthCheck.exe .\dist\Clippy\ -Force
 
 # Ensure a default static.mp4 is bundled if present
@@ -74,6 +148,26 @@ if (Test-Path ..\transitions\static.mp4) {
 
 Write-Host '==> Adding helper files to dist'
 New-Item -ItemType Directory -Force -Path dist\Clippy | Out-Null
+# If we fetched/copied a license text for ffmpeg, surface it in dist
+if (Test-Path .\bin\ffmpeg-LICENSE.txt) {
+  Copy-Item .\bin\ffmpeg-LICENSE.txt dist\Clippy\ -Force
+}
+# Ensure assets/fonts exists in portable and copy bundled font if present
+New-Item -ItemType Directory -Force -Path dist\Clippy\assets\fonts | Out-Null
+# Try common internal data locations for the font
+if (Test-Path .\dist\Clippy\_internal\Roboto-Medium.ttf) {
+  Copy-Item .\dist\Clippy\_internal\Roboto-Medium.ttf dist\Clippy\assets\fonts\Roboto-Medium.ttf -Force
+} elseif (Test-Path .\dist\Clippy\_internal\assets\fonts\Roboto-Medium.ttf) {
+  Copy-Item .\dist\Clippy\_internal\assets\fonts\Roboto-Medium.ttf dist\Clippy\assets\fonts\Roboto-Medium.ttf -Force
+}
+
+# Ensure ffmpeg.exe and yt-dlp.exe are at app root; some PyInstaller versions place them under _internal
+if ((-not (Test-Path .\dist\Clippy\ffmpeg.exe)) -and (Test-Path .\dist\Clippy\_internal\ffmpeg.exe)) {
+  Copy-Item .\dist\Clippy\_internal\ffmpeg.exe .\dist\Clippy\ffmpeg.exe -Force
+}
+if ((-not (Test-Path .\dist\Clippy\yt-dlp.exe)) -and (Test-Path .\dist\Clippy\_internal\yt-dlp.exe)) {
+  Copy-Item .\dist\Clippy\_internal\yt-dlp.exe .\dist\Clippy\yt-dlp.exe -Force
+}
 if (Test-Path ..\README.md) {
   Copy-Item ..\README.md dist\Clippy\ -Force
 } else {
@@ -109,6 +203,7 @@ setlocal
 "%~dp0HealthCheck.exe"
 endlocal
 '@ | Out-File -Encoding ascii dist\Clippy\Start-HealthCheck.bat
+
 Write-Host '==> Creating zip archive Clippy-portable.zip'
 if (Test-Path .\Clippy-portable.zip) { Remove-Item .\Clippy-portable.zip -Force }
 Compress-Archive -Path .\dist\Clippy\* -DestinationPath .\Clippy-portable.zip
