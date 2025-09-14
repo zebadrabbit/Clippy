@@ -121,11 +121,11 @@ def _print_header():
 
 
 def _prompt_str(label: str, default: Optional[str] = None, secret: bool = False) -> str:
-    d = f" [{default}]" if default not in (None, "") else ""
+    d = f"{default}" if default not in (None, "") else ""
     while True:
         prompt = THEME.label(label)
         if d:
-            prompt += THEME.default(d)
+            prompt += THEME.sep(" [") + THEME.default(d) + THEME.sep("]")
         prompt += THEME.sep(": ")
         val = input(prompt).strip()
         if not val and default is not None:
@@ -137,7 +137,7 @@ def _prompt_str(label: str, default: Optional[str] = None, secret: bool = False)
 
 def _prompt_int(label: str, default: int, min_v: Optional[int] = None, max_v: Optional[int] = None) -> int:
     while True:
-        prompt = THEME.label(label) + THEME.default(f" [{default}]") + THEME.sep(": ")
+        prompt = THEME.label(label) + THEME.sep(" [") + THEME.default(str(default)) + THEME.sep("]: ")
         s = input(prompt).strip()
         if not s:
             return int(default)
@@ -156,7 +156,7 @@ def _prompt_int(label: str, default: int, min_v: Optional[int] = None, max_v: Op
 
 def _prompt_float(label: str, default: float, min_v: Optional[float] = None, max_v: Optional[float] = None) -> float:
     while True:
-        prompt = THEME.label(label) + THEME.default(f" [{default}]") + THEME.sep(": ")
+        prompt = THEME.label(label) + THEME.sep(" [") + THEME.default(str(default)) + THEME.sep("]: ")
         s = input(prompt).strip()
         if not s:
             return float(default)
@@ -176,9 +176,9 @@ def _prompt_float(label: str, default: float, min_v: Optional[float] = None, max
 def _prompt_yes_no(label: str, default_yes: bool = True) -> bool:
     # Render BBS-style choice with highlighted default
     if default_yes:
-        d_colored = THEME.choice_default("[Y") + THEME.sep("/") + THEME.choice_other("n]")
+        d_colored = THEME.sep("[") + THEME.choice_default("Y") + THEME.sep("/") + THEME.choice_other("n") + THEME.sep("]")
     else:
-        d_colored = THEME.choice_other("[y/") + THEME.choice_default("N]")
+        d_colored = THEME.sep("[") + THEME.choice_other("y") + THEME.sep("/") + THEME.choice_default("N") + THEME.sep("]")
     while True:
         prompt = THEME.label(label) + THEME.sep(" ") + d_colored + THEME.sep(": ")
         s = input(prompt).strip().lower()
