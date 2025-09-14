@@ -1,10 +1,13 @@
 # scripts/
 
-This directory contains utility scripts that support development and distribution.
+This directory contains utility scripts that support setup, media preparation, validation, and packaging.
 
-- `health_check.py`: A standalone preflight that verifies binaries (ffmpeg, ffprobe, yt-dlp), NVENC availability, Python packages, required folders, and `.env` credentials. It provides quick diagnostics before running Clippy or packaging.
-- `test_transitions.py`: Probes each file in `transitions/`, normalizes assets into `cache/_trans` (48 kHz stereo AAC), and can perform an audio-only concat check to detect cross-file issues. Use `--normalize` and `--concat-audio-check`.
-- `check_sequencing.py`: Validates the concat sequence policy (intro? → static → clip → static → chance(transition → static) … → outro?).
+- `setup_wizard.py` — Guided first-time setup. Creates `.env`, writes `clippy.yaml`, checks binaries, helps you choose a transitions folder (or prefer internal packaged ones), and can generate `run_clippy.ps1` for quick launching.
+- `health_check.py` — Standalone preflight: verifies ffmpeg/yt-dlp presence, NVENC availability, Python packages, required folders, transitions/static.mp4, fonts, and `.env` credentials.
+- `import_media.py` — Normalize or convert any source video/image into a valid transition asset (`intro`, `transition`, `outro`, `static`). Ensures correct codecs, fps, resolution, and loudness.
+- `make_transitions.py` — Generate multiple short `transition_XX.mp4` clips by slicing random segments from a long source video.
+- `test_transitions.py` — Probe all files in `transitions/`, normalize into `cache/_trans` (48 kHz stereo AAC), and perform an optional audio-only concat validation.
+- `check_sequencing.py` — Validate a generated concat list file (e.g., `cache/comp0`) to ensure the sequence policy is obeyed.
 
 ## Sequencing validator
 
@@ -46,3 +49,36 @@ Typical usage:
 Notes:
 - The checker prefers local `bin/` and `assets/fonts/` paths when running from source, and bundled paths when frozen.
 - Coloring is minimal and safe for Windows consoles.
+
+## Transitions tools quick reference
+
+When you need to prepare or validate transitions, these tools help you get there fast:
+
+1) Import existing media as transitions
+
+```powershell
+# Import a transition clip, converting as needed
+python .\scripts\import_media.py path\to\clip.mp4 --type transition
+
+# Create or overwrite the required static.mp4
+python .\scripts\import_media.py path\to\image_or_video.mp4 --type static --overwrite
+
+# Name a custom outro file
+python .\scripts\import_media.py path\to\outro.mov --type outro --name outro_custom.mp4
+```
+
+2) Generate transitions from a long video
+
+```powershell
+python .\scripts\make_transitions.py -i .\long_source.mp4 -n 8
+```
+
+3) Validate transitions
+
+```powershell
+# Normalize all and run audio-only concat check
+python .\scripts\test_transitions.py --normalize --concat-audio-check
+
+# Verify a previously generated concat list (e.g., cache\comp0)
+python .\scripts\check_sequencing.py --comp .\cache\comp0 --transitions-dir .\transitions
+```

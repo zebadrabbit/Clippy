@@ -12,26 +12,33 @@ Create highlight compilations directly from Twitch clips. Audio is ON by default
 - Resilient audio: loudness normalization for assets, synthesize clean stereo audio if missing
 - Ctrl-C friendly: cooperative shutdown that stops workers and terminates ffmpeg cleanly
 
-## Setup (PowerShell on Windows)
+## Setup (first time, PowerShell on Windows)
+
 ```powershell
-python -m venv .venv; .\.venv\Scripts\Activate.ps1
+python -m venv .venv
+\.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-"TWITCH_CLIENT_ID=your_id`nTWITCH_CLIENT_SECRET=your_secret" | Out-File -Encoding utf8 .env
-```
-
-## Configuration
-
-- Most non-secret settings live in `clippy.yaml`. A commented example is provided in `clippy.yaml.example`.
-- Precedence: CLI flags > Environment (.env) > clippy.yaml > built-in defaults.
-- Run the setup wizard to generate `.env` and a starter `clippy.yaml`:
-
-```powershell
 python .\scripts\setup_wizard.py
 ```
 
-Key env vars:
-- `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` – required Twitch credentials
-- `TRANSITIONS_DIR` – custom folder containing transitions (`static.mp4` required)
+### What the setup wizard does
+- Guides you through entering your Twitch credentials and saves them to a `.env` file
+- Writes a starter `clippy.yaml` with sensible defaults (clips per compilation, min views, quality, fps/resolution)
+- Checks for ffmpeg/yt-dlp and NVENC availability; suggests fixes if missing
+- Helps you select or create a transitions folder (`transitions/`), explains the required `static.mp4`
+- Offers to prefer packaged internal transitions with `CLIPPY_USE_INTERNAL=1`
+- Generates a convenience launcher `run_clippy.ps1` with your last-used flags
+
+You can re-run the wizard at any time to adjust settings; it will merge with the existing YAML and leave custom edits intact.
+
+## Configuration
+
+- The wizard creates `clippy.yaml` and `.env` for you. A commented example remains in `clippy.yaml.example`.
+- Precedence: CLI flags > Environment (.env) > clippy.yaml > built-in defaults.
+
+Key env vars (advanced):
+- `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` – Twitch credentials used by the Helix API
+- `TRANSITIONS_DIR` – point to a custom transitions folder (`static.mp4` required)
 - `CLIPPY_USE_INTERNAL=1` – prefer packaged `_internal/transitions` when available
 
 ## Usage
@@ -77,16 +84,50 @@ Sections include: Required, Window & selection, Output & formatting, Transitions
 ## Transitions & sequencing
 - `transitions/static.mp4` is required and placed between every segment.
 - Sequence: random(optional intro) → static → clip → static → random_chance(transition → static) … → random(optional outro)
-- All non-clip assets are normalized to cache/_trans on first use to ensure uniform codecs and audio (48 kHz stereo). You can force a rebuild with `--rebuild-transitions`.
+- All non-clip assets are normalized to `cache/_trans` on first use to ensure uniform codecs and audio (48 kHz stereo). You can force a rebuild with `--rebuild-transitions`.
 
 ### Internal data and ENV
 
-- `static.mp4` is REQUIRED. If you ship a portable build, include it under `transitions/` (runtime) and/ or `_internal/transitions/static.mp4` (packaged). At runtime, set `CLIPPY_USE_INTERNAL=1` to prefer packaged assets.
+- `static.mp4` is REQUIRED. If you ship a portable build, include it under `transitions/` (runtime) and/or `_internal/transitions/static.mp4` (packaged). Set `CLIPPY_USE_INTERNAL=1` to prefer packaged assets.
 - Override transitions location with `TRANSITIONS_DIR` (absolute or relative path).
 - Common ENV:
-	- `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`: Twitch API credentials
-	- `CLIPPY_USE_INTERNAL=1`: Prefer `_internal` packaged data
-	- `TRANSITIONS_DIR=path`: Use a specific transitions folder
+  - `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`: Twitch API credentials
+  - `CLIPPY_USE_INTERNAL=1`: Prefer `_internal` packaged data
+  - `TRANSITIONS_DIR=path`: Use a specific transitions folder
+
+### Transitions 101: creating and validating assets
+
+There are two easy ways to prepare transitions:
+
+1) Import existing clips at the correct format
+
+```powershell
+# Normalize/convert any video into the transitions folder
+python .\scripts\import_media.py path\to\your\clip.mp4 --type transition
+
+# Set a specific output name (e.g., outro_custom.mp4)
+python .\scripts\import_media.py path\to\outro.mov --type outro --name outro_custom.mp4
+
+# Replace or create the required static.mp4
+python .\scripts\import_media.py path\to\image_or_video.mp4 --type static --overwrite
+```
+
+2) Generate multiple transitions from a long video
+
+```powershell
+# Slice random 1–3s segments and write transition_XX.mp4 files
+python .\scripts\make_transitions.py -i .\long_source.mp4 -n 8
+```
+
+Validate and troubleshoot:
+
+```powershell
+# Normalize all transitions and run an audio-only concat probe
+python .\scripts\test_transitions.py --normalize --concat-audio-check
+
+# Verify a previously generated concat list (e.g., cache\comp0)
+python .\scripts\check_sequencing.py --comp .\cache\comp0 --transitions-dir .\transitions
+```
 
 ## Notes
 - Min views equals `--min-views` (maps to `reactionThreshold`).
@@ -126,6 +167,13 @@ This creates `Clippy-portable.zip` with:
 - Double-click `Start-Clippy.bat` or run `Clippy.exe --broadcaster <name> -y`
 
 Optional: Create a shortcut to `Start-Clippy.bat` with your preferred default flags.
+
+## Manual setup (optional)
+If you prefer not to use the wizard, you can create `.env` yourself and edit `clippy.yaml`:
+
+```powershell
+"TWITCH_CLIENT_ID=your_id`nTWITCH_CLIENT_SECRET=your_secret" | Out-File -Encoding utf8 .env
+```
 
 ## Docs
 - [Contributing](docs/CONTRIBUTING.md)
