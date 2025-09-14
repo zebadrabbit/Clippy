@@ -262,31 +262,53 @@ def main():
     except Exception as e:
         print("\n" + chalk.yellow(f"WARN: Failed to write .env: {e}"))
 
-    # Write defaults JSON (for reference and tooling)
-    defaults = {
-        "min_views": min_views,
-        "clips_per_compilation": clips_per_comp,
-        "num_compilations": num_compilations,
-        "quality": preset_name,
-        "bitrate": bitrate,
-        "resolution": resolution,
-        "fps": fps,
-        "audio_bitrate": audio_br,
-        "use_random_transitions": use_random,
-        "transition_probability": trans_prob,
-        "silence_nonclip_asset_audio": silence_nonclip,
-    "silence_static": silence_static,
-        "cache": cache_dir,
-        "output": output_dir,
-        "max_concurrency": conc,
-        "version": CLIPPY_VERSION,
+    # Write YAML config (clippy.yaml)
+    cfg = {
+        "selection": {
+            "min_views": min_views,
+            "clips_per_compilation": clips_per_comp,
+            "compilations": num_compilations,
+        },
+        "sequencing": {
+            "transition_probability": trans_prob,
+            "no_random_transitions": (not use_random),
+            "transitions_weights": {},
+            "transition_cooldown": 1,
+        },
+        "audio": {
+            "silence_nonclip_asset_audio": silence_nonclip,
+            "silence_static": silence_static,
+            "audio_normalize_transitions": True,
+        },
+        "encoding": {
+            "bitrate": bitrate,
+            "audio_bitrate": audio_br,
+            "fps": fps,
+            "resolution": resolution,
+            "nvenc": {"preset": "slow", "cq": "19", "gop": "120", "rc_lookahead": "20", "aq_strength": "8", "spatial_aq": "1", "temporal_aq": "1"},
+        },
+        "paths": {"cache": cache_dir, "output": output_dir},
+        "behavior": {"max_concurrency": conc, "skip_bad_clip": True, "rebuild": False, "enable_overlay": True},
+        "assets": {
+            "static": "static.mp4",
+            # leave lists to file defaults; user can edit later if desired
+        },
+        "_meta": {"generated_by": f"setup_wizard v{CLIPPY_VERSION}"},
     }
-    defaults_path = Path("clippy.defaults.json")
     try:
-        defaults_path.write_text(json.dumps(defaults, indent=2) + "\n", encoding="utf-8")
-        print(chalk.green_bright(f"Wrote {defaults_path.resolve()}"))
+        import yaml  # type: ignore
+        yaml_text = yaml.safe_dump(cfg, sort_keys=False)
+        yaml_path = Path("clippy.yaml")
+        yaml_path.write_text(yaml_text, encoding="utf-8")
+        print(chalk.green_bright(f"Wrote {yaml_path.resolve()}"))
     except Exception as e:
-        print(chalk.yellow(f"WARN: Failed to write defaults file: {e}"))
+        # Fallback to JSON if PyYAML missing
+        try:
+            json_path = Path("clippy.yaml.json")
+            json_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+            print(chalk.yellow(f"PyYAML not available; wrote JSON fallback: {json_path.resolve()}"))
+        except Exception as e2:
+            print(chalk.yellow(f"WARN: Failed to write config file: {e} / {e2}"))
 
     # Generate a PowerShell helper script with suggestions
     broadcaster_placeholder = "<your_twitch_login>"

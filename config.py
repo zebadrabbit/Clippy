@@ -3,7 +3,8 @@ Global configuration for the clip compilation pipeline.
 
 Notes:
 - Secrets (client IDs, secrets) must live in environment variables or `.env`.
-- This file is grouped into logical sections; variable names and defaults are unchanged to avoid breaking imports.
+- This file now supports a structured YAML config (clippy.yaml) that overrides defaults at import time.
+- Variable names and defaults are unchanged to avoid breaking imports; we merge clippy.yaml onto these defaults.
 """
 
 # =============================================================
@@ -238,3 +239,51 @@ youtubeDlOptions = ("--no-color --no-check-certificate --quiet --progress --retr
 
 # Alias for clarity
 viewThreshold = reactionThreshold
+
+# =============================================================
+# Apply clippy.yaml overrides (if present) after defaults but before templates use values
+# =============================================================
+try:
+	from clippy.config_loader import load_merged_config  # type: ignore
+	_defaults = dict(
+		amountOfClips=amountOfClips,
+		amountOfCompilations=amountOfCompilations,
+		reactionThreshold=reactionThreshold,
+		transition_probability=transition_probability,
+		no_random_transitions=no_random_transitions,
+		transitions_weights=transitions_weights,
+		transition_cooldown=transition_cooldown,
+		silence_nonclip_asset_audio=silence_nonclip_asset_audio,
+		silence_static=silence_static,
+		audio_normalize_transitions=audio_normalize_transitions,
+		bitrate=bitrate,
+		audio_bitrate=audio_bitrate,
+		fps=fps,
+		resolution=resolution,
+		nvenc_preset=nvenc_preset,
+		cq=cq,
+		gop=gop,
+		rc_lookahead=rc_lookahead,
+		aq_strength=aq_strength,
+		spatial_aq=spatial_aq,
+		temporal_aq=temporal_aq,
+		cache=cache,
+		output=output,
+		max_concurrency=max_concurrency,
+		skip_bad_clip=skip_bad_clip,
+		rebuild=rebuild,
+		enable_overlay=enable_overlay,
+		static=static,
+		intro=intro,
+		outro=outro,
+		transitions=transitions,
+	)
+	_merged = load_merged_config(_defaults)
+	# Assign back to module globals
+	for _k, _v in _merged.items():
+		try:
+			globals()[_k] = _v
+		except Exception:
+			pass
+except Exception:
+	pass
