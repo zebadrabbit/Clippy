@@ -6,6 +6,35 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+# Ensure project root (parent of scripts/) is on sys.path so `clippy` imports work
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+# Minimal color support via yachalk (fallback to plain)
+try:  # pragma: no cover
+    from yachalk import chalk  # type: ignore
+except Exception:  # pragma: no cover
+    class _Plain:
+        def __getattr__(self, name):
+            return lambda s: s
+    chalk = _Plain()  # type: ignore
+
+# Enable Windows VT so ANSI colors render in default console
+def _enable_windows_vt():
+    if os.name != 'nt':
+        return
+    try:  # pragma: no cover
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+            kernel32.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+    except Exception:
+        pass
+
 # Try to import project version and defaults
 try:
     from clippy import __version__ as CLIPPY_VERSION  # type: ignore
@@ -58,78 +87,82 @@ PS1_HEADER = """
 
 
 def _print_header():
-    print("==============================================")
-    print("Clippy Setup Wizard" + (f"  (v{CLIPPY_VERSION})" if CLIPPY_VERSION else ""))
-    print("This will help you get set up with Twitch credentials and sensible defaults.")
-    print("You can re-run this anytime; it writes a .env and helper script.")
-    print("==============================================\n")
+    _enable_windows_vt()
+    bar = "=" * 46
+    title = chalk.green_bright("Clippy Setup Wizard")
+    ver = chalk.gray(f"(v{CLIPPY_VERSION})") if CLIPPY_VERSION else ""
+    print(chalk.gray(bar))
+    print(f"{title}  {ver}")
+    print(chalk.cyan("This will help you get set up with Twitch credentials and sensible defaults."))
+    print(chalk.cyan("You can re-run this anytime; it writes a .env and helper script."))
+    print(chalk.gray(bar) + "\n")
 
 
 def _prompt_str(label: str, default: Optional[str] = None, secret: bool = False) -> str:
     d = f" [{default}]" if default not in (None, "") else ""
     while True:
-        val = input(f"{label}{d}: ").strip()
+        val = input(chalk.yellow(f"{label}{d}: ")).strip()
         if not val and default is not None:
             return str(default)
         if val:
             return val
-        print("Please enter a value.")
+        print(chalk.red_bright("Please enter a value."))
 
 
 def _prompt_int(label: str, default: int, min_v: Optional[int] = None, max_v: Optional[int] = None) -> int:
     while True:
-        s = input(f"{label} [{default}]: ").strip()
+        s = input(chalk.yellow(f"{label} [{default}]: ")).strip()
         if not s:
             return int(default)
         try:
             v = int(s)
             if min_v is not None and v < min_v:
-                print(f"Minimum is {min_v}")
+                print(chalk.red_bright(f"Minimum is {min_v}"))
                 continue
             if max_v is not None and v > max_v:
-                print(f"Maximum is {max_v}")
+                print(chalk.red_bright(f"Maximum is {max_v}"))
                 continue
             return v
         except Exception:
-            print("Please enter a whole number.")
+            print(chalk.red_bright("Please enter a whole number."))
 
 
 def _prompt_float(label: str, default: float, min_v: Optional[float] = None, max_v: Optional[float] = None) -> float:
     while True:
-        s = input(f"{label} [{default}]: ").strip()
+        s = input(chalk.yellow(f"{label} [{default}]: ")).strip()
         if not s:
             return float(default)
         try:
             v = float(s)
             if min_v is not None and v < min_v:
-                print(f"Minimum is {min_v}")
+                print(chalk.red_bright(f"Minimum is {min_v}"))
                 continue
             if max_v is not None and v > max_v:
-                print(f"Maximum is {max_v}")
+                print(chalk.red_bright(f"Maximum is {max_v}"))
                 continue
             return v
         except Exception:
-            print("Please enter a number.")
+            print(chalk.red_bright("Please enter a number."))
 
 
 def _prompt_yes_no(label: str, default_yes: bool = True) -> bool:
     d = "Y/n" if default_yes else "y/N"
     while True:
-        s = input(f"{label} [{d}]: ").strip().lower()
+        s = input(chalk.yellow(f"{label} [{d}]: ")).strip().lower()
         if not s:
             return default_yes
         if s in ("y", "yes"):
             return True
         if s in ("n", "no"):
             return False
-        print("Please answer y or n.")
+        print(chalk.red_bright("Please answer y or n."))
 
 
 def _quality_menu() -> tuple[str, str]:
-    print("\nQuality presets:")
-    print("  1) balanced  (video ~10-12M, good for 1080p60 uploads)")
-    print("  2) high      (video ~12-14M, higher quality, larger files)")
-    print("  3) max       (video ~16M+, best quality, large files)")
+    print("\n" + chalk.blue_bright("Quality presets:"))
+    print(chalk.gray("  1) balanced  (video ~10-12M, good for 1080p60 uploads)"))
+    print(chalk.gray("  2) high      (video ~12-14M, higher quality, larger files)"))
+    print(chalk.gray("  3) max       (video ~16M+, best quality, large files)"))
     choice = _prompt_int("Choose quality preset", 1, 1, 3)
     if choice == 1:
         return ("balanced", "10M")
@@ -139,11 +172,11 @@ def _quality_menu() -> tuple[str, str]:
 
 
 def _transitions_explain():
-    print("\nTransitions & sequencing:")
-    print("  - static.mp4 is placed between every segment to provide a clean cut buffer.")
-    print("  - You can optionally insert random transitions (video effects) between some clips.")
-    print("  - Probability controls how often a transition (beyond static) appears.")
-    print("  - You can silence audio on transitions/intro/outro if you prefer no music there.")
+    print("\n" + chalk.blue_bright("Transitions & sequencing:"))
+    print(chalk.gray("  - static.mp4 is placed between every segment to provide a clean cut buffer."))
+    print(chalk.gray("  - You can optionally insert random transitions (video effects) between some clips."))
+    print(chalk.gray("  - Probability controls how often a transition (beyond static) appears."))
+    print(chalk.gray("  - You can silence audio on transitions/intro/outro if you prefer no music there."))
 
 
 def _find_static_candidates() -> list[Path]:
@@ -160,9 +193,9 @@ def main():
     _print_header()
 
     # Step 1: Twitch credentials
-    print("Step 1: Twitch Client ID & Secret")
-    print("  Get credentials: https://dev.twitch.tv/console/apps (create an application)")
-    print("  For this tool, the Client Credentials flow is used; redirect URL is not required for clip fetching.")
+    print(chalk.magenta_bright("Step 1: Twitch Client ID & Secret"))
+    print(chalk.gray("  Get credentials: https://dev.twitch.tv/console/apps (create an application)"))
+    print(chalk.gray("  For this tool, the Client Credentials flow is used; redirect URL is not required for clip fetching."))
     env_path = Path(".env")
     existing = {}
     if env_path.is_file():
@@ -181,13 +214,13 @@ def main():
     client_secret = _prompt_str("Twitch Client Secret", sec_default or None)
 
     # Step 2: Defaults for selection
-    print("\nStep 2: Clip selection defaults")
+    print("\n" + chalk.magenta_bright("Step 2: Clip selection defaults"))
     min_views = _prompt_int("Minimum views to include a clip", DEFAULT_MIN_VIEWS, 0)
     clips_per_comp = _prompt_int("Clips per compilation", DEFAULT_CLIPS, 1)
     num_compilations = _prompt_int("Number of compilations per run", DEFAULT_COMPS, 1)
 
     # Step 3: Quality and format
-    print("\nStep 3: Output quality & format")
+    print("\n" + chalk.magenta_bright("Step 3: Output quality & format"))
     preset_name, bitrate = _quality_menu()
     resolution = _prompt_str("Resolution (e.g., 1920x1080)", DEFAULT_RES)
     fps = _prompt_str("Framerate (e.g., 60)", DEFAULT_FPS)
@@ -205,14 +238,14 @@ def main():
     silence_intro_outro = _prompt_yes_no("Silence intro/outro audio?", default_yes=DEFAULT_SILENCE_INTRO_OUTRO)
 
     # Step 5: Paths & concurrency
-    print("\nStep 5: Paths & concurrency")
+    print("\n" + chalk.magenta_bright("Step 5: Paths & concurrency"))
     cache_dir = _prompt_str("Cache directory", DEFAULT_CACHE)
     output_dir = _prompt_str("Output directory", DEFAULT_OUTPUT)
     conc = _prompt_int("Max concurrent workers (downloads/normalize)", DEFAULT_CONC, 1)
 
     # Step 6: Transitions location
-    print("\nStep 6: Transitions directory")
-    print("  The tool requires transitions/static.mp4. You can set a custom directory or use the bundled internal data.")
+    print("\n" + chalk.magenta_bright("Step 6: Transitions directory"))
+    print(chalk.gray("  The tool requires transitions/static.mp4. You can set a custom directory or use the bundled internal data."))
     use_internal = _prompt_yes_no("Prefer bundled internal transitions when available?", default_yes=True)
     trans_dir = _prompt_str("Custom transitions directory (blank to skip)", "")
 
@@ -227,9 +260,9 @@ def main():
         lines.append(f"TRANSITIONS_DIR={trans_dir}")
     try:
         env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        print(f"\nWrote {env_path.resolve()}")
+        print("\n" + chalk.green_bright(f"Wrote {env_path.resolve()}"))
     except Exception as e:
-        print(f"\nWARN: Failed to write .env: {e}")
+        print("\n" + chalk.yellow(f"WARN: Failed to write .env: {e}"))
 
     # Write defaults JSON (for reference and tooling)
     defaults = {
@@ -255,9 +288,9 @@ def main():
     defaults_path = Path("clippy.defaults.json")
     try:
         defaults_path.write_text(json.dumps(defaults, indent=2) + "\n", encoding="utf-8")
-        print(f"Wrote {defaults_path.resolve()}")
+        print(chalk.green_bright(f"Wrote {defaults_path.resolve()}"))
     except Exception as e:
-        print(f"WARN: Failed to write defaults file: {e}")
+        print(chalk.yellow(f"WARN: Failed to write defaults file: {e}"))
 
     # Generate a PowerShell helper script with suggestions
     broadcaster_placeholder = "<your_twitch_login>"
@@ -290,21 +323,21 @@ def main():
     run_ps1 = Path("run_clippy.ps1")
     try:
         run_ps1.write_text(helper, encoding="utf-8")
-        print(f"Wrote {run_ps1.resolve()}")
+        print(chalk.green_bright(f"Wrote {run_ps1.resolve()}"))
     except Exception as e:
-        print(f"WARN: Failed to write {run_ps1.name}: {e}")
+        print(chalk.yellow(f"WARN: Failed to write {run_ps1.name}: {e}"))
 
     # Final checks & suggestions
-    print("\nFinal checks:")
+    print("\n" + chalk.blue_bright("Final checks:"))
     statics = _find_static_candidates()
     if statics:
-        print(f"  Found static.mp4 here: {statics[0]}")
+        print(chalk.gray(f"  Found static.mp4 here: {statics[0]}"))
     else:
-        print("  static.mp4 not found in transitions/. If you don't have one, set CLIPPY_USE_INTERNAL=1 or set --transitions-dir.")
-    print("\nAll set! Next steps:")
-    print("  1) Edit run_clippy.ps1 to set your broadcaster login.")
-    print("  2) Open a PowerShell and run: .\\run_clippy.ps1")
-    print("  3) Check output/ for your compiled videos and manifest.json")
+        print(chalk.yellow("  static.mp4 not found in transitions/. If you don't have one, set CLIPPY_USE_INTERNAL=1 or set --transitions-dir."))
+    print("\n" + chalk.green_bright("All set! Next steps:"))
+    print(chalk.gray("  1) Edit run_clippy.ps1 to set your broadcaster login."))
+    print(chalk.gray("  2) Open a PowerShell and run: .\\run_clippy.ps1"))
+    print(chalk.gray("  3) Check output/ for your compiled videos and manifest.json"))
 
 
 if __name__ == "__main__":
