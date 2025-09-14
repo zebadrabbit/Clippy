@@ -20,5 +20,6 @@ Build and packaging scripts for creating a portable distribution of Clippy.
 ## Tips
 
 - Run `scripts/health_check.py` first to ensure your environment is healthy.
-- ffmpeg.exe is bundled into the portable by default when available at build time (or via the `-FetchFFmpeg` switch).
+- ffmpeg.exe and ffprobe.exe are bundled into the portable by default when available at build time (or via the `-FetchFFmpeg` switch).
+- Include `_internal/transitions/static.mp4` so new users have a default static clip; they can set `CLIPPY_USE_INTERNAL=1` at runtime to prefer packaged assets.
 - Large binaries should not be committed; publish the zip as a release asset or CI artifact.

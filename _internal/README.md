@@ -8,5 +8,8 @@ Contents (recommended):
 - Optional: other default media or licenses
 
 Runtime selection:
-- Set CLIPPY_USE_INTERNAL=1 to force using bundled data first
-- TRANSITIONS_DIR can still override to a custom folder
+- Set `CLIPPY_USE_INTERNAL=1` to prefer bundled data first (falls back to external transitions if missing)
+- `TRANSITIONS_DIR` can still override to a custom folder and takes precedence when set
+
+Build packaging notes:
+- Windows portable zips include `ffmpeg.exe`, `ffprobe.exe`, and `yt-dlp.exe` when available.
