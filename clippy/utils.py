@@ -205,7 +205,9 @@ def replace_vars(s, m):
     s = s.replace('{author}', author)
     # Normalize font path to forward slashes for ffmpeg on Windows
     _fontfile = _cfg_get('fontfile', None)
-    _font = _fontfile.replace('\\\\', '/').replace('\\\\', '/') if isinstance(_fontfile, str) else _fontfile
+    _font = _fontfile.replace('\\', '/').replace('\\', '/') if isinstance(_fontfile, str) else _fontfile
+    # When used inside filter_complex with single quotes around parameters, keep fontfile quoted
+    # The template expects fontfile='{fontfile}' so we only need to inject the raw path here
     s = s.replace('{fontfile}', _font)
     s = s.replace('{bitrate}', _cfg_get('bitrate', ''))
     s = s.replace('{audio_bitrate}', _cfg_get('audio_bitrate', ''))
