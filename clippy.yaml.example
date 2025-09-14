@@ -1,0 +1,88 @@
+# Clippy configuration (YAML)
+#
+# Precedence at runtime:
+#   CLI flags > Environment (.env) > clippy.yaml > built-in defaults
+#
+# Tip: keep secrets (client IDs, tokens) in .env or environment variables.
+# This file is for non-secret settings and preferences.
+
+selection:
+  # Minimum views to include a clip
+  min_views: 1
+  # Number of clips included in each compilation
+  clips_per_compilation: 12
+  # How many compilations to produce per run
+  compilations: 2
+
+sequencing:
+  # Probability (0.0 - 1.0) of inserting a random transition between clips
+  transition_probability: 0.35
+  # Disable random transitions entirely (static.mp4 is still used between clips)
+  no_random_transitions: false
+  # Optional weights for specific transitions (higher = more likely)
+  transitions_weights: { }
+  # Avoid repeat transitions within the last N picks (0 disables)
+  transition_cooldown: 1
+
+audio:
+  # If true, silence audio for ALL non-clip assets (static/intro/outro/transitions)
+  silence_nonclip_asset_audio: false
+  # If true, silence static.mp4 even when the global flag is false
+  silence_static: false
+  # If true, silence transition files even when the global flag is false
+  silence_transitions: false
+  # If true, silence intros/outros even when the global flag is false
+  silence_intro_outro: false
+  # Normalize loudness for non-clip assets (EBU R128)
+  audio_normalize_transitions: true
+
+encoding:
+  # Video bitrate target (used as NVENC maxrate; VBR with CQ)
+  bitrate: 12M
+  # Audio bitrate
+  audio_bitrate: 192k
+  # Framerate and resolution for outputs
+  fps: '60'
+  resolution: 1920x1080
+  # yt-dlp format selection (Twitch clips)
+  yt_format: "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]"
+  # Container options
+  container_ext: mp4
+  container_flags: "-movflags +faststart"
+  # NVENC tuning
+  nvenc:
+    preset: slow
+    cq: '19'
+    gop: '120'
+    rc_lookahead: '20'
+    aq_strength: '8'
+    spatial_aq: '1'
+    temporal_aq: '1'
+
+paths:
+  # Working directory for intermediates
+  cache: ./cache
+  # Final outputs directory
+  output: ./output
+
+behavior:
+  # Max concurrent workers for download/normalize stage
+  max_concurrency: 4
+  # Skip a clip if it fails after retries (true) or abort run (false)
+  skip_bad_clip: true
+  # Force rebuild of normalized non-clip assets (cache/_trans)
+  transitions_rebuild: false
+  # Enable overlay (avatar + text) on clips
+  enable_overlay: true
+
+assets:
+  # Required: static mp4 file name in your transitions directory
+  static: static.mp4
+  # Optionally list custom names for intros, outros, transitions
+  # intro: [intro.mp4, intro_2.mp4]
+  # outro: [outro.mp4, outro_2.mp4]
+  # transitions: [transition_01.mp4, transition_02.mp4, transition_03.mp4]
+
+# Notes:
+# - Use TRANSITIONS_DIR env var to point to a custom transitions folder.
+# - Set CLIPPY_USE_INTERNAL=1 to prefer packaged internal transitions/static when available.

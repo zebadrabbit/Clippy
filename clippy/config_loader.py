@@ -13,6 +13,69 @@ except Exception:  # pragma: no cover
 
 DEFAULT_CONFIG_FILE = "clippy.yaml"
 
+# Built-in defaults migrated from previous config.py so users don't have to edit Python files.
+# These are used when clippy.yaml is absent or partial.
+DEFAULTS: Dict[str, Any] = {
+    # Selection & counts
+    "amountOfClips": 12,
+    "amountOfCompilations": 2,
+    "reactionThreshold": 1,
+
+    # Sequencing
+    "transition_probability": 0.35,
+    "no_random_transitions": False,
+    "transitions_weights": {},
+    "transition_cooldown": 1,
+
+    # Audio policy for non-clip assets
+    "audio_normalize_transitions": True,
+    "silence_nonclip_asset_audio": False,
+    "silence_static": False,
+    "silence_transitions": False,
+    "silence_intro_outro": False,
+
+    # Encoding
+    "bitrate": "12M",
+    "audio_bitrate": "192k",
+    "fps": "60",
+    "resolution": "1920x1080",
+    "nvenc_preset": "slow",
+    "cq": "19",
+    "gop": "120",
+    "rc_lookahead": "20",
+    "aq_strength": "8",
+    "spatial_aq": "1",
+    "temporal_aq": "1",
+
+    # Paths & behavior
+    "cache": "./cache",
+    "output": "./output",
+    "max_concurrency": 4,
+    "skip_bad_clip": True,
+    "rebuild": False,
+    "enable_overlay": True,
+    "transitions_rebuild": False,
+
+    # Assets & overlay
+    "fontfile": "assets/fonts/Roboto-Medium.ttf",
+    "static": "static.mp4",
+    "intro": ["intro.mp4", "intro_2.mp4"],
+    "outro": ["outro.mp4", "outro_2.mp4"],
+    "transitions": [
+        "transition_01.mp4",
+        "transition_02.mp4",
+        "transition_03.mp4",
+        "transition_05.mp4",
+        "transition_07.mp4",
+        "transition_08.mp4",
+    ],
+
+    # Container & yt-dlp
+    "container_ext": "mp4",
+    "container_flags": "-movflags +faststart",
+    "yt_format": "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]",
+}
+
 
 def _load_yaml(path: Path) -> Dict[str, Any]:
     if not yaml:
@@ -81,7 +144,7 @@ def _coerce_dict_float(v: Any, default: dict[str, float]) -> dict[str, float]:
     return default
 
 
-def load_merged_config(defaults: dict[str, Any], env: dict[str, str] | None = None, file_path: str | None = None) -> dict[str, Any]:
+def load_merged_config(defaults: dict[str, Any] | None = None, env: dict[str, str] | None = None, file_path: str | None = None) -> dict[str, Any]:
     """Merge config from YAML (if exists) and environment onto defaults.
 
     - defaults: dict of baseline values (from config.py constants)
@@ -93,7 +156,8 @@ def load_merged_config(defaults: dict[str, Any], env: dict[str, str] | None = No
     data = _load_yaml(cfg_path)
 
     # Decompose structured sections to flat keys matching existing config module globals
-    merged = dict(defaults)
+    base = defaults if defaults is not None else DEFAULTS
+    merged = dict(base)
 
     sel = data.get("selection", {}) if isinstance(data, dict) else {}
     seq = data.get("sequencing", {}) if isinstance(data, dict) else {}
@@ -116,12 +180,17 @@ def load_merged_config(defaults: dict[str, Any], env: dict[str, str] | None = No
 
     merged["silence_nonclip_asset_audio"] = _coerce_bool(aud.get("silence_nonclip_asset_audio"), merged.get("silence_nonclip_asset_audio", False))
     merged["silence_static"] = _coerce_bool(aud.get("silence_static"), merged.get("silence_static", False))
+    merged["silence_transitions"] = _coerce_bool(aud.get("silence_transitions"), merged.get("silence_transitions", False))
+    merged["silence_intro_outro"] = _coerce_bool(aud.get("silence_intro_outro"), merged.get("silence_intro_outro", False))
     merged["audio_normalize_transitions"] = _coerce_bool(aud.get("audio_normalize_transitions"), merged.get("audio_normalize_transitions", True))
 
     merged["bitrate"] = _coerce_str(enc.get("bitrate"), merged.get("bitrate"))
     merged["audio_bitrate"] = _coerce_str(enc.get("audio_bitrate"), merged.get("audio_bitrate"))
     merged["fps"] = _coerce_str(enc.get("fps"), merged.get("fps"))
     merged["resolution"] = _coerce_str(enc.get("resolution"), merged.get("resolution"))
+    merged["yt_format"] = _coerce_str(enc.get("yt_format"), merged.get("yt_format"))
+    merged["container_ext"] = _coerce_str(enc.get("container_ext"), merged.get("container_ext", "mp4"))
+    merged["container_flags"] = _coerce_str(enc.get("container_flags"), merged.get("container_flags", "-movflags +faststart"))
 
     merged["nvenc_preset"] = _coerce_str(nv.get("preset"), merged.get("nvenc_preset"))
     merged["cq"] = _coerce_str(nv.get("cq"), merged.get("cq"))
@@ -138,6 +207,7 @@ def load_merged_config(defaults: dict[str, Any], env: dict[str, str] | None = No
     merged["skip_bad_clip"] = _coerce_bool(beh.get("skip_bad_clip"), merged.get("skip_bad_clip", True))
     merged["rebuild"] = _coerce_bool(beh.get("rebuild"), merged.get("rebuild", False))
     merged["enable_overlay"] = _coerce_bool(beh.get("enable_overlay"), merged.get("enable_overlay", True))
+    merged["transitions_rebuild"] = _coerce_bool(beh.get("transitions_rebuild"), merged.get("transitions_rebuild", False))
 
     merged["static"] = _coerce_str(assets.get("static"), merged.get("static"))
     merged["intro"] = _coerce_list_str(assets.get("intro"), merged.get("intro", []))
@@ -147,6 +217,8 @@ def load_merged_config(defaults: dict[str, Any], env: dict[str, str] | None = No
     # Environment overrides (non-secret convenience)
     if env.get("TRANSITIONS_DIR"):
         merged["TRANSITIONS_DIR"] = env.get("TRANSITIONS_DIR")
+        # also expose as config.transitions_dir for compatibility with utils
+        merged["transitions_dir"] = env.get("TRANSITIONS_DIR")
     if env.get("CLIPPY_USE_INTERNAL"):
         merged["CLIPPY_USE_INTERNAL"] = env.get("CLIPPY_USE_INTERNAL")
 

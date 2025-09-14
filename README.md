@@ -19,6 +19,21 @@ pip install -r requirements.txt
 "TWITCH_CLIENT_ID=your_id`nTWITCH_CLIENT_SECRET=your_secret" | Out-File -Encoding utf8 .env
 ```
 
+## Configuration
+
+- Most non-secret settings live in `clippy.yaml`. A commented example is provided in `clippy.yaml.example`.
+- Precedence: CLI flags > Environment (.env) > clippy.yaml > built-in defaults.
+- Run the setup wizard to generate `.env` and a starter `clippy.yaml`:
+
+```powershell
+python .\scripts\setup_wizard.py
+```
+
+Key env vars:
+- `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` – required Twitch credentials
+- `TRANSITIONS_DIR` – custom folder containing transitions (`static.mp4` required)
+- `CLIPPY_USE_INTERNAL=1` – prefer packaged `_internal/transitions` when available
+
 ## Usage
 Basic:
 ```powershell
