@@ -233,9 +233,7 @@ def main():
     if use_random:
         trans_prob = _prompt_float("Probability to insert a transition (0.0 - 1.0)", DEFAULT_TRANS_PROB, 0.0, 1.0)
     silence_nonclip = _prompt_yes_no("Silence audio on non-clip assets by default? (static/intro/outro/transitions)", default_yes=DEFAULT_SILENCE_NONCLIP)
-    silence_trans = _prompt_yes_no("Silence transitions audio?", default_yes=DEFAULT_SILENCE_TRANS)
     silence_static = _prompt_yes_no("Silence static.mp4 audio?", default_yes=DEFAULT_SILENCE_STATIC)
-    silence_intro_outro = _prompt_yes_no("Silence intro/outro audio?", default_yes=DEFAULT_SILENCE_INTRO_OUTRO)
 
     # Step 5: Paths & concurrency
     print("\n" + chalk.magenta_bright("Step 5: Paths & concurrency"))
@@ -277,9 +275,7 @@ def main():
         "use_random_transitions": use_random,
         "transition_probability": trans_prob,
         "silence_nonclip_asset_audio": silence_nonclip,
-        "silence_transitions": silence_trans,
-        "silence_static": silence_static,
-        "silence_intro_outro": silence_intro_outro,
+    "silence_static": silence_static,
         "cache": cache_dir,
         "output": output_dir,
         "max_concurrency": conc,
