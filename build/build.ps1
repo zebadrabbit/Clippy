@@ -153,11 +153,24 @@ $hcArgs = @(
 )
 & pyinstaller @hcArgs
 
+# Build SetupWizard.exe (interactive setup for users)
+Write-Host '==> Building SetupWizard utility'
+$wizArgs = @(
+  '--noconfirm','--clean','--onefile','--name','SetupWizard',
+  '--paths','..',
+  '--hidden-import','clippy.config',
+  '..\\scripts\\setup_wizard.py'
+)
+& pyinstaller @wizArgs
+
 # Ensure destination exists before copying HealthCheck
 if (-not (Test-Path .\dist\Clippy)) {
   New-Item -ItemType Directory -Force -Path .\dist\Clippy | Out-Null
 }
 Copy-Item .\dist\HealthCheck.exe .\dist\Clippy\ -Force
+if (Test-Path .\dist\SetupWizard.exe) {
+  Copy-Item .\dist\SetupWizard.exe .\dist\Clippy\ -Force
+}
 
 # Ensure a default static.mp4 is bundled if present
 if (Test-Path ..\transitions\static.mp4) {
@@ -226,6 +239,14 @@ setlocal
 "%~dp0HealthCheck.exe"
 endlocal
 '@ | Out-File -Encoding ascii dist\Clippy\Start-HealthCheck.bat
+
+@'
+@echo off
+REM Launch Setup Wizard for initial configuration
+setlocal
+"%~dp0SetupWizard.exe"
+endlocal
+'@ | Out-File -Encoding ascii dist\Clippy\Start-SetupWizard.bat
 
 Write-Host '==> Creating zip archive Clippy-portable.zip'
 if (Test-Path .\Clippy-portable.zip) { Remove-Item .\Clippy-portable.zip -Force }
