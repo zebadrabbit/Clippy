@@ -4,7 +4,20 @@ All notable changes to this project are documented here. Dates are in YYYY-MM-DD
 
 ## 2025-09-14 — v0.3.0
 
-- Added — Graceful interruption and shutdown
+- Cleanup — Remove legacy inline color tags and dead code
+  - Deleted unused legacy '{@...}' tag stripping and helper functions; all styling now flows through THEME with heuristics for label/value/path lines.
+  - Simplified utils logger and added clearer comments; retained symbol accenting (→, :, *).
+  - Fixed an unreachable branch in transition appending and tightened ffprobe usage.
+  - Files: `utils.py`, `pipeline.py`, `main.py`
+
+- Fix — Accurate Ctrl-C messaging
+  - Gated the "Interrupted by user (Ctrl-C)" line so it only prints when a KeyboardInterrupt actually occurs.
+  - Files: `main.py`
+
+- Docs — Minor docstring and README touch-ups (usage reflects current entrypoint)
+  - Files: `main.py`, `README.md`
+
+
   - Ctrl-C now cooperatively stops work: signals threads, terminates any running ffmpeg/yt-dlp processes, and performs cleanup.
   - Introduced a cancellable process runner used for long ffmpeg and probe operations.
   - A global shutdown event is checked at safe points within workers and normalization steps.

@@ -19,18 +19,17 @@
 # ║                                                                            ║
 # ╚════════════════════════════════════════════════════════════════════════════╝
 
-"""Standalone entrypoint that ingests Twitch clips directly.
+"""Clippy entrypoint: fetch Twitch clips and build compilations.
 
-Usage (PowerShell):
-  $env:TWITCH_CLIENT_ID="xxxxx"; $env:TWITCH_CLIENT_SECRET="yyyyy"
-  python main_twitch.py --broadcaster somechannel --max-clips 40 --clips 10 --compilations 2
+Quick start (PowerShell):
+    $env:TWITCH_CLIENT_ID="xxxxx"; $env:TWITCH_CLIENT_SECRET="yyyyy"; \
+    python .\main.py --broadcaster somechannel --max-clips 40 --clips 10 --compilations 2
 
 Optional time window:
-  --start 2025-07-01T00:00:00Z --end 2025-07-07T00:00:00Z
+    --start 2025-07-01T00:00:00Z --end 2025-07-07T00:00:00Z
 
-Reuses the existing processing pipeline from `main.py` (download, normalize,
-overlay, concat) by inserting Helix clip metadata into the existing Messages
-table, mapping view_count -> reactions.
+This orchestrates the processing pipeline (download, normalize, optional overlay, concat)
+using configuration from config.py and runtime CLI overrides.
 """
 
 from __future__ import annotations
@@ -60,6 +59,12 @@ from clippy import __version__ as CLIPPY_VERSION
 from clippy.window import resolve_date_window, summarize as _summarize
 from clippy.naming import sanitize_filename as _sanitize_filename, ensure_unique_names as _ensure_unique_names, finalize_outputs
 from clippy.runtime import ensure_twitch_credentials_if_needed, ensure_transitions_static_present
+try:
+    from clippy.theme import THEME, enable_windows_vt  # type: ignore
+except Exception:  # pragma: no cover
+    THEME = None  # type: ignore
+    def enable_windows_vt():  # type: ignore
+        return
 
 def main():  # noqa: C901
     global amountOfClips, amountOfCompilations, reactionThreshold
@@ -114,7 +119,9 @@ def main():  # noqa: C901
 
     # Resolve simple date window to RFC3339
     window = resolve_date_window(args.start, args.end)
-    _summarize(args, window, globals().get("resolution", None), globals().get("container_ext", "mp4"), globals().get("bitrate", None))
+    # Show startup summary only when skipping confirmation to avoid duplication
+    if getattr(args, "yes", False):
+        _summarize(args, window, globals().get("resolution", None), globals().get("container_ext", "mp4"), globals().get("bitrate", None))
     # Apply runtime overrides for quality/bitrate/resolution/container
     # Determine desired bitrate from quality unless explicitly provided
     qmap = {"balanced": "10M", "high": "12M", "max": "16M"}
@@ -194,7 +201,7 @@ def main():  # noqa: C901
         os.environ['TRANSITIONS_DIR'] = args.transitions_dir
         try:
             from utils import log as _log
-            _log("{@green}Transitions directory override:{@reset} {@cyan}" + os.path.abspath(args.transitions_dir), 1)
+            _log("Transitions directory override: " + os.path.abspath(args.transitions_dir), 1)
         except Exception:
             pass
 
@@ -265,27 +272,29 @@ def main():  # noqa: C901
     # Interactive confirmation (default). Use -y/--yes to skip.
     if not getattr(args, "yes", False):
         try:
-            log("{@cyan}Confirmation preview:{@reset}", 1)
-            log("  {@green}Broadcaster{@reset}: {@white}" + str(args.broadcaster), 1)
-            log("  {@green}Time Window{@reset}: {@yellow}" + str(window[0] or 'ANY') + "{@reset} {@white}->{@reset} {@yellow}" + str(window[1] or 'NOW'), 1)
-            log("  {@green}Max Clips Fetch{@reset}: {@white}" + str(args.max_clips), 1)
+            # Concise BBS-style panel
             try:
-                _totc = int(args.amountOfCompilations) * int(args.amountOfClips)
+                enable_windows_vt()
             except Exception:
-                _totc = None
-            _line = "  {@green}Compilations x Clips{@reset}: {@white}" + str(args.amountOfCompilations) + " x " + str(args.amountOfClips)
-            if _totc is not None:
-                _line += " {@green}({@white}" + str(_totc) + "{@green} total)"
-            log(_line, 1)
-            log("  {@green}Min Views{@reset}: {@white}" + str(reactionThreshold), 1)
-            if getattr(args, "auto_expand", False):
-                log("  {@green}Auto-expand{@reset}: {@cyan}enabled{@reset} {@white}(step {@yellow}" + str(args.expand_step_days) + "{@reset} {@white}day(s), max lookback {@yellow}" + str(args.max_lookback_days) + "{@reset} {@white}day(s))", 1)
-            else:
-                log("  {@green}Auto-expand{@reset}: {@cyan}disabled", 1)
-            log("  {@green}Cache dir{@reset}: {@white}" + str(cache), 1)
-            log("  {@green}Output dir{@reset}: {@white}" + str(output), 1)
-            log("  {@green}FFmpeg{@reset}: {@white}bitrate=" + str(bitrate) + ", fps=" + str(fps) + ", res=" + str(resolution), 1)
-            log("  {@green}Format{@reset}: {@white}" + str(container_ext) + " {@gray}(" + (container_flags or 'no extra flags') + ")", 1)
+                pass
+            try:
+                from yachalk import chalk as _chalk
+            except Exception:
+                class _Plain:
+                    def __getattr__(self, name):
+                        return lambda s: s
+                _chalk = _Plain()  # type: ignore
+            title = (THEME.title("Run plan") if THEME else _chalk.cyan_bright("Run plan"))
+            bar = (THEME.bar("=" * 56) if THEME else _chalk.gray("=" * 56))
+            def L(s: str) -> str:
+                # Static labels: darker blue
+                return THEME.section(s) if THEME else str(_chalk.blue(s))
+            def S(txt: str = " : ") -> str:
+                return THEME.sep(txt) if THEME else str(_chalk.gray(txt))
+            def V(v: str, accent: bool = False) -> str:
+                # Dynamic values: white
+                return str(_chalk.white(v))
+            # Gather values
             try:
                 import config as _cfg
                 _intro_list = getattr(_cfg, 'intro', [])
@@ -293,13 +302,36 @@ def main():  # noqa: C901
                 _transitions_list = getattr(_cfg, 'transitions', [])
                 _tprob = getattr(_cfg, 'transition_probability', 0.35)
                 _norand = getattr(_cfg, 'no_random_transitions', False)
-                log("  {@green}Transitions{@reset}: {@white}static.mp4 required, intro choices=" + str(len(_intro_list)) + ", transitions choices=" + str(len(_transitions_list)) + ", outro choices=" + str(len(_outro_list)) + ", prob=" + str(_tprob) + (" {@gray}(random transitions disabled)" if _norand else ""), 1)
             except Exception:
-                pass
-            log("  {@green}Keep cache{@reset}: {@white}" + ("true" if args.keep_cache else "false"), 1)
-            log("  {@green}Overlay{@reset}: {@white}" + ("enabled" if enable_overlay else "disabled"), 1)
-            log("  {@green}Rebuild{@reset}: {@white}" + ("true" if rebuild else "false"), 1)
-            # No strict intro/outro checks now; static is required and verified earlier.
+                _intro_list = []; _outro_list = []; _transitions_list = []; _tprob = 0.35; _norand = False
+            try:
+                _total = int(args.amountOfCompilations) * int(args.amountOfClips)
+            except Exception:
+                _total = None
+            # Panel rendering
+            print(bar)
+            print(title)
+            print(bar)
+            print(f"{L('Broadcaster')}{S()}{V(str(args.broadcaster), True)}")
+            print(f"{L('Time Window')}{S()}{V(str(window[0] or 'ANY'), True)} {S('->')} {V(str(window[1] or 'NOW'), True)}")
+            print(f"{L('Max fetch')}{S()}{V(str(args.max_clips))}")
+            print(f"{L('Min views')}{S()}{V(str(reactionThreshold))}")
+            print(f"{L('Format')}{S()}{V(container_ext)} {S('(')}{V(container_flags or 'no flags')}{S(')')}")
+            print(f"{L('Resolution')}{S()}{V(resolution)}  {L('FPS')}{S()}{V(str(fps))}  {L('Bitrate')}{S()}{V(str(bitrate))}")
+            comp_desc = f"{V(str(args.amountOfCompilations))} x {V(str(args.amountOfClips))}"
+            if _total is not None:
+                comp_desc += f" {S('(')}{V(str(_total))} {V('total')}{S(')')}"
+            print(f"{L('Compilations x Clips')}{S()}{comp_desc}")
+            print(f"{L('Cache dir')}{S()}{V(str(cache), True)}")
+            print(f"{L('Output dir')}{S()}{V(str(output), True)}")
+            tr_desc = f"intro={len(_intro_list)}, trans={len(_transitions_list)}, outro={len(_outro_list)}, prob={_tprob}"
+            if _norand:
+                tr_desc += f" {S('[no-random]')}"
+            print(f"{L('Transitions')}{S()}{V(tr_desc)}")
+            print(f"{L('Overlay')}{S()}{V('enabled' if enable_overlay else 'disabled')}")
+            print(f"{L('Rebuild')}{S()}{V('true' if rebuild else 'false')}")
+            print(bar)
+            # Prompt
             ans = input("Proceed? [Y/n]: ").strip().lower()
             if ans in ("n", "no"):
                 raise SystemExit("Aborted by user")
@@ -312,11 +344,11 @@ def main():  # noqa: C901
     if not user:
         raise SystemExit("Broadcaster not found")
     broadcaster_id = user["id"]
-    log("{@blue}Resolved broadcaster id:{@reset} {@cyan}" + str(broadcaster_id), 2)
+    log("Resolved broadcaster id: " + str(broadcaster_id), 2)
 
     prep_work()
 
-    log("{@green}Fetching clips from {@cyan}Helix", 1)
+    log("Fetching clips from Helix", 1)
     clips = fetch_clips(
         broadcaster_id=broadcaster_id,
         client_id=cid,
@@ -325,11 +357,11 @@ def main():  # noqa: C901
         ended_at=window[1],
         max_clips=args.max_clips,
     )
-    log("{@blue}Fetched {@white}" + str(len(clips)) + "{@blue} raw clips", 2)
+    log("Fetched " + str(len(clips)) + " raw clips", 2)
 
     # Filter by min views (reactionThreshold proxy)
     filtered = [c for c in clips if int(c.get("view_count", 0)) >= reactionThreshold]
-    log("{@blue}Filtered to {@white}" + str(len(filtered)) + "{@blue} clips (>= {@yellow}" + str(reactionThreshold) + "{@blue} views)", 2)
+    log("Filtered to " + str(len(filtered)) + " clips (>= " + str(reactionThreshold) + " views)", 2)
     if not filtered:
         # If auto-expand is off and we got none, stop here early.
         if not getattr(args, "auto_expand", False):
@@ -375,7 +407,7 @@ def main():  # noqa: C901
                     max_clips=args.max_clips,
                 )
                 if not seg_clips:
-                    log("{@cyan}Auto-expand:{@reset} no clips found for segment", 2)
+                    log("Auto-expand: no clips found for segment", 2)
                 # Filter and dedupe
                 seg_filtered = [c for c in seg_clips if int(c.get("view_count", 0)) >= reactionThreshold]
                 before = len(collected)
@@ -386,15 +418,15 @@ def main():  # noqa: C901
                         collected.append(c)
                 gained = len(collected) - before
                 log(
-                    "{@cyan}Auto-expand:{@reset} {@green}segment {@yellow}"
+                    "Auto-expand: segment "
                     + new_start_iso
-                    + "{@reset} -> {@yellow}"
+                    + " -> "
                     + current_start.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-                    + "{@reset} {@blue}added {@white}"
+                    + " added "
                     + str(gained)
-                    + "{@blue} clips (total {@white}"
+                    + " clips (total "
                     + str(len(collected))
-                    + "{@blue})",
+                    + ")",
                     2,
                 )
                 if gained == 0:
@@ -413,19 +445,19 @@ def main():  # noqa: C901
             except Exception:
                 pass
             log(
-                "{@blue}After expand:{@reset} {@white}" + str(len(filtered))
-                + "{@blue} filtered clips (target {@white}" + str(target_total) + "{@blue})",
+                "After expand: " + str(len(filtered))
+                + " filtered clips (target " + str(target_total) + ")",
                 2,
             )
         except Exception as e:
-            log("{@redbright}{@bold}Auto-expand failed:{@reset} {@white}" + str(e), 5)
+            log("Auto-expand failed: " + str(e), 5)
 
     avatar_map = fetch_creator_avatars(filtered, cid, token)
     rows = build_clip_rows(filtered, avatar_map)
     comps = create_compilations_from(rows)
-    log("{@blue}Stage 1{@reset} {@green}(processing clips)", 1)
+    log("Stage 1 (processing clips)", 1)
     stage_one(comps)
-    log("{@blue}Stage 2{@reset} {@green}(concatenate)", 1)
+    log("Stage 2 (concatenate)", 1)
     # Build the final filenames for display during compilation
     b_name = _sanitize_filename(args.broadcaster.lower()) or 'broadcaster'
     start_iso, end_iso = window
@@ -451,6 +483,7 @@ def main():  # noqa: C901
             base_names.append(f"{b_name}_{date_range}_part{i+1}.{_ext}")
     # Ensure names are unique upfront unless overwrite requested
     final_names = _ensure_unique_names(base_names, output, getattr(args, 'overwrite_output', False))
+    _was_interrupted = False
     try:
         stage_two(comps, final_names)
     except KeyboardInterrupt:
@@ -460,7 +493,9 @@ def main():  # noqa: C901
             request_shutdown()
         except Exception:
             pass
-        log("{@yellow}{@bold}Interrupted by user (Ctrl-C). Stopping encoder and cleaning up...", 1)
+        _was_interrupted = True
+    if _was_interrupted:
+        log("Interrupted by user (Ctrl-C). Stopping encoder and cleaning up...", 1)
     finals = finalize_outputs(
         args.broadcaster,
         window,
@@ -484,10 +519,10 @@ def main():  # noqa: C901
         _m_path = _os.path.join(output, "manifest.json")
         with open(_m_path, "w", encoding="utf-8") as f:
             _json.dump(manifest, f, indent=2)
-        log("{@green}Wrote manifest:{@reset} {@cyan}" + _m_path, 1)
+        log("Wrote manifest: " + _m_path, 1)
     except Exception as e:
-        log("{@yellow}{@bold}WARN{@reset} Failed to write manifest: {@white}" + str(e), 2)
-    log("{@green}Done", 2)
+        log("WARN Failed to write manifest: " + str(e), 2)
+    log("Done", 2)
 
 
 if __name__ == "__main__":  # pragma: no cover
@@ -502,6 +537,6 @@ if __name__ == "__main__":  # pragma: no cover
             pass
         try:
             from utils import log as _log
-            _log("{@yellow}{@bold}Interrupted by user. Exiting.")
+            _log("Interrupted by user. Exiting.")
         except Exception:
             print("Interrupted by user. Exiting.")

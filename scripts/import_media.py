@@ -181,31 +181,31 @@ def build_ffmpeg_cmd(src: str, dst: str, use_nvenc: bool, normalize_audio: bool)
 
 def import_one(src: str, tdir: str, kind: str, name: Optional[str], overwrite: bool, normalize_audio: bool) -> Optional[str]:
     if not os.path.exists(src):
-        log("{@redbright}{@bold}Input not found{@reset}: {@white}" + src, 5)
+        log("Input not found: " + src, 5)
         return None
     if not _ext_is_video(src):
-        log("{@yellow}{@bold}Skipping non-video{@reset}: {@white}" + src, 1)
+        log("Skipping non-video: " + src, 1)
         return None
     ensure_dir(tdir)
     out_name = pick_output_name(tdir, kind, name)
     out_path = os.path.join(tdir, out_name)
     if os.path.exists(out_path) and not overwrite:
-        log("{@yellow}{@bold}Exists{@reset} (use --overwrite): {@white}" + out_path, 1)
+        log("Exists (use --overwrite): " + out_path, 1)
         return out_path
     # temp path to avoid partial files
     tmp_path = out_path + ".tmp.mp4"
     use_nv = _has_nvenc(ffmpeg)
     cmd = build_ffmpeg_cmd(src, tmp_path, use_nv, normalize_audio)
-    log("{@green}Encoding{@reset}: {@gray}" + cmd, 1)
+    log("Encoding: " + cmd, 1)
     code, out = _run(cmd)
     if code != 0:
         # If NVENC failed, retry with libx264 automatically once
         if use_nv:
-            log("{@yellow}{@bold}NVENC failed, retrying with libx264...", 1)
+            log("NVENC failed, retrying with libx264...", 1)
             cmd2 = build_ffmpeg_cmd(src, tmp_path, use_nvenc=False, normalize_audio=normalize_audio)
             code2, out2 = _run(cmd2)
             if code2 != 0:
-                log("{@redbright}{@bold}Encode failed{@reset}", 5)
+                log("Encode failed", 5)
                 log(out2, 5)
                 try:
                     os.remove(tmp_path)
@@ -213,7 +213,7 @@ def import_one(src: str, tdir: str, kind: str, name: Optional[str], overwrite: b
                     pass
                 return None
         else:
-            log("{@redbright}{@bold}Encode failed{@reset}", 5)
+            log("Encode failed", 5)
             log(out, 5)
             try:
                 os.remove(tmp_path)
@@ -237,13 +237,13 @@ def import_one(src: str, tdir: str, kind: str, name: Optional[str], overwrite: b
                     i += 1
         shutil.move(tmp_path, out_path)
     except Exception as e:
-        log("{@redbright}{@bold}Failed to finalize file{@reset}: {@white}" + str(e), 5)
+        log("Failed to finalize file: " + str(e), 5)
         try:
             os.remove(tmp_path)
         except Exception:
             pass
         return None
-    log("{@green}Imported{@reset} -> {@cyan}" + out_path, 1)
+    log("Imported → " + out_path, 1)
     return out_path
 
 

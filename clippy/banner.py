@@ -4,13 +4,7 @@ import os
 import sys
 from typing import Optional
 
-try:
-    from yachalk import chalk
-except Exception:  # fallback if chalk not available
-    class _Plain:
-        def __getattr__(self, name):
-            return lambda s: s
-    chalk = _Plain()  # type: ignore
+from clippy.theme import THEME, enable_windows_vt  # type: ignore
 
 
 _VT_ENABLED = False
@@ -20,20 +14,8 @@ def _enable_windows_vt():
     global _VT_ENABLED
     if _VT_ENABLED:
         return
-    if os.name != 'nt':
-        _VT_ENABLED = True
-        return
-    try:
-        import ctypes
-        kernel32 = ctypes.windll.kernel32
-        handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
-        mode = ctypes.c_uint32()
-        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
-            ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
-            kernel32.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
-        _VT_ENABLED = True
-    except Exception:
-        _VT_ENABLED = False
+    enable_windows_vt()
+    _VT_ENABLED = True
 
 
 def show_banner(force: bool = False):
@@ -59,9 +41,9 @@ def show_banner(force: bool = False):
     ]
 
     # Colorize
-    neon = chalk.green_bright
-    accent = chalk.cyan
-    dim = chalk.gray
+    neon = THEME.title
+    accent = THEME.path
+    dim = THEME.bar
 
     for i, line in enumerate(lines):
         if i <= 5:

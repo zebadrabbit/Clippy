@@ -27,12 +27,32 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 import sys
 from yachalk import chalk
+try:
+    from clippy.theme import THEME, enable_windows_vt  # type: ignore
+except Exception:  # pragma: no cover
+    THEME = None  # type: ignore
+    def enable_windows_vt():  # type: ignore
+        return
 
 import requests
 from PIL import Image
 
 from config import *  # noqa: F401,F403
-from utils import log, replace_vars, resolve_transitions_dir
+# Hint static analyzers about the specific names we rely on from config
+try:  # pragma: no cover - purely for type checkers
+    from config import (
+        cache, output,
+        rebuild, enable_overlay,
+        reactionThreshold, amountOfClips, amountOfCompilations,
+        bitrate, audio_bitrate, resolution, fps,
+        cq, nvenc_preset, gop, rc_lookahead, spatial_aq, temporal_aq, aq_strength,
+        youtubeDl, youtubeDlOptions, ffmpeg, ffprobe,
+        ffmpegCreateThumbnail, ffmpegNormalizeVideos, ffmpegApplyOverlay, ffmpegBuildSegments,
+        container_ext, container_flags,
+    )
+except Exception:
+    pass
+from utils import log, replace_vars, resolve_transitions_dir, find_transition_file
 
 ClipRow = Tuple[str, float, str, str, int, str]  # (id, created_ts, author, avatar_url, views, url)
 
@@ -117,7 +137,7 @@ def run_proc(cmd: str, prefer_shell: bool = False):
                 return proc.returncode, proc.stderr
             except FileNotFoundError:
                 try:
-                    log("{@redbright}{@bold}Executable not found (Windows):{@reset} {@white}" + cmd, 5)
+                    log("Executable not found (Windows): " + cmd, 5)
                 except Exception:
                     pass
                 raise
@@ -128,8 +148,8 @@ def run_proc(cmd: str, prefer_shell: bool = False):
                 return proc.returncode, proc.stderr
             except FileNotFoundError:
                 try:
-                    log("{@redbright}{@bold}Executable not found:{@reset} {@white}" + str(tokens[0]), 5)
-                    log("{@gray}" + cmd, 5)
+                    log("Executable not found: " + str(tokens[0]), 5)
+                    log(cmd, 5)
                 except Exception:
                     pass
                 raise
@@ -140,8 +160,8 @@ def run_proc(cmd: str, prefer_shell: bool = False):
             return proc.returncode, proc.stderr
         except FileNotFoundError:
             try:
-                log("{@redbright}{@bold}Executable not found:{@reset} {@white}" + str(tokens[0]), 5)
-                log("{@gray}" + cmd, 5)
+                log("Executable not found: " + str(tokens[0]), 5)
+                log(cmd, 5)
             except Exception:
                 pass
             raise
@@ -180,10 +200,10 @@ def run_proc_cancellable(cmd: str, prefer_shell: bool = False, progress_cb: Opti
         # mirror run_proc error messaging
         try:
             if use_shell:
-                log("{@redbright}{@bold}Executable not found:{@reset} {@white}" + str(cmd), 5)
+                log("Executable not found: " + str(cmd), 5)
             else:
-                log("{@redbright}{@bold}Executable not found:{@reset} {@white}" + str(args[0]), 5)
-                log("{@gray}" + (cmd if isinstance(cmd, str) else str(cmd)), 5)
+                log("Executable not found: " + str(args[0]), 5)
+                log((cmd if isinstance(cmd, str) else str(cmd)), 5)
         except Exception:
             pass
         raise
@@ -281,11 +301,8 @@ def run_proc_cancellable(cmd: str, prefer_shell: bool = False, progress_cb: Opti
 
 
 def _ffprobe_duration(path: str) -> Optional[float]:
+    """Return media duration in seconds using ffprobe, or None on failure."""
     try:
-        cmd = f"{ffprobe} -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{path}\""
-        rc, err = run_proc_cancellable(cmd, prefer_shell=True)
-        # With our runner, diagnostics in err; duration will be in stdout, but we didn't capture stdout.
-        # Fallback: use subprocess directly for this one-off probe.
         out = subprocess.check_output([
             ffprobe, '-v', 'error', '-show_entries', 'format=duration',
             '-of', 'default=noprint_wrappers=1:nokey=1', path
@@ -338,7 +355,7 @@ def download_avatar(clip: ClipRow, quiet: bool = False) -> int:
         return 2
     url = clip[3] or 'https://static-cdn.jtvnw.net/jtv_user_pictures/x.png'
     if not quiet:
-        log(f"{{@green}}Avatar:{{@reset}} {{@cyan}}{url}", 1)
+        log(f"Avatar: {url}", 1)
     resp = requests.get(url)
     if resp.status_code >= 400:
         log('Avatar fetch failed; using placeholder', 2)
@@ -371,7 +388,7 @@ def download_clip(clip: ClipRow, quiet: bool = False) -> int:
         # Decode error for inspection
         err_txt = err.decode('utf-8', errors='ignore') if isinstance(err, (bytes, bytearray)) else str(err)
         if not quiet:
-            log('{@redbright}{@bold}Clip download error', 5)
+            log('Clip download error', 5)
             log(err_txt, 5)
         return 1
     return 0
@@ -401,7 +418,7 @@ def create_thumbnail(clip: ClipRow) -> int:
         return 1
     rc, err = run_proc_cancellable(ffmpeg + ' ' + replace_vars(ffmpegCreateThumbnail, clip), prefer_shell=False)
     if rc != 0:
-        log('{@redbright}{@bold}Thumbnail generation failed', 5)
+        log('Thumbnail generation failed', 5)
         log(err, 5)
         return 1
     try:
@@ -409,7 +426,7 @@ def create_thumbnail(clip: ClipRow) -> int:
             img.thumbnail((128, 128))
             img.save(preview, 'PNG')
     except Exception as e:
-        log(f"{{@redbright}}{{@bold}}Thumbnail resize error:{{@reset}} {{@white}}{e}", 5)
+        log(f"Thumbnail resize error: {e}", 5)
         return 1
     return 0
 
@@ -420,7 +437,7 @@ def process_clip(clip: ClipRow, quiet: bool = False, on_norm_progress: Optional[
     if os.path.isfile(final_path) and not rebuild:
         return 2
     if not quiet:
-        log('{@green}Normalizing', 1)
+        log('Normalizing', 1)
     if SHUTDOWN_EVENT.is_set():
         return 1
     # inject ffmpeg progress flags
@@ -446,9 +463,9 @@ def process_clip(clip: ClipRow, quiet: bool = False, on_norm_progress: Optional[
     rc, err = run_proc_cancellable(_norm_cmd, prefer_shell=False, progress_cb=_norm_cb if on_norm_progress else None)
     if rc != 0:
         if _is_interrupted(err):
-            log('{@yellow}{@bold}Normalization interrupted by user', 2)
+            log('Normalization interrupted by user', 2)
         else:
-            log('{@redbright}{@bold}Normalization failed', 5)
+            log('Normalization failed', 5)
             log(err, 5)
         return 1
     try:
@@ -457,7 +474,7 @@ def process_clip(clip: ClipRow, quiet: bool = False, on_norm_progress: Optional[
         pass
     if enable_overlay:
         if not quiet:
-            log('{@green}Overlay', 1)
+            log('Overlay', 1)
         if SHUTDOWN_EVENT.is_set():
             return 1
         _ovl_cmd = ffmpeg + ' ' + replace_vars(ffmpegApplyOverlay, clip)
@@ -477,9 +494,9 @@ def process_clip(clip: ClipRow, quiet: bool = False, on_norm_progress: Optional[
         rc, err = run_proc_cancellable(_ovl_cmd, prefer_shell=True, progress_cb=_ovl_cb if on_overlay_progress else None)
         if rc != 0:
             if _is_interrupted(err):
-                log('{@yellow}{@bold}Overlay interrupted by user', 2)
+                log('Overlay interrupted by user', 2)
             else:
-                log('{@redbright}{@bold}Overlay failed', 5)
+                log('Overlay failed', 5)
                 log(err, 5)
             return 1
     else:
@@ -503,7 +520,7 @@ def create_compilations_from(clips: List[ClipRow]) -> List[List[ClipRow]]:
     while eligible and len(compilations) < amountOfCompilations:
         compilations.append(eligible[:amountOfClips])
         eligible = eligible[amountOfClips:]
-    log(f"{{@blue}}Created {{@white}}{len(compilations)}{{@blue}} compilations", 2)
+    log(f"Created {len(compilations)} compilations", 2)
     return compilations
 
 
@@ -537,10 +554,11 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
     def _ensure_transcoded(name: str) -> Optional[str]:
         if not name:
             return None
-        src = os.path.join(transitions_abs, name)
+        # Resolve asset path across known roots to avoid false missing warnings
+        src = find_transition_file(name) or os.path.join(transitions_abs, name)
         if not os.path.exists(src):
             try:
-                log("{@yellow}{@bold}WARN{@reset} Missing transition file; skipping: {@white}" + name, 2)
+                log("WARN Missing transition file; skipping: " + name, 2)
             except Exception:
                 pass
             return None
@@ -675,9 +693,9 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
             try:
                 _etxt = err.decode('utf-8', errors='ignore') if isinstance(err, (bytes, bytearray)) else str(err)
                 if _is_interrupted(err):
-                    log("{@yellow}{@bold}Transition build interrupted by user{@reset}", 2)
+                    log("Transition build interrupted by user", 2)
                 else:
-                    log("{@yellow}{@bold}WARN{@reset} Failed to normalize transition asset: {@white}" + name, 2)
+                    log("WARN Failed to normalize transition asset: " + name, 2)
                     log(_etxt, 2)
             except Exception:
                 pass
@@ -787,7 +805,7 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
             return True
         # If normalization fails or file missing, skip to avoid bad AAC streams
         try:
-            log("{@yellow}{@bold}WARN{@reset} Skipping transition (normalization failed): {@white}" + str(name), 2)
+            log("WARN Skipping transition (normalization failed): " + str(name), 2)
         except Exception:
             pass
         return False
@@ -830,18 +848,30 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
     _lock = threading.Lock()
     def _status_text(label: str) -> str:
         low = label.lower()
-        if low.startswith('failed'):
-            return str(chalk.red_bright.bold(label))
-        if 'done' in low:
-            return str(chalk.green_bright.bold(label))
-        if 'download' in low or 'avatar' in low:
-            return str(chalk.cyan(label))
-        if 'normalizing' in low or 'overlay' in low or 'processing' in low:
-            return str(chalk.yellow(label))
-        if 'queued' in low:
-            return str(chalk.gray(label))
+        try:
+            if low.startswith('failed'):
+                return THEME.error(label) if THEME else str(chalk.magenta(label))
+            if 'done' in low:
+                return THEME.success(label) if THEME else str(chalk.cyan(label))
+            if 'download' in low or 'avatar' in low:
+                return THEME.path(label) if THEME else str(chalk.cyan(label))
+            if 'normalizing' in low or 'overlay' in low or 'processing' in low:
+                return THEME.section(label) if THEME else str(chalk.blue(label))
+            if 'queued' in low:
+                return THEME.bar(label) if THEME else str(chalk.gray(label))
+        except Exception:
+            pass
         return label
-    print(str(chalk.blue_bright(f"Preparing {total} clip(s)...")))
+    try:
+        enable_windows_vt()
+    except Exception:
+        pass
+    hdr = None
+    try:
+        hdr = THEME.title(f"Preparing {total} clip(s)...") if THEME else str(chalk.blue_bright(f"Preparing {total} clip(s)..."))
+    except Exception:
+        hdr = str(chalk.blue_bright(f"Preparing {total} clip(s)..."))
+    print(hdr)
     for i in range(1, total + 1):
         print(f"Clip {i}: {_status_text('queued')}")
 
@@ -852,7 +882,11 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
             offset = (total - (pos - 1))
             sys.stdout.write(f"\x1b[{offset}A")
             sys.stdout.write("\r\x1b[2K")
-            sys.stdout.write(f"Clip {pos}: {_status_text(text)}\n")
+            try:
+                clip_label = THEME.section("Clip") if THEME else "Clip"
+            except Exception:
+                clip_label = "Clip"
+            sys.stdout.write(f"{clip_label} {pos}: {_status_text(text)}\n")
             # Move back down to bottom
             if offset > 1:
                 sys.stdout.write(f"\x1b[{offset - 1}B")
@@ -934,13 +968,13 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
         if not ok:
             if _skip_bad:
                 try:
-                    log("{@yellow}{@bold}WARN{@reset} Skipping failed clip: {@white}" + str(clip[0]), 2)
+                    log("WARN Skipping failed clip: " + str(clip[0]), 2)
                 except Exception:
                     pass
                 continue
             else:
                 try:
-                    log("{@redbright}{@bold}Clip failed and skip disabled; aborting", 5)
+                    log("Clip failed and skip disabled; aborting", 5)
                 except Exception:
                     pass
                 break
@@ -966,7 +1000,7 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
 
 def stage_one(compilations: List[List[ClipRow]]):
     for idx, comp in enumerate(compilations):
-        log(f"{{@green}}Concat list{{@reset}} {{@white}}{idx}", 1)
+        log(f"Concat list {idx}", 1)
         write_concat_file(idx, comp)
 
 
@@ -978,9 +1012,9 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
         out_path = replace_vars(out_tmpl, (str(idx), 0, '', '', 0, ''))
         out_name = os.path.basename(out_path)
         if final_names and idx < len(final_names):
-            log(f"{{@green}}Compiling{{@reset}} {{@white}}{out_name}{{@reset}} -> {{@white}}{final_names[idx]}", 1)
+            log(f"Compiling {out_name} → {final_names[idx]}", 1)
         else:
-            log(f"{{@green}}Compiling{{@reset}} {{@white}}{out_name}", 1)
+            log(f"Compiling {out_name}", 1)
         # Prepare template with index/date and run through replace_vars to fill all tokens
         tmpl = (ffmpegBuildSegments
             .replace('{idx}', str(idx))
@@ -1012,9 +1046,21 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
             done = float(info['out_time'])
             if total and total > 0:
                 pct = max(0, min(100, int((done/total)*100)))
-                sys.stdout.write(f"\r{chalk.yellow('Concatenating')} {chalk.white(out_name)}: {pct}% ({_fmt_time(done)}/{_fmt_time(total)})   ")
+                try:
+                    act = THEME.section('Concatenating') if THEME else chalk.cyan('Concatenating')
+                    name = THEME.path(out_name) if THEME else chalk.white(out_name)
+                except Exception:
+                    act = chalk.cyan('Concatenating')
+                    name = chalk.white(out_name)
+                sys.stdout.write(f"\r{act} {name}: {pct}% ({_fmt_time(done)}/{_fmt_time(total)})   ")
             else:
-                sys.stdout.write(f"\r{chalk.yellow('Concatenating')} {chalk.white(out_name)}: {_fmt_time(done)}   ")
+                try:
+                    act = THEME.section('Concatenating') if THEME else chalk.cyan('Concatenating')
+                    name = THEME.path(out_name) if THEME else chalk.white(out_name)
+                except Exception:
+                    act = chalk.cyan('Concatenating')
+                    name = chalk.white(out_name)
+                sys.stdout.write(f"\r{act} {name}: {_fmt_time(done)}   ")
             sys.stdout.flush()
 
         # Use cancellable runner for final concat as well
@@ -1028,10 +1074,10 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
         if rc != 0:
             try:
                 if _is_interrupted(err):
-                    log("{@yellow}{@bold}Concatenation interrupted by user{@reset}", 2)
+                    log("Concatenation interrupted by user", 2)
                 else:
                     _etxt = err.decode('utf-8', errors='ignore') if isinstance(err, (bytes, bytearray)) else str(err)
-                    log("{@redbright}{@bold}Concat failed for index {@reset}{@white}" + str(idx), 5)
+                    log("Concat failed for index " + str(idx), 5)
                     log(_etxt, 5)
             except Exception:
                 pass

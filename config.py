@@ -30,12 +30,6 @@ globals().update(_merged)
 # Ensure essentials exist
 yt_format = globals().get('yt_format', "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]")
 
-
-# =============================================================
-# DO NOT EDIT BELOW THIS LINE UNLESS YOU KNOW WHAT YOU'RE DOING
-# (but feel free to read it)
-# =============================================================
-
 # ffmpeg / downloader binaries
 import os, sys  # noqa: E401
 if getattr(sys, 'frozen', False):

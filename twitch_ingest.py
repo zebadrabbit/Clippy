@@ -18,7 +18,7 @@ Environment variables (recommended):
     TWITCH_CLIENT_ID
     TWITCH_CLIENT_SECRET
 
-Fallback: values can be passed via CLI flags in `main_twitch.py`.
+Fallback: values can be passed via CLI flags in `main.py`.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def resolve_user(login: str, client_id: str, token: str) -> dict | None:
     """Resolve a user by login name; returns first match or None."""
     resp = requests.get(USERS_URL, params={"login": login}, headers=_headers(client_id, token), timeout=15)
     if resp.status_code != 200:
-        log(f"{{redbright}}{{bold}}Resolve user failed:{{reset}} {{white}}{login}{{reset}} {{yellow}}{resp.status_code}", 5)
+        log(f"Resolve user failed: {login} {resp.status_code}", 5)
         return None
     data = resp.json().get("data", [])
     return data[0] if data else None
@@ -95,16 +95,19 @@ def fetch_clips(
             _ea = params.get("ended_at") or "-"
             _af = params.get("after") or "-"
             _first = params.get("first")
-            log("{@cyan}Helix params{@reset}: "
-                + "{@green}started_at{@reset}={@yellow}" + str(_sa)
-                + "{@reset} {@green}ended_at{@reset}={@yellow}" + str(_ea)
-                + "{@reset} {@green}first{@reset}={@white}" + str(_first)
-                + "{@reset} {@green}after{@reset}={@white}" + str(_af), 2)
+            log(
+                "Helix params: "
+                + "started_at=" + str(_sa)
+                + " ended_at=" + str(_ea)
+                + " first=" + str(_first)
+                + " after=" + str(_af),
+                2,
+            )
         except Exception:
             pass
         resp = requests.get(CLIPS_URL, params=params, headers=_headers(client_id, token), timeout=30)
         if resp.status_code != 200:
-            log(f"{{redbright}}{{bold}}Error fetching clips:{{reset}} {{yellow}}{resp.status_code}{{reset}} {{white}}{resp.text[:120]}", 5)
+            log(f"Error fetching clips: {resp.status_code} {resp.text[:120]}", 5)
             break
         payload = resp.json()
         data = payload.get("data", [])
@@ -129,7 +132,7 @@ def fetch_creator_avatars(clips: _t.Iterable[dict], client_id: str, token: str) 
         params = [("id", cid) for cid in chunk]
         resp = requests.get(USERS_URL, params=params, headers=_headers(client_id, token), timeout=15)
         if resp.status_code != 200:
-            log(f"{{redbright}}{{bold}}Avatar batch failed{{reset}} {{yellow}}{resp.status_code}", 5)
+            log(f"Avatar batch failed {resp.status_code}", 5)
             continue
         for u in resp.json().get("data", []):
             avatar_map[u.get("id")] = u.get("profile_image_url", "")
@@ -160,7 +163,7 @@ def build_clip_rows(clips: _t.Iterable[dict], avatar_map: dict | None = None) ->
                 c.get("url", ""),
             ))
         except Exception as e:  # pragma: no cover
-            log(f"{{redbright}}{{bold}}Row build error:{{reset}} {{white}}{e}", 5)
+            log(f"Row build error: {e}", 5)
     return rows
 
 
@@ -190,7 +193,7 @@ def _load_dotenv(path: str = ".env") -> dict:
                 k, v = line.split("=", 1)
                 data[k.strip()] = v.strip().strip('"').strip("'")
     except Exception as e:  # pragma: no cover
-        log(f"{{redbright}}{{bold}}.env parse error:{{reset}} {{white}}{e}", 5)
+        log(f".env parse error: {e}", 5)
     return data
 
 

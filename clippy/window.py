@@ -51,32 +51,32 @@ def resolve_date_window(start_str: Optional[str], end_str: Optional[str]) -> Tup
 
 def summarize(cfg, resolved_window: Tuple[Optional[str], Optional[str]], resolution: Optional[str], container_ext: str, bitrate: Optional[str]):
     start_iso, end_iso = resolved_window
-    log("{@green}Broadcaster:{@reset} {@cyan}" + str(cfg.broadcaster), 1)
+    log("Broadcaster: " + str(cfg.broadcaster), 1)
     if start_iso or end_iso:
-        log("{@green}Time Window:{@reset} {@yellow}" + (start_iso or 'ANY') + "{@reset} {@white}->{@reset} {@yellow}" + (end_iso or 'NOW'), 1)
+        log("Time Window: " + (start_iso or 'ANY') + " -> " + (end_iso or 'NOW'), 1)
     else:
-        log("{@green}Time Window:{@reset} {@yellow}ANY", 1)
-    log("{@green}Max Clips Fetch:{@reset} {@white}" + str(cfg.max_clips), 1)
+        log("Time Window: ANY", 1)
+    log("Max Clips Fetch: " + str(cfg.max_clips), 1)
     try:
         _tot = int(getattr(cfg, "amountOfCompilations")) * int(getattr(cfg, "amountOfClips"))
     except Exception:
         _tot = None
-    msg = "{@green}Compilations:{@reset} {@white}" + str(cfg.amountOfCompilations) + "{@reset} {@green}| Clips each:{@reset} {@white}" + str(cfg.amountOfClips)
+    msg = "Compilations: " + str(cfg.amountOfCompilations) + " | Clips each: " + str(cfg.amountOfClips)
     if _tot is not None:
-        msg += " {@green}({@white}" + str(_tot) + "{@green} total)"
+        msg += " (" + str(_tot) + " total)"
     log(msg, 1)
-    log("{@green}Min Views:{@reset} {@yellow}" + str(cfg.reactionThreshold), 1)
+    log("Min Views: " + str(cfg.reactionThreshold), 1)
     # Show selected resolution/format/bitrate
     try:
-        log("{@green}Resolution:{@reset} {@white}" + str(resolution or ""), 1)
-        log("{@green}Format:{@reset} {@white}" + str(container_ext or "mp4"), 1)
-        log("{@green}Bitrate:{@reset} {@white}" + str(bitrate or ""), 1)
+        log("Resolution: " + str(resolution or ""), 1)
+        log("Format: " + str(container_ext or "mp4"), 1)
+        log("Bitrate: " + str(bitrate or ""), 1)
     except Exception:
         pass
     try:
         if getattr(cfg, "auto_expand", False):
-            log("{@green}Auto-expand:{@reset} {@cyan}enabled", 1)
-            log("{@green}Expand step:{@reset} {@white}" + str(getattr(cfg, "expand_step_days", 7)) + "{@reset} {@green}days", 1)
-            log("{@green}Max lookback:{@reset} {@white}" + str(getattr(cfg, "max_lookback_days", 90)) + "{@reset} {@green}days", 1)
+            log("Auto-expand: enabled", 1)
+            log("Expand step: " + str(getattr(cfg, "expand_step_days", 7)) + " days", 1)
+            log("Max lookback: " + str(getattr(cfg, "max_lookback_days", 90)) + " days", 1)
     except Exception:
         pass

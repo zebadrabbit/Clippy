@@ -49,12 +49,12 @@ def ensure_twitch_credentials_if_needed():
     secret = os.getenv("TWITCH_CLIENT_SECRET") or ""
 
     if not cid or not secret:
-        log("{@redbright}{@bold}Twitch credentials missing{@reset}", 5)
-        log("ID and Secret needed: {@cyan}https://dev.twitch.tv/console/apps{@reset}", 1)
+        log("Twitch credentials missing", 5)
+        log("ID and Secret needed: https://dev.twitch.tv/console/apps", 1)
         log("Provide credentials via one of:", 1)
-        log("  - .env file: {@white}TWITCH_CLIENT_ID=<id>{@reset}, {@white}TWITCH_CLIENT_SECRET=<secret>", 1)
-        log("  - PowerShell env vars: {@white}$env:TWITCH_CLIENT_ID='...'; $env:TWITCH_CLIENT_SECRET='...'{@reset}", 1)
-        log("  - CLI flags (if supported): {@white}--client-id <id> --client-secret <secret>{@reset}", 1)
+        log("  - .env file: TWITCH_CLIENT_ID=<id>, TWITCH_CLIENT_SECRET=<secret>", 1)
+        log("  - PowerShell env vars: $env:TWITCH_CLIENT_ID='...'; $env:TWITCH_CLIENT_SECRET='...'", 1)
+        log("  - CLI flags (if supported): --client-id <id> --client-secret <secret>", 1)
         raise SystemExit(2)
 
 
@@ -77,10 +77,10 @@ def ensure_transitions_static_present(transitions_dir: Optional[str] = None):
         def _log(msg, level=0):
             print(msg)
     if not os.path.isdir(tdir):
-        _log("{@redbright}{@bold}Transitions directory missing:{@reset} {@white}" + tdir, 5)
+        _log("Transitions directory missing: " + tdir, 5)
         _log("Place your clips (intro.mp4, static.mp4, outro.mp4) in this folder or provide --transitions-dir.", 1)
         raise SystemExit(2)
     if not os.path.exists(static_path):
-        _log("{@redbright}{@bold}Missing required file:{@reset} {@white}static.mp4 {@reset}in {@white}" + tdir, 5)
+        _log("Missing required file: static.mp4 in " + tdir, 5)
         _log("This project requires transitions/static.mp4. Set TRANSITIONS_DIR, use --transitions-dir, or place the file.", 1)
         raise SystemExit(2)

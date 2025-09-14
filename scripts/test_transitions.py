@@ -20,7 +20,7 @@ def run(cmd: List[str]) -> Tuple[int, bytes, bytes]:
         p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return p.returncode, p.stdout, p.stderr
     except FileNotFoundError as e:
-        log("{@redbright}{@bold}Executable not found:{@reset} {@white}" + str(e), 5)
+        log("Executable not found: " + str(e), 5)
         return 127, b"", str(e).encode()
 
 
@@ -106,11 +106,11 @@ def main():
     args = ap.parse_args()
 
     tdir = resolve_transitions_dir()
-    log("{@green}Transitions dir:{@reset} {@cyan}" + tdir, 1)
+    log("Transitions dir: " + tdir, 1)
     files = [f for f in os.listdir(tdir) if f.lower().endswith(".mp4")]
     files.sort()
     if not files:
-        log("{@yellow}{@bold}No .mp4 files found in transitions directory", 1)
+        log("No .mp4 files found in transitions directory", 1)
         return 0
 
     ok_count = 0
@@ -123,10 +123,10 @@ def main():
         aud = "audio" if has_aud else "no-audio"
         if ok:
             ok_count += 1
-            log(f"{{@blue}}Probe{{@reset}} {{@white}}{name}{{@reset}} -> {{@green}}{status}{{@reset}} {{@gray}}({aud})", 2)
+            log(f"Probe {name} → {status} ({aud})", 2)
         else:
             fail_count += 1
-            log(f"{{@blue}}Probe{{@reset}} {{@white}}{name}{{@reset}} -> {{@redbright}}{status}{{@reset}}", 2)
+            log(f"Probe {name} → {status}", 2)
             if err:
                 log(err, 5)
 
@@ -140,14 +140,14 @@ def main():
             dst = os.path.join(norm_dir, name)
             if (not args.rebuild) and os.path.exists(dst):
                 normalized_ok.append(name)
-                log("{@green}Normalized exists{@reset}: {@cyan}" + name, 1)
+                log("Normalized exists: " + name, 1)
                 continue
             ok, err = normalize_asset(src, dst, loudnorm=(not args.no_audnorm))
             if ok:
                 normalized_ok.append(name)
-                log("{@green}Normalized{@reset}: {@white}" + name, 1)
+                log("Normalized: " + name, 1)
             else:
-                log("{@yellow}{@bold}WARN{@reset} Failed to normalize: {@white}" + name, 2)
+                log("WARN Failed to normalize: " + name, 2)
                 if err:
                     log(err, 5)
 
@@ -155,13 +155,13 @@ def main():
     if args.concat_audio_check and normalized_ok:
         ok, err = build_concat_and_check(norm_dir, normalized_ok)
         if ok:
-            log("{@green}Concat audio-only check passed{@reset}", 1)
+            log("Concat audio-only check passed", 1)
         else:
-            log("{@yellow}{@bold}Concat audio-only check found errors{@reset}", 2)
+            log("Concat audio-only check found errors", 2)
             if err:
                 log(err, 5)
 
-    log(f"{{@blue}}Summary{{@reset}}: ok={{@white}}{ok_count}{{@reset}}, failed={{@white}}{fail_count}{{@reset}}, files={{@white}}{len(files)}", 2)
+    log(f"Summary: ok={ok_count}, failed={fail_count}, files={len(files)}", 2)
     return 0
 
 

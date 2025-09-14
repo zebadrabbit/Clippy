@@ -42,7 +42,7 @@ python main.py --broadcaster somechannel --max-clips 80 --clips 12 --compilation
 
 Confirm settings (default prompt) or skip with `-y`:
 ```powershell
-python main_twitch.py --broadcaster somechannel -y
+python main.py --broadcaster somechannel -y
 ```
 
 Auto-expand lookback to gather more clips:

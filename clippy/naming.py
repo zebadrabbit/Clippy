@@ -50,7 +50,7 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
     # Import late to avoid circulars
     from config import cache, output
     from utils import log  # local import to avoid circular
-    log("{@green}Finalizing outputs", 1)
+    log("Finalizing outputs", 1)
     try:
         b_name = sanitize_filename(broadcaster.lower()) or 'broadcaster'
         start_iso, end_iso = window
@@ -122,25 +122,25 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
                 missing_indices.append(i)
         if moved_files:
             try:
-                log("{@blue}Moved {@white}" + str(moved) + "{@blue} file(s) to {@cyan}output{@reset}: " + ", ".join(moved_files), 2)
+                log("Moved " + str(moved) + " file(s) to output: " + ", ".join(moved_files), 2)
             except Exception:
-                log("{@blue}Moved {@white}" + str(moved) + "{@blue} file(s) to {@cyan}output", 2)
+                log("Moved " + str(moved) + " file(s) to output", 2)
         else:
-            log("{@blue}Moved {@white}" + str(moved) + "{@blue} file(s) to {@cyan}output", 2)
+            log("Moved " + str(moved) + " file(s) to output", 2)
         if missing_indices:
             try:
-                log("{@yellow}{@bold}WARN{@reset} Missing compiled output(s) in cache for index(es): {@white}" + ", ".join(str(i) for i in missing_indices), 2)
+                log("WARN Missing compiled output(s) in cache for index(es): " + ", ".join(str(i) for i in missing_indices), 2)
             except Exception:
                 pass
     except Exception as e:  # pragma: no cover
-        log("{@redbright}{@bold}Finalize failed:{@reset} {@white}" + str(e), 5)
+        log("Finalize failed: " + str(e), 5)
         return []
 
     if keep_cache and not purge_cache:
-        log('{@green}Cache retained{@reset} ({@cyan}--keep-cache set{@reset})', 0)
+        log('Cache retained (--keep-cache set)', 0)
         return final_names
     # clean cache except leave directory itself
-    log('{@green}Cleaning cache', 1)
+    log('Cleaning cache', 1)
     try:
         preserve_set = set()
         if not purge_cache:
@@ -160,7 +160,7 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
                     os.remove(path)
             except OSError:
                 pass
-        log('{@blue}Cache cleaned', 2)
+        log('Cache cleaned', 2)
     except Exception as e:  # pragma: no cover
-        log("{@redbright}{@bold}Cache cleanup failed:{@reset} {@white}" + str(e), 5)
+        log("Cache cleanup failed: " + str(e), 5)
     return final_names

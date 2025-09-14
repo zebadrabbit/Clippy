@@ -30,6 +30,7 @@ else:
 
 from config import youtubeDl, ffmpeg, cache, output, fontfile  # noqa: E402
 from utils import resolve_transitions_dir  # noqa: E402
+from clippy.theme import enable_windows_vt, status_tag, THEME, paint  # type: ignore  # noqa: E402
 
 
 def _resolve_exe(name_or_path: str) -> str | None:
@@ -57,62 +58,14 @@ def _run(cmd: list[str] | str) -> tuple[int, str]:
         return 1, str(e)
 
 
-# --- Minimal color support (no external deps) ---------------------------------
-_CODES = {
-    "reset": "\x1b[0m",
-    "bold": "\x1b[1m",
-    "dim": "\x1b[2m",
-    "red": "\x1b[31m",
-    "green": "\x1b[32m",
-    "yellow": "\x1b[33m",
-    "blue": "\x1b[34m",
-    "magenta": "\x1b[35m",
-    "cyan": "\x1b[36m",
-    "gray": "\x1b[90m",
-}
-
-
-def _enable_windows_vt() -> None:
-    # Best-effort: enable ANSI sequences in Windows terminals
-    try:
-        if os.name == "nt":
-            import ctypes  # noqa: PLC0415
-            kernel32 = ctypes.windll.kernel32
-            handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
-            mode = ctypes.c_uint32()
-            if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
-                ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
-                kernel32.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
-    except Exception:
-        pass
-
-
 def _color_enabled() -> bool:
+    # Keep for compatibility with paint; theme handles chalk but we still want to avoid styling when redirected
     if os.getenv("NO_COLOR") is not None:
         return False
     try:
         return sys.stdout.isatty()
     except Exception:
         return False
-
-
-def paint(text: str, *styles: str) -> str:
-    if not _color_enabled():
-        return text
-    start = "".join(_CODES.get(s, "") for s in styles if s in _CODES)
-    end = _CODES["reset"] if start else ""
-    return f"{start}{text}{end}"
-
-
-def status_tag(kind: str) -> str:
-    kinds = {
-        "OK": ("OK", "green", "bold"),
-        "WARN": ("WARN", "yellow", "bold"),
-        "MISSING": ("MISSING", "red", "bold"),
-        "INFO": ("INFO", "cyan", "bold"),
-    }
-    text, *styles = kinds.get(kind, (kind,))
-    return paint(f"[{text}]", *styles)
 
 
 def check_binaries() -> tuple[bool, dict[str, str | None]]:
@@ -308,7 +261,7 @@ def check_twitch_creds() -> None:
 
 
 def main():
-    _enable_windows_vt()
+    enable_windows_vt()
     ok, bin_paths = check_binaries()
     ff = bin_paths.get(ffmpeg)
     if ff:
