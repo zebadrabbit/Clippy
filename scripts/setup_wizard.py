@@ -102,10 +102,7 @@ except Exception:
     DEFAULT_SILENCE_STATIC = False
     DEFAULT_SILENCE_INTRO_OUTRO = False
 
-PS1_HEADER = """
-# Helper to run Clippy with your chosen defaults
-# Edit values below to match your broadcaster name and any overrides
-""".strip()
+PS1_HEADER = """"""  # no longer used; keeping symbol to avoid NameError if referenced
 
 
 def _print_header():
@@ -246,11 +243,12 @@ def main():
     client_id = _prompt_str("Twitch Client ID", cid_default or None)
     client_secret = _prompt_str("Twitch Client Secret", sec_default or None)
 
-    # Step 2: Defaults for selection
+    # Step 2: Defaults for selection and identity
     print("\n" + THEME.header("Step 2: Clip selection defaults"))
     min_views = _prompt_int("Minimum views to include a clip", DEFAULT_MIN_VIEWS, 0)
     clips_per_comp = _prompt_int("Clips per compilation", DEFAULT_CLIPS, 1)
     num_compilations = _prompt_int("Number of compilations per run", DEFAULT_COMPS, 1)
+    default_broadcaster = _prompt_str("Default broadcaster login (optional)", "")
 
     # Step 3: Quality and format
     print("\n" + THEME.header("Step 3: Output quality & format"))
@@ -302,6 +300,9 @@ def main():
             "clips_per_compilation": clips_per_comp,
             "compilations": num_compilations,
         },
+        "identity": {
+            "broadcaster": default_broadcaster or None,
+        },
         "sequencing": {
             "transition_probability": trans_prob,
             "no_random_transitions": (not use_random),
@@ -343,40 +344,7 @@ def main():
         except Exception as e2:
             print(THEME.warn(f"WARN: Failed to write config file: {e} / {e2}"))
 
-    # Generate a PowerShell helper script with suggestions
-    broadcaster_placeholder = "<your_twitch_login>"
-    args = [
-        f"--broadcaster {broadcaster_placeholder}",
-        f"--clips {clips_per_comp}",
-        f"--compilations {num_compilations}",
-        f"--min-views {min_views}",
-        f"--max-concurrency {conc}",
-        "-y",
-    ]
-    # Add quality derived flags
-    args += [
-        f"--quality {preset_name}",
-        f"--fps {fps}",
-        f"--audio-bitrate {audio_br}",
-        f"--resolution {resolution}",
-    ]
-    if use_random:
-        args.append(f"--transition-prob {trans_prob}")
-    else:
-        args.append("--no-random-transitions")
-    if trans_dir:
-        args.append(f"--transitions-dir '{trans_dir}'")
-
-    helper = PS1_HEADER + "\n" + (
-        f"$env:TWITCH_CLIENT_ID=\"{client_id}\"; $env:TWITCH_CLIENT_SECRET=\"{client_secret}\"; "+
-        "python .\\main.py " + " ".join(args) + "\n"
-    )
-    run_ps1 = Path("run_clippy.ps1")
-    try:
-        run_ps1.write_text(helper, encoding="utf-8")
-        print(THEME.success(f"Wrote {run_ps1.resolve()}"))
-    except Exception as e:
-        print(THEME.warn(f"WARN: Failed to write {run_ps1.name}: {e}"))
+    # No longer generating run_clippy.ps1; rely on clippy.yaml defaults and CLI overrides
 
     # Final checks & suggestions
     print("\n" + THEME.section("Final checks:"))
@@ -386,9 +354,13 @@ def main():
     else:
         print(THEME.warn("  static.mp4 not found in transitions/. If you don't have one, set CLIPPY_USE_INTERNAL=1 or set --transitions-dir."))
     print("\n" + THEME.header("All set! Next steps:"))
-    print(THEME.text("  1) Edit run_clippy.ps1 to set your broadcaster login."))
-    print(THEME.text("  2) Open a PowerShell and run: .\\run_clippy.ps1"))
-    print(THEME.text("  3) Check output/ for your compiled videos and manifest.json"))
+    if default_broadcaster:
+        print(THEME.text("  1) Run a compile using your saved defaults:"))
+        print(THEME.path("     python .\\main.py -y"))
+    else:
+        print(THEME.text("  1) Run a compile by providing a broadcaster:"))
+        print(THEME.path("     python .\\main.py --broadcaster <name> -y"))
+    print(THEME.text("  2) Check output/ for your compiled videos and manifest.json"))
 
 
 if __name__ == "__main__":

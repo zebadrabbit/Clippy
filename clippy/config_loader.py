@@ -167,6 +167,7 @@ def load_merged_config(defaults: dict[str, Any] | None = None, env: dict[str, st
     paths = data.get("paths", {}) if isinstance(data, dict) else {}
     beh = data.get("behavior", {}) if isinstance(data, dict) else {}
     assets = data.get("assets", {}) if isinstance(data, dict) else {}
+    identity = data.get("identity", {}) if isinstance(data, dict) else {}
 
     # Map fields to existing names
     merged["amountOfClips"] = _coerce_int(sel.get("clips_per_compilation"), merged.get("amountOfClips"))
@@ -213,6 +214,9 @@ def load_merged_config(defaults: dict[str, Any] | None = None, env: dict[str, st
     merged["intro"] = _coerce_list_str(assets.get("intro"), merged.get("intro", []))
     merged["outro"] = _coerce_list_str(assets.get("outro"), merged.get("outro", []))
     merged["transitions"] = _coerce_list_str(assets.get("transitions"), merged.get("transitions", []))
+
+    # Identity
+    merged["default_broadcaster"] = _coerce_str(identity.get("broadcaster"), merged.get("default_broadcaster", ""))
 
     # Environment overrides (non-secret convenience)
     if env.get("TRANSITIONS_DIR"):

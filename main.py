@@ -269,6 +269,20 @@ def main():  # noqa: C901
     except Exception:
         pass
 
+    # If broadcaster not provided via CLI, use default from config if present
+    try:
+        _def_b = globals().get("default_broadcaster", "")
+    except Exception:
+        _def_b = ""
+    if not getattr(args, "broadcaster", None):
+        if _def_b:
+            args.broadcaster = _def_b
+            log("Using default broadcaster from config: " + str(_def_b), 1)
+        else:
+            log("No broadcaster provided and no default configured in clippy.yaml (identity.broadcaster)", 5)
+            log("Set identity.broadcaster via setup_wizard or provide --broadcaster", 1)
+            raise SystemExit(2)
+
     # Interactive confirmation (default). Use -y/--yes to skip.
     if not getattr(args, "yes", False):
         try:

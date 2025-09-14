@@ -20,7 +20,7 @@ def parse_args() -> argparse.Namespace:
 
     # Required / identity
     g_required = p.add_argument_group("Required")
-    g_required.add_argument("--broadcaster", required=True, help="Broadcaster login name (e.g. theflood)")
+    g_required.add_argument("--broadcaster", help="Broadcaster login name (e.g. theflood). If omitted, uses identity.broadcaster from clippy.yaml if set.")
     g_required.add_argument("--client-id", dest="client_id", help="Twitch Client ID (else TWITCH_CLIENT_ID env)")
     g_required.add_argument("--client-secret", dest="client_secret", help="Twitch Client Secret (else env)")
 

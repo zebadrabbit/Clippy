@@ -24,10 +24,11 @@ python .\scripts\setup_wizard.py
 ### What the setup wizard does
 - Guides you through entering your Twitch credentials and saves them to a `.env` file
 - Writes a starter `clippy.yaml` with sensible defaults (clips per compilation, min views, quality, fps/resolution)
+- Optionally sets a default broadcaster so you can run without specifying `--broadcaster`
 - Checks for ffmpeg/yt-dlp and NVENC availability; suggests fixes if missing
 - Helps you select or create a transitions folder (`transitions/`), explains the required `static.mp4`
 - Offers to prefer packaged internal transitions with `CLIPPY_USE_INTERNAL=1`
-- Generates a convenience launcher `run_clippy.ps1` with your last-used flags
+- You can run with just: `python .\main.py -y` after saving defaults
 
 You can re-run the wizard at any time to adjust settings; it will merge with the existing YAML and leave custom edits intact.
 
