@@ -44,16 +44,34 @@ if (( CLEAN )); then
 fi
 
 echo '==> Building portable folder with PyInstaller'
-# Determine ffmpeg/yt-dlp binary names for non-Windows
-FFMPEG_BIN="../bin/ffmpeg"
-YTDLP_BIN="./bin/yt-dlp"
+# Determine ffmpeg/yt-dlp binary paths if present
+FFMPEG_REPO="../bin/ffmpeg"
+FFMPEG_BUILD="./bin/ffmpeg"
+YTDLP_BUILD="./bin/yt-dlp"
+YTDLP_REPO="../bin/yt-dlp"
+FFPROBE_REPO="../bin/ffprobe"
+FFPROBE_BUILD="./bin/ffprobe"
 
-pyinstaller --noconfirm --clean --onedir --name Clippy \
+PY_ARGS=(
+  --noconfirm --clean --onedir --name Clippy \
   ../main.py \
   --add-data "../transitions:transitions" \
   --add-data "../assets/fonts:assets/fonts" \
-  --add-binary "$FFMPEG_BIN:." \
-  --add-binary "$YTDLP_BIN:."
+  --add-data "../_internal:_internal"
+)
+if [[ -x "$FFMPEG_REPO" ]]; then PY_ARGS+=( --add-binary "$FFMPEG_REPO:." );
+elif [[ -x "$FFMPEG_BUILD" ]]; then PY_ARGS+=( --add-binary "$FFMPEG_BUILD:." );
+else echo '(!) ffmpeg not found in ../bin or ./bin; runtime will try PATH'; fi
+
+if [[ -x "$YTDLP_BUILD" ]]; then PY_ARGS+=( --add-binary "$YTDLP_BUILD:." );
+elif [[ -x "$YTDLP_REPO" ]]; then PY_ARGS+=( --add-binary "$YTDLP_REPO:." );
+else echo '(!) yt-dlp not found in ./bin or ../bin; runtime will try PATH'; fi
+
+if [[ -x "$FFPROBE_BUILD" ]]; then PY_ARGS+=( --add-binary "$FFPROBE_BUILD:." );
+elif [[ -x "$FFPROBE_REPO" ]]; then PY_ARGS+=( --add-binary "$FFPROBE_REPO:." );
+else echo '(!) ffprobe not found in ./bin or ../bin; runtime will try PATH'; fi
+
+pyinstaller "${PY_ARGS[@]}"
 
 # Build a companion HealthCheck binary
 pyinstaller --noconfirm --clean --onefile --name HealthCheck \

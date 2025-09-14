@@ -64,6 +64,15 @@ Sections include: Required, Window & selection, Output & formatting, Transitions
 - Sequence: random(optional intro) → static → clip → static → random_chance(transition → static) … → random(optional outro)
 - All non-clip assets are normalized to cache/_trans on first use to ensure uniform codecs and audio (48 kHz stereo). You can force a rebuild with `--rebuild-transitions`.
 
+### Internal data and ENV
+
+- `static.mp4` is REQUIRED. If you ship a portable build, include it under `transitions/` (runtime) and/ or `_internal/transitions/static.mp4` (packaged). At runtime, set `CLIPPY_USE_INTERNAL=1` to prefer packaged assets.
+- Override transitions location with `TRANSITIONS_DIR` (absolute or relative path).
+- Common ENV:
+	- `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`: Twitch API credentials
+	- `CLIPPY_USE_INTERNAL=1`: Prefer `_internal` packaged data
+	- `TRANSITIONS_DIR=path`: Use a specific transitions folder
+
 ## Notes
 - Min views equals `--min-views` (maps to `reactionThreshold`).
 - NVENC settings aim to reduce blockiness: VBR HQ + CQ, B-frames, lookahead, AQ, lanczos scaling.

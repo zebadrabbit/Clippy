@@ -21,6 +21,7 @@ import shlex
 import subprocess
 import time
 from subprocess import Popen
+from collections import deque
 from typing import List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
@@ -129,7 +130,7 @@ def run_proc(cmd: str, prefer_shell: bool = False):
                 pass
             raise
 
-def run_proc_cancellable(cmd: str, prefer_shell: bool = False) -> tuple[int, bytes | None]:
+def run_proc_cancellable(cmd: str, prefer_shell: bool = False, progress_cb: Optional[callable] = None) -> tuple[int, bytes | None]:
     """Start a subprocess and allow cooperative shutdown.
 
     - Registers process handle to a global set so Ctrl-C can terminate them.
@@ -154,6 +155,9 @@ def run_proc_cancellable(cmd: str, prefer_shell: bool = False) -> tuple[int, byt
             shell=use_shell,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            universal_newlines=True,
+            encoding='utf-8',
+            errors='ignore',
         )
         _register_proc(proc)
     except FileNotFoundError:
@@ -167,6 +171,51 @@ def run_proc_cancellable(cmd: str, prefer_shell: bool = False) -> tuple[int, byt
         except Exception:
             pass
         raise
+    # Progress/err reader (reads stderr for -progress pipe:2 lines)
+    _err_lines = deque(maxlen=200)
+    _reader_stop = threading.Event()
+
+    def _reader():
+        try:
+            while not _reader_stop.is_set() and proc and proc.poll() is None:
+                line = proc.stderr.readline()
+                if line == '':
+                    # EOF or no data yet; avoid tight loop
+                    time.sleep(0.02)
+                    continue
+                l = line.strip()
+                if progress_cb and ('out_time=' in l or 'out_time_ms=' in l or l.startswith('progress=')):
+                    info: dict = {}
+                    try:
+                        if l.startswith('out_time='):
+                            # format hh:mm:ss.micro
+                            t = l.split('=', 1)[1]
+                            # parse to seconds
+                            hms, _, frac = t.partition('.')
+                            h, m, s = hms.split(':')
+                            secs = int(h) * 3600 + int(m) * 60 + float(s)
+                            if frac:
+                                secs += float('0.' + ''.join(c for c in frac if c.isdigit()))
+                            info['out_time'] = float(secs)
+                        elif l.startswith('out_time_ms='):
+                            ms = float(l.split('=', 1)[1])
+                            info['out_time'] = ms / 1_000_000.0
+                        elif l.startswith('progress='):
+                            info['progress'] = l.split('=', 1)[1]
+                        if info:
+                            progress_cb(info)
+                        continue
+                    except Exception:
+                        # fall through and buffer
+                        pass
+                # buffer any non-progress diagnostics
+                _err_lines.append(l)
+        except Exception:
+            pass
+
+    _t = threading.Thread(target=_reader, daemon=True)
+    _t.start()
+
     # Wait loop with cooperative shutdown
     stderr_data: Optional[bytes] = None
     try:
@@ -188,17 +237,47 @@ def run_proc_cancellable(cmd: str, prefer_shell: bool = False) -> tuple[int, byt
             rc = proc.poll()
             if rc is not None:
                 # Completed
-                # Read remaining output
                 try:
-                    _out, _err = proc.communicate(timeout=0.01)
-                    stderr_data = _err
+                    # ensure reader stops
+                    _reader_stop.set()
+                    try:
+                        proc.stdout.close()
+                    except Exception:
+                        pass
+                    try:
+                        proc.stderr.close()
+                    except Exception:
+                        pass
+                    # capture buffered diagnostics
+                    stderr_data = ('\n'.join(list(_err_lines))).encode('utf-8', errors='ignore') if _err_lines else None
                 except Exception:
                     stderr_data = None
                 return rc, stderr_data
             # still running
             time.sleep(0.05)
     finally:
+        _reader_stop.set()
+        try:
+            _t.join(timeout=0.2)
+        except Exception:
+            pass
         _unregister_proc(proc)
+
+
+def _ffprobe_duration(path: str) -> Optional[float]:
+    try:
+        cmd = f"{ffprobe} -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{path}\""
+        rc, err = run_proc_cancellable(cmd, prefer_shell=True)
+        # With our runner, diagnostics in err; duration will be in stdout, but we didn't capture stdout.
+        # Fallback: use subprocess directly for this one-off probe.
+        out = subprocess.check_output([
+            ffprobe, '-v', 'error', '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1', path
+        ], universal_newlines=True, encoding='utf-8', errors='ignore')
+        val = out.strip()
+        return float(val) if val else None
+    except Exception:
+        return None
 
 
 def ensure_dir(path: str):
@@ -289,7 +368,7 @@ def create_thumbnail(clip: ClipRow) -> int:
     return 0
 
 
-def process_clip(clip: ClipRow, quiet: bool = False) -> int:
+def process_clip(clip: ClipRow, quiet: bool = False, on_norm_progress: Optional[callable] = None, on_overlay_progress: Optional[callable] = None) -> int:
     clip_dir = os.path.join(cache, str(clip[0]))
     final_path = os.path.join(clip_dir, f'{clip[0]}.mp4')
     if os.path.isfile(final_path) and not rebuild:
@@ -298,7 +377,22 @@ def process_clip(clip: ClipRow, quiet: bool = False) -> int:
         log('{@green}Normalizing', 1)
     if SHUTDOWN_EVENT.is_set():
         return 1
-    rc, err = run_proc_cancellable(ffmpeg + ' ' + replace_vars(ffmpegNormalizeVideos, clip), prefer_shell=False)
+    # inject ffmpeg progress flags
+    _norm_cmd = ffmpeg + ' ' + replace_vars(ffmpegNormalizeVideos, clip)
+    if ' -stats ' in _norm_cmd:
+        _norm_cmd = _norm_cmd.replace(' -stats ', ' -nostats -progress pipe:2 ')
+    else:
+        _norm_cmd += ' -progress pipe:2'
+    # probe duration for progress percentage
+    _in_norm = os.path.join(os.path.join(cache, str(clip[0])), 'clip.mp4')
+    _dur = _ffprobe_duration(_in_norm)
+    def _norm_cb(info: dict):
+        if on_norm_progress and 'out_time' in info and _dur:
+            try:
+                on_norm_progress(info['out_time'], _dur)
+            except Exception:
+                pass
+    rc, err = run_proc_cancellable(_norm_cmd, prefer_shell=False, progress_cb=_norm_cb if on_norm_progress else None)
     if rc != 0:
         log('{@redbright}{@bold}Normalization failed', 5)
         log(err, 5)
@@ -312,7 +406,18 @@ def process_clip(clip: ClipRow, quiet: bool = False) -> int:
             log('{@green}Overlay', 1)
         if SHUTDOWN_EVENT.is_set():
             return 1
-        rc, err = run_proc_cancellable(ffmpeg + ' ' + replace_vars(ffmpegApplyOverlay, clip), prefer_shell=True)
+        _ovl_cmd = ffmpeg + ' ' + replace_vars(ffmpegApplyOverlay, clip)
+        if ' -stats ' in _ovl_cmd:
+            _ovl_cmd = _ovl_cmd.replace(' -stats ', ' -nostats -progress pipe:2 ')
+        else:
+            _ovl_cmd += ' -progress pipe:2'
+        def _ovl_cb(info: dict):
+            if on_overlay_progress and 'out_time' in info and _dur:
+                try:
+                    on_overlay_progress(info['out_time'], _dur)
+                except Exception:
+                    pass
+        rc, err = run_proc_cancellable(_ovl_cmd, prefer_shell=True, progress_cb=_ovl_cb if on_overlay_progress else None)
         if rc != 0:
             log('{@redbright}{@bold}Overlay failed', 5)
             log(err, 5)
@@ -703,8 +808,25 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
             return clip, False
         if SHUTDOWN_EVENT.is_set():
             return clip, False
-        _update_line(pos, "Normalizing" + ("/Overlay " if enable_overlay else ""))
-        p_rc = _retry(lambda: process_clip(clip, quiet=True))
+        # Prepare progress updaters
+        def _fmt_time(secs: float) -> str:
+            try:
+                secs_int = int(secs)
+                m, s = divmod(secs_int, 60)
+                h, m = divmod(m, 60)
+                if h > 0:
+                    return f"{h:02d}:{m:02d}:{s:02d}"
+                return f"{m:02d}:{s:02d}"
+            except Exception:
+                return "--:--"
+        def _norm_progress(done: float, total: float):
+            pct = max(0, min(100, int((done/total)*100))) if total else 0
+            _update_line(pos, f"Normalizing {pct}% ({_fmt_time(done)}/{_fmt_time(total)})")
+        def _ovl_progress(done: float, total: float):
+            pct = max(0, min(100, int((done/total)*100))) if total else 0
+            _update_line(pos, f"Overlay {pct}% ({_fmt_time(done)}/{_fmt_time(total)})")
+        _update_line(pos, "Normalizing")
+        p_rc = _retry(lambda: process_clip(clip, quiet=True, on_norm_progress=_norm_progress, on_overlay_progress=(_ovl_progress if enable_overlay else None)))
         if p_rc == 1:
             _update_line(pos, "FAILED (process)")
             return clip, False
@@ -798,9 +920,16 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
         tmpl = (ffmpegBuildSegments
             .replace('{idx}', str(idx))
             .replace('{date}', date_str))
-    cmd = ffmpeg + ' ' + replace_vars(tmpl, (str(idx), 0, '', '', 0, ''))
-    # Use cancellable runner for final concat as well
-    run_proc_cancellable(cmd, prefer_shell=True)
+        cmd = ffmpeg + ' ' + replace_vars(tmpl, (str(idx), 0, '', '', 0, ''))
+        # Use cancellable runner for final concat as well
+        rc, err = run_proc_cancellable(cmd, prefer_shell=True)
+        if rc != 0:
+            try:
+                _etxt = err.decode('utf-8', errors='ignore') if isinstance(err, (bytes, bytearray)) else str(err)
+                log("{@redbright}{@bold}Concat failed for index {@reset}{@white}" + str(idx), 5)
+                log(_etxt, 5)
+            except Exception:
+                pass
 
 
 # Backwards compatible aliases

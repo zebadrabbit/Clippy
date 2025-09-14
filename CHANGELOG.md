@@ -16,6 +16,33 @@ All notable changes to this project are documented here. Dates are in YYYY-MM-DD
 - Docs
   - Updated README to document transitions/audio policy, output auto-suffix vs `--overwrite-output`, cache flags, and Ctrl-C behavior.
 
+- UI — Startup banner and log symbols
+  - Added a neon hacker-style ASCII banner at program start (skips when `-h/--help` or non-TTY). Can be disabled with `CLIPPY_NO_BANNER=1`.
+  - Switched log prefixes to Markdown-safe symbols to avoid unintended formatting in rich renderers.
+  - Files: `clippy/banner.py`, `main.py`, `utils.py`
+
+- Progress — Per-clip ffmpeg progress
+  - Parse `-progress` output to display live percentages and ETA-like time for Normalizing/Overlay steps in Stage 1.
+  - Added an internal `ffprobe` duration probe helper for accurate progress computation.
+  - Files: `pipeline.py`
+
+- Fix — Stage 2 compile loop + finalize clarity
+  - Ensure the concatenate (Stage 2) runs once per compilation index (bug caused only the last or a single output to be produced).
+  - Finalize step now lists exactly which files were moved and warns for any missing compiled indices.
+  - Files: `pipeline.py`, `clippy/naming.py`
+
+- Packaging — Internal data and ffprobe
+  - New internal data support: `_internal/` folder packaged and discoverable at runtime; resolver honors `CLIPPY_USE_INTERNAL=1` to prefer bundled assets.
+  - `transitions/static.mp4` is REQUIRED; build now stages it into `_internal/transitions/static.mp4` (and includes `transitions/` externally) to guarantee availability in portable builds.
+  - Bundled `ffprobe` alongside `ffmpeg` and `yt-dlp` in the portable output.
+  - Updated PyInstaller spec and build scripts to include `_internal`, fonts, transitions, and `ffprobe`.
+  - Files: `build/Clippy.spec`, `build/build.ps1`, `build/build.sh`, `_internal/README.md`, `utils.py`
+
+- Health check & docs
+  - Health check now hints using `CLIPPY_USE_INTERNAL=1` if `transitions/static.mp4` is missing.
+  - README: grouped “Internal data and ENV” section covering `CLIPPY_USE_INTERNAL`, `TRANSITIONS_DIR`, and static.mp4 requirement.
+  - Files: `scripts/health_check.py`, `README.md`
+
 ## 2025-09-13
 
 - CI/Build

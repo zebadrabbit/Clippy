@@ -5,7 +5,7 @@ Checks:
 - NVENC availability (h264_nvenc) for faster GPU encoding (optional)
 - Required Python packages (requests, Pillow, yachalk, yt_dlp)
 - Directory readiness: cache/, output/, transitions/
-- Transitions/static.mp4 presence (warns if missing; runtime can auto-generate)
+- Transitions/static.mp4 presence (REQUIRED)
 - Font file presence (Roboto-Medium.ttf)
 - Twitch credentials presence in environment (optional)
 """
@@ -181,6 +181,35 @@ def check_dirs_and_assets(ffmpeg_path: str | None) -> None:
         print(f"{status_tag('OK')} transitions/static.mp4 present")
     else:
         print(f"{status_tag('MISSING')} transitions/static.mp4 missing (required)")
+        print("        Try setting CLIPPY_USE_INTERNAL=1 if you packaged _internal/transitions/static.mp4")
+    # counts for intros/outros/transitions and probability
+    try:
+        import config as _cfg
+        def _count(names: list[str]) -> int:
+            c = 0
+            for n in (names or []):
+                if os.path.exists(os.path.join(tdir, n)):
+                    c += 1
+            return c
+        _intro_cnt = _count(getattr(_cfg, 'intro', []))
+        _outro_cnt = _count(getattr(_cfg, 'outro', []))
+        _trans_cnt = _count(getattr(_cfg, 'transitions', []))
+        _prob = getattr(_cfg, 'transition_probability', 0.35)
+        _norand = getattr(_cfg, 'no_random_transitions', False)
+        _weights = getattr(_cfg, 'transitions_weights', {})
+        _cooldown = getattr(_cfg, 'transition_cooldown', 0)
+        print(f"{status_tag('INFO')} transitions: intro={_intro_cnt}, transitions={_trans_cnt}, outro={_outro_cnt}, prob={_prob}{' (disabled)' if _norand else ''}")
+        if _weights:
+            print(f"{status_tag('INFO')} transition weights: {paint(str(_weights), 'gray')}")
+        if _cooldown:
+            print(f"{status_tag('INFO')} transition cooldown: {_cooldown}")
+        _sil_master = getattr(_cfg, 'silence_nonclip_asset_audio', True)
+        _sil_tr = getattr(_cfg, 'silence_transitions', True)
+        _sil_st = getattr(_cfg, 'silence_static', True)
+        _sil_io = getattr(_cfg, 'silence_intro_outro', True)
+        print(f"{status_tag('INFO')} audio silence: master={_sil_master}, transitions={_sil_tr}, static={_sil_st}, intro/outro={_sil_io}")
+    except Exception:
+        pass
     # font
     font_abs = os.path.abspath(os.path.join(BASE_DIR, fontfile)) if not os.path.isabs(fontfile) else fontfile
     if os.path.exists(font_abs):

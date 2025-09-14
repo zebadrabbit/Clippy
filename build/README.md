@@ -2,7 +2,7 @@
 
 Build and packaging scripts for creating a portable distribution of Clippy.
 
-- `build.ps1` (Windows): Creates a self-contained `dist/Clippy` folder with `Clippy.exe`, `HealthCheck.exe`, bundled fonts, and helper BATs, then zips it to `Clippy-portable.zip`.
+- `build.ps1` (Windows): Creates a self-contained `dist/Clippy` folder with `Clippy.exe`, `HealthCheck.exe`, bundled `ffmpeg.exe`, fonts, and helper BATs, then zips it to `Clippy-portable.zip`.
 - `build.sh` (Linux/macOS): Shell equivalent to build a portable folder with `Clippy` and `HealthCheck` binaries using PyInstaller.
 
 ## Prerequisites
@@ -20,4 +20,5 @@ Build and packaging scripts for creating a portable distribution of Clippy.
 ## Tips
 
 - Run `scripts/health_check.py` first to ensure your environment is healthy.
+- ffmpeg.exe is bundled into the portable by default when available at build time (or via the `-FetchFFmpeg` switch).
 - Large binaries should not be committed; publish the zip as a release asset or CI artifact.

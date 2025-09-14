@@ -115,13 +115,16 @@ def log(msg, level=0):
         out = "  " + body
     elif level == 1:
         body = rendered if used_tags else chalk.gray(raw)
-        out = chalk.green("-") + " " + body
+        # Use a bullet to avoid Markdown list trigger ("- ")
+        out = chalk.green("•") + " " + body
     elif level == 2:
         body = rendered if used_tags else chalk.gray(raw)
-        out = chalk.blue(">") + " " + body
+        # Use a chevron to avoid Markdown blockquote ("> ")
+        out = chalk.blue("›") + " " + body
     elif level == 5:
         body = rendered if used_tags else chalk.gray(raw)
-        out = chalk.red("#") + " " + body
+        # Use a cross to avoid Markdown heading ("# ")
+        out = chalk.red("✖") + " " + body
     else:
         body = rendered if used_tags else chalk.gray(raw)
         out = body
@@ -183,7 +186,9 @@ def resolve_transitions_dir() -> str:
 
     Order of preference:
     - TRANSITIONS_DIR env var (absolute or relative to CWD)
+    - If CLIPPY_USE_INTERNAL=1, prefer bundled/internal locations first
     - config.transitions_dir if defined
+    - PyInstaller MEIPASS (onefile temp dir): <MEIPASS>/transitions, <MEIPASS>/_internal/transitions
     - Next to the executable when frozen: <exe>/transitions, <exe>/_internal/transitions
     - Project source locations: <repo>/transitions, <repo>/_internal/transitions
     - Working directory variants: ./transitions, ./_internal/transitions
@@ -194,6 +199,7 @@ def resolve_transitions_dir() -> str:
     env_dir = os.getenv('TRANSITIONS_DIR')
     if env_dir:
         candidates.append(os.path.abspath(env_dir))
+    use_internal = os.getenv('CLIPPY_USE_INTERNAL', '').strip().lower() in ('1', 'true', 'yes', 'on')
     # Config-specified dir (optional)
     try:
         import config as _cfg  # type: ignore
@@ -202,26 +208,50 @@ def resolve_transitions_dir() -> str:
             candidates.append(os.path.abspath(str(cfg_dir)))
     except Exception:
         pass
+    # PyInstaller MEIPASS (onefile extracts here)
+    try:
+        meipass = getattr(sys, '_MEIPASS', None)
+    except Exception:
+        meipass = None
+    if meipass:
+        if use_internal:
+            candidates.insert(0, os.path.join(meipass, '_internal', 'transitions'))
+            candidates.insert(1, os.path.join(meipass, 'transitions'))
+        else:
+            candidates.append(os.path.join(meipass, 'transitions'))
+            candidates.append(os.path.join(meipass, '_internal', 'transitions'))
     # Frozen bundle locations
     try:
         if getattr(sys, 'frozen', False):
             exe_dir = os.path.dirname(sys.executable)
-            candidates.append(os.path.join(exe_dir, 'transitions'))
-            candidates.append(os.path.join(exe_dir, '_internal', 'transitions'))
+            if use_internal:
+                candidates.insert(0, os.path.join(exe_dir, '_internal', 'transitions'))
+                candidates.insert(1, os.path.join(exe_dir, 'transitions'))
+            else:
+                candidates.append(os.path.join(exe_dir, 'transitions'))
+                candidates.append(os.path.join(exe_dir, '_internal', 'transitions'))
     except Exception:
         pass
     # Source tree locations
     try:
         repo_dir = os.path.dirname(os.path.abspath(__file__))
-        candidates.append(os.path.join(repo_dir, 'transitions'))
-        candidates.append(os.path.join(repo_dir, '_internal', 'transitions'))
+        if use_internal:
+            candidates.append(os.path.join(repo_dir, '_internal', 'transitions'))
+            candidates.append(os.path.join(repo_dir, 'transitions'))
+        else:
+            candidates.append(os.path.join(repo_dir, 'transitions'))
+            candidates.append(os.path.join(repo_dir, '_internal', 'transitions'))
     except Exception:
         pass
     # Working dir variants
     try:
         cwd = os.getcwd()
-        candidates.append(os.path.join(cwd, 'transitions'))
-        candidates.append(os.path.join(cwd, '_internal', 'transitions'))
+        if use_internal:
+            candidates.append(os.path.join(cwd, '_internal', 'transitions'))
+            candidates.append(os.path.join(cwd, 'transitions'))
+        else:
+            candidates.append(os.path.join(cwd, 'transitions'))
+            candidates.append(os.path.join(cwd, '_internal', 'transitions'))
     except Exception:
         pass
     for p in candidates:
@@ -287,12 +317,16 @@ def prep_work():
         _ensure_dir(transitions_dir, 'transitions')
     _ensure_readme(transitions_dir, (
         "# transitions\n\n"
-        "Place transition and bumper videos used between clips.\n\n"
-        "Expected files (customize as you like):\n\n"
-        "- intro.mp4   (optional)\n"
-        "- static.mp4  (used between clips)\n"
-        "- outro.mp4   (optional)\n\n"
-        "The pipeline references these by relative path from the cache directory.\n"
+        "Put your intro/outro/transition clips here.\n\n"
+        "Rules: static.mp4 is REQUIRED and is placed between every segment.\n"
+        "You can provide multiple intros/outros/transitions (e.g., intro_2.mp4, transition_05.mp4);\n"
+        "the app randomly picks intros/outros and may insert random transitions between clips.\n\n"
+        "Examples:\n"
+        "- intro.mp4, intro_2.mp4 (optional, random one chosen)\n"
+        "- static.mp4  (required)\n"
+        "- transition_01.mp4 ... transition_10.mp4 (optional random inserts)\n"
+        "- outro.mp4, outro_2.mp4 (optional, random one chosen)\n\n"
+        "Files are referenced relative to the cache directory using ffmpeg concat.\n"
     ))
 
     # Require transitions/static.mp4 to be present; do not auto-create or copy

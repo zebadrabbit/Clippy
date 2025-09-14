@@ -2,11 +2,11 @@
 
 
 a = Analysis(
-    ['..\\main.py'],
-    pathex=[],
-    binaries=[('.\\\\bin\\\\ffmpeg.exe', '.'), ('.\\\\bin\\\\yt-dlp.exe', '.'), ('..\\bin\\ffprobe.exe', '.')],
-    datas=[('..\\\\transitions', 'transitions'), ('..\\\\assets\\\\fonts', 'assets/fonts'), ('..\\\\_internal', '_internal')],
-    hiddenimports=[],
+    ['..\\scripts\\health_check.py'],
+    pathex=['..'],
+    binaries=[],
+    datas=[],
+    hiddenimports=['config'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -19,26 +19,20 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
-    name='Clippy',
+    name='HealthCheck',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='Clippy',
 )

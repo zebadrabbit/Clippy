@@ -42,8 +42,14 @@ function Get-PortableFFmpeg {
   Invoke-WebRequest -Uri $url -OutFile $zip
   Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $tmp 'unz') -Force
   $ff = Get-ChildItem -Recurse -Filter ffmpeg.exe -Path (Join-Path $tmp 'unz') | Select-Object -First 1
+  $fp = Get-ChildItem -Recurse -Filter ffprobe.exe -Path (Join-Path $tmp 'unz') | Select-Object -First 1
   if (-not $ff) { throw 'Could not locate ffmpeg.exe in archive.' }
+  if (-not $fp) { Write-Warning 'Could not locate ffprobe.exe in archive.' }
   Copy-Item $ff.FullName $OutPath -Force
+  if ($fp) {
+    $probeOut = Join-Path (Split-Path -Parent $OutPath) 'ffprobe.exe'
+    Copy-Item $fp.FullName $probeOut -Force
+  }
   # Try to capture a license text file alongside
   $lic = Get-ChildItem -Recurse -Path (Join-Path $tmp 'unz') -Include 'LICENSE*.txt','COPYING*.txt' | Select-Object -First 1
   if ($lic) { Copy-Item $lic.FullName (Join-Path (Split-Path -Parent $OutPath) 'ffmpeg-LICENSE.txt') -Force }
@@ -80,10 +86,13 @@ if ($Clean) {
 }
 
 Write-Host '==> Preparing assets (transitions/static.mp4)'
-# Ensure transitions/static.mp4 exists before bundling
+# Ensure transitions/static.mp4 exists before bundling; also stage a copy under _internal/transitions
 New-Item -ItemType Directory -Force -Path ..\transitions | Out-Null
+New-Item -ItemType Directory -Force -Path ..\_internal\transitions | Out-Null
 $tDir = (Resolve-Path ..\transitions).Path
+$iDir = (Resolve-Path ..\_internal\transitions).Path
 $staticPath = Join-Path $tDir 'static.mp4'
+$internalStatic = Join-Path $iDir 'static.mp4'
 if (-not (Test-Path $staticPath)) {
   # Try to find ffmpeg for placeholder generation
   $ff = $null
@@ -99,11 +108,16 @@ if (-not (Test-Path $staticPath)) {
     Write-Warning 'ffmpeg not available during build; static.mp4 will be generated at runtime if possible.'
   }
 }
+if (-not (Test-Path $internalStatic) -and (Test-Path $staticPath)) {
+  Copy-Item $staticPath $internalStatic -Force
+}
 
 Write-Host '==> Building portable folder with PyInstaller'
 # Select ffmpeg/yt-dlp binary paths to bundle (support repo bin/ and build/bin/)
 $ffmpegRepo = Join-Path .. 'bin/ffmpeg.exe'
 $ffmpegBuild = '.\\bin\\ffmpeg.exe'
+$ffprobeRepo = Join-Path .. 'bin/ffprobe.exe'
+$ffprobeBuild = '.\\bin\\ffprobe.exe'
 $ytDlpRepo = Join-Path .. 'bin/yt-dlp.exe'
 $ytDlpBuild = '.\\bin\\yt-dlp.exe'
 
@@ -111,7 +125,8 @@ $pyArgs = @(
   '--noconfirm','--clean','--onedir','--name','Clippy',
   '..\\main.py',
   '--add-data','..\\transitions;transitions',
-  '--add-data','..\\assets\\fonts;assets/fonts'
+  '--add-data','..\\assets\\fonts;assets/fonts',
+  '--add-data','..\\_internal;_internal'
 )
 if (Test-Path $ffmpegBuild) { $pyArgs += @('--add-binary', "${ffmpegBuild};.") }
 elseif (Test-Path $ffmpegRepo) { $pyArgs += @('--add-binary', "${ffmpegRepo};.") }
@@ -120,6 +135,11 @@ else { Write-Host '(!) ffmpeg.exe not found in ..\bin or .\bin; runtime will try
 if (Test-Path $ytDlpBuild) { $pyArgs += @('--add-binary', "${ytDlpBuild};.") }
 elseif (Test-Path $ytDlpRepo) { $pyArgs += @('--add-binary', "${ytDlpRepo};.") }
 else { Write-Host '(!) yt-dlp.exe not found in .\bin or ..\bin; runtime will try PATH' -ForegroundColor Yellow }
+
+# Also add ffprobe.exe if present
+if (Test-Path $ffprobeBuild) { $pyArgs += @('--add-binary', "${ffprobeBuild};.") }
+elseif (Test-Path $ffprobeRepo) { $pyArgs += @('--add-binary', "${ffprobeRepo};.") }
+else { Write-Host '(!) ffprobe.exe not found in ..\bin or .\bin; runtime will try PATH' -ForegroundColor Yellow }
 
 & pyinstaller @pyArgs
 
@@ -167,6 +187,9 @@ if ((-not (Test-Path .\dist\Clippy\ffmpeg.exe)) -and (Test-Path .\dist\Clippy\_i
 }
 if ((-not (Test-Path .\dist\Clippy\yt-dlp.exe)) -and (Test-Path .\dist\Clippy\_internal\yt-dlp.exe)) {
   Copy-Item .\dist\Clippy\_internal\yt-dlp.exe .\dist\Clippy\yt-dlp.exe -Force
+}
+if ((-not (Test-Path .\dist\Clippy\ffprobe.exe)) -and (Test-Path .\dist\Clippy\_internal\ffprobe.exe)) {
+  Copy-Item .\dist\Clippy\_internal\ffprobe.exe .\dist\Clippy\ffprobe.exe -Force
 }
 if (Test-Path ..\README.md) {
   Copy-Item ..\README.md dist\Clippy\ -Force
