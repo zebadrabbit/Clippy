@@ -6,6 +6,7 @@ Contains generic functions for:
   - Avatar/thumbnail handling (avatar may be a Twitch user image or placeholder)
   - Normalizing & overlaying metadata
   - Building ffmpeg concat lists & final compilations
+    - Colorizing progress board lines using yachalk
 
 Relies on globals defined in `config.py` and helpers from `utils.py`.
 """
@@ -21,6 +22,10 @@ import subprocess
 import time
 from subprocess import Popen
 from typing import List, Tuple, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+import sys
+from yachalk import chalk
 
 import requests
 from PIL import Image
@@ -30,6 +35,54 @@ from utils import log, replace_vars, resolve_transitions_dir
 
 ClipRow = Tuple[str, float, str, str, int, str]  # (id, created_ts, author, avatar_url, views, url)
 
+
+SHUTDOWN_EVENT = threading.Event()
+_ACTIVE_PROCS: set[Popen] = set()
+_PROCS_LOCK = threading.Lock()
+
+def _register_proc(p: Popen):
+    with _PROCS_LOCK:
+        _ACTIVE_PROCS.add(p)
+
+def _unregister_proc(p: Optional[Popen]):
+    if p is None:
+        return
+    with _PROCS_LOCK:
+        _ACTIVE_PROCS.discard(p)
+
+def terminate_all_processes(timeout: float = 2.0):
+    """Attempt to gracefully terminate any running child processes, then kill."""
+    with _PROCS_LOCK:
+        procs = list(_ACTIVE_PROCS)
+    for p in procs:
+        try:
+            if p.poll() is None:
+                p.terminate()
+        except Exception:
+            pass
+    # brief wait
+    t0 = time.time()
+    for p in procs:
+        try:
+            while p.poll() is None and (time.time() - t0) < timeout:
+                time.sleep(0.05)
+            if p.poll() is None:
+                p.kill()
+        except Exception:
+            pass
+        finally:
+            _unregister_proc(p)
+
+def request_shutdown():
+    """Signal threads to stop work and terminate child processes."""
+    try:
+        SHUTDOWN_EVENT.set()
+    except Exception:
+        pass
+    try:
+        terminate_all_processes()
+    except Exception:
+        pass
 
 def run_proc(cmd: str, prefer_shell: bool = False):
     """Run a command and return (returncode, stderr_bytes).
@@ -76,13 +129,84 @@ def run_proc(cmd: str, prefer_shell: bool = False):
                 pass
             raise
 
+def run_proc_cancellable(cmd: str, prefer_shell: bool = False) -> tuple[int, bytes | None]:
+    """Start a subprocess and allow cooperative shutdown.
+
+    - Registers process handle to a global set so Ctrl-C can terminate them.
+    - Periodically checks SHUTDOWN_EVENT; if set, terminates the child.
+    Returns (returncode, stderr_bytes_or_None).
+    """
+    if os.name == 'nt':
+        # Tokenization similar to run_proc; use shell for complex filters when needed
+        if prefer_shell:
+            args = cmd
+            use_shell = True
+        else:
+            args = cmd.split()
+            use_shell = False
+    else:
+        args = shlex.split(cmd)
+        use_shell = False
+    proc: Optional[Popen] = None
+    try:
+        proc = subprocess.Popen(
+            args,
+            shell=use_shell,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        _register_proc(proc)
+    except FileNotFoundError:
+        # mirror run_proc error messaging
+        try:
+            if use_shell:
+                log("{@redbright}{@bold}Executable not found:{@reset} {@white}" + str(cmd), 5)
+            else:
+                log("{@redbright}{@bold}Executable not found:{@reset} {@white}" + str(args[0]), 5)
+                log("{@gray}" + (cmd if isinstance(cmd, str) else str(cmd)), 5)
+        except Exception:
+            pass
+        raise
+    # Wait loop with cooperative shutdown
+    stderr_data: Optional[bytes] = None
+    try:
+        while True:
+            if SHUTDOWN_EVENT.is_set():
+                try:
+                    if proc.poll() is None:
+                        proc.terminate()
+                        # give it a moment then force
+                        for _ in range(10):
+                            if proc.poll() is not None:
+                                break
+                            time.sleep(0.05)
+                        if proc.poll() is None:
+                            proc.kill()
+                except Exception:
+                    pass
+                return 1, b"interrupted"
+            rc = proc.poll()
+            if rc is not None:
+                # Completed
+                # Read remaining output
+                try:
+                    _out, _err = proc.communicate(timeout=0.01)
+                    stderr_data = _err
+                except Exception:
+                    stderr_data = None
+                return rc, stderr_data
+            # still running
+            time.sleep(0.05)
+    finally:
+        _unregister_proc(proc)
+
 
 def ensure_dir(path: str):
     if not os.path.isdir(path):
         os.makedirs(path, exist_ok=True)
 
 
-def download_avatar(clip: ClipRow) -> int:
+def download_avatar(clip: ClipRow, quiet: bool = False) -> int:
     clip_dir = os.path.join(cache, str(clip[0]))
     ensure_dir(clip_dir)
     png_path = os.path.join(clip_dir, 'avatar.png')
@@ -90,7 +214,8 @@ def download_avatar(clip: ClipRow) -> int:
     if os.path.isfile(png_path):
         return 2
     url = clip[3] or 'https://static-cdn.jtvnw.net/jtv_user_pictures/x.png'
-    log(f"{{@green}}Avatar:{{@reset}} {{@cyan}}{url}", 1)
+    if not quiet:
+        log(f"{{@green}}Avatar:{{@reset}} {{@cyan}}{url}", 1)
     resp = requests.get(url)
     if resp.status_code >= 400:
         log('Avatar fetch failed; using placeholder', 2)
@@ -109,21 +234,37 @@ def download_avatar(clip: ClipRow) -> int:
     return 0
 
 
-def download_clip(clip: ClipRow) -> int:
+def download_clip(clip: ClipRow, quiet: bool = False) -> int:
     clip_dir = os.path.join(cache, str(clip[0]))
     ensure_dir(clip_dir)
     final_path = os.path.join(clip_dir, f'{clip[0]}.mp4')
     if os.path.isfile(final_path) and not rebuild:
         return 2
     cmd = youtubeDl + ' ' + replace_vars(youtubeDlOptions, clip) + ' ' + clip[5]
-    rc, err = run_proc(cmd, prefer_shell=False)
+    if SHUTDOWN_EVENT.is_set():
+        return 1
+    rc, err = run_proc_cancellable(cmd, prefer_shell=False)
     if rc != 0:
         # Decode error for inspection
         err_txt = err.decode('utf-8', errors='ignore') if isinstance(err, (bytes, bytearray)) else str(err)
-        log('{@redbright}{@bold}Clip download error', 5)
-        log(err_txt, 5)
+        if not quiet:
+            log('{@redbright}{@bold}Clip download error', 5)
+            log(err_txt, 5)
         return 1
     return 0
+
+def _retry(fn, attempts: int = 3, backoff: float = 1.5):
+    last = None
+    for i in range(attempts):
+        rc = fn()
+        if rc == 0 or rc == 2:
+            return rc
+        last = rc
+        try:
+            time.sleep(backoff * (i + 1))
+        except Exception:
+            pass
+    return last if last is not None else 1
 
 
 def create_thumbnail(clip: ClipRow) -> int:
@@ -131,7 +272,9 @@ def create_thumbnail(clip: ClipRow) -> int:
     preview = os.path.join(clip_dir, 'preview.png')
     if os.path.isfile(preview) and not rebuild:
         return 2
-    rc, err = run_proc(ffmpeg + ' ' + replace_vars(ffmpegCreateThumbnail, clip), prefer_shell=False)
+    if SHUTDOWN_EVENT.is_set():
+        return 1
+    rc, err = run_proc_cancellable(ffmpeg + ' ' + replace_vars(ffmpegCreateThumbnail, clip), prefer_shell=False)
     if rc != 0:
         log('{@redbright}{@bold}Thumbnail generation failed', 5)
         log(err, 5)
@@ -146,13 +289,16 @@ def create_thumbnail(clip: ClipRow) -> int:
     return 0
 
 
-def process_clip(clip: ClipRow) -> int:
+def process_clip(clip: ClipRow, quiet: bool = False) -> int:
     clip_dir = os.path.join(cache, str(clip[0]))
     final_path = os.path.join(clip_dir, f'{clip[0]}.mp4')
     if os.path.isfile(final_path) and not rebuild:
         return 2
-    log('{@green}Normalizing', 1)
-    rc, err = run_proc(ffmpeg + ' ' + replace_vars(ffmpegNormalizeVideos, clip), prefer_shell=False)
+    if not quiet:
+        log('{@green}Normalizing', 1)
+    if SHUTDOWN_EVENT.is_set():
+        return 1
+    rc, err = run_proc_cancellable(ffmpeg + ' ' + replace_vars(ffmpegNormalizeVideos, clip), prefer_shell=False)
     if rc != 0:
         log('{@redbright}{@bold}Normalization failed', 5)
         log(err, 5)
@@ -162,8 +308,11 @@ def process_clip(clip: ClipRow) -> int:
     except FileNotFoundError:
         pass
     if enable_overlay:
-        log('{@green}Overlay', 1)
-        rc, err = run_proc(ffmpeg + ' ' + replace_vars(ffmpegApplyOverlay, clip), prefer_shell=True)
+        if not quiet:
+            log('{@green}Overlay', 1)
+        if SHUTDOWN_EVENT.is_set():
+            return 1
+        rc, err = run_proc_cancellable(ffmpeg + ' ' + replace_vars(ffmpegApplyOverlay, clip), prefer_shell=True)
         if rc != 0:
             log('{@redbright}{@bold}Overlay failed', 5)
             log(err, 5)
@@ -205,44 +354,425 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
     transitions_abs = os.path.abspath(resolve_transitions_dir())
     # Compute the relative path from concat file location (cache) to transitions for ffmpeg concat entries
     rel_trans_dir = os.path.relpath(transitions_abs, start=cache_abs).replace('\\', '/')
-    # Guard intro/transition/outro against missing files so ffmpeg concat doesn't fail
-    if intro:
-        _intro_path = os.path.join(transitions_abs, intro)
-        if os.path.exists(_intro_path):
-            lines.append(f'file {rel_trans_dir}/{intro}')
-        else:
+    # Prepare a normalized transitions cache to ensure consistent codecs (avoid AV1 decode issues)
+    assets_out_dir = os.path.join(cache_abs, '_trans')
+    try:
+        os.makedirs(assets_out_dir, exist_ok=True)
+    except Exception:
+        pass
+    rel_assets_dir = os.path.relpath(assets_out_dir, start=cache_abs).replace('\\', '/')
+    # Manifest to record how each asset was built (silent vs. normalized) to avoid stale reuse
+    manifest_path = os.path.join(assets_out_dir, '_manifest.json')
+    try:
+        with open(manifest_path, 'r', encoding='utf-8') as _mf:
+            _asset_manifest = json.load(_mf) or {}
+    except Exception:
+        _asset_manifest = {}
+
+    def _ensure_transcoded(name: str) -> Optional[str]:
+        if not name:
+            return None
+        src = os.path.join(transitions_abs, name)
+        if not os.path.exists(src):
             try:
-                log("{@yellow}{@bold}WARN{@reset} Missing intro clip; skipping", 2)
+                log("{@yellow}{@bold}WARN{@reset} Missing transition file; skipping: {@white}" + name, 2)
             except Exception:
                 pass
-    _trans_path = os.path.join(transitions_abs, transition)
-    if os.path.exists(_trans_path):
-        lines.append(f'file {rel_trans_dir}/{transition}')
-    else:
+            return None
+        dst = os.path.join(assets_out_dir, name)
+
+        # Behavior knobs
         try:
-            log("{@yellow}{@bold}WARN{@reset} Missing transition clip; proceeding without separators", 2)
+            from config import transitions_rebuild as _rebuild_trans  # type: ignore
+        except Exception:
+            _rebuild_trans = False
+        try:
+            from config import audio_normalize_transitions as _aud_norm  # type: ignore
+        except Exception:
+            _aud_norm = True
+        try:
+            from config import transitions as _cfg_transitions  # type: ignore
+        except Exception:
+            _cfg_transitions = []
+        try:
+            from config import static as _cfg_static  # type: ignore
+        except Exception:
+            _cfg_static = 'static.mp4'
+        try:
+            from config import intro as _cfg_intro  # type: ignore
+        except Exception:
+            _cfg_intro = []
+        try:
+            from config import outro as _cfg_outro  # type: ignore
+        except Exception:
+            _cfg_outro = []
+        try:
+            from config import silence_nonclip_asset_audio as _silence_nonclip  # type: ignore
+        except Exception:
+            _silence_nonclip = True
+        try:
+            from config import silence_transitions as _silence_transitions  # type: ignore
+        except Exception:
+            _silence_transitions = True
+        try:
+            from config import silence_static as _silence_static  # type: ignore
+        except Exception:
+            _silence_static = True
+        try:
+            from config import silence_intro_outro as _silence_intro_outro  # type: ignore
+        except Exception:
+            _silence_intro_outro = True
+
+        # Determine whether to force silence via config
+        force_silent_audio = False
+        if (
+            (_silence_nonclip and (
+                (name == _cfg_static) or
+                (isinstance(_cfg_transitions, (list, tuple)) and name in _cfg_transitions) or
+                (isinstance(_cfg_intro, (list, tuple)) and name in _cfg_intro) or
+                (isinstance(_cfg_outro, (list, tuple)) and name in _cfg_outro)
+            )) or
+            (not _silence_nonclip and (
+                (name == _cfg_static and _silence_static) or
+                (isinstance(_cfg_transitions, (list, tuple)) and name in _cfg_transitions and _silence_transitions) or
+                ((isinstance(_cfg_intro, (list, tuple)) and name in _cfg_intro) or (isinstance(_cfg_outro, (list, tuple)) and name in _cfg_outro)) and _silence_intro_outro
+            ))
+        ):
+            force_silent_audio = True
+
+        # Probe for audio stream presence; if no audio and not forcing silence, we'll synthesize clean audio
+        has_audio = True
+        try:
+            probe_cmd = f"{ffprobe} -v error -select_streams a:0 -show_entries stream=codec_type -of csv=p=0 \"{src}\""
+            rc_probe, _ = run_proc_cancellable(probe_cmd, prefer_shell=True)
+            has_audio = (rc_probe == 0)
+        except Exception:
+            has_audio = True
+
+        # Determine desired build characteristics for this asset
+        desired_silent = bool(force_silent_audio)
+        desired_audnorm = (not desired_silent) and bool(_aud_norm)
+
+        # Reuse normalized copy only if manifest matches current desired settings
+        if os.path.exists(dst) and not _rebuild_trans:
+            try:
+                entry = _asset_manifest.get(name) if isinstance(_asset_manifest, dict) else None
+            except Exception:
+                entry = None
+            if entry and isinstance(entry, dict):
+                if bool(entry.get('silent')) == desired_silent and bool(entry.get('aud_norm')) == desired_audnorm:
+                    return f"{rel_assets_dir}/{name}"
+            else:
+                # If no manifest entry exists and we now desire silent or audnorm explicitly, force rebuild
+                if not desired_silent and not desired_audnorm:
+                    return f"{rel_assets_dir}/{name}"
+                # else fall-through to rebuild
+
+        # Build ffmpeg command
+        if force_silent_audio:
+            cmd = (
+                f"{ffmpeg} -y -i \"{src}\" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 "
+                f"-map 0:v -map 1:a "
+                f"-r {fps} -s {resolution} -sws_flags lanczos "
+                f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
+                f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
+                f"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 -shortest "
+                f"-movflags +faststart -preset {nvenc_preset} -loglevel error -stats \"{dst}\""
+            )
+        else:
+            _af = " -af loudnorm=I=-16:TP=-1.5:LRA=11" if _aud_norm else ""
+            if has_audio:
+                cmd = (
+                    f"{ffmpeg} -y -i \"{src}\" "
+                    f"-r {fps} -s {resolution} -sws_flags lanczos "
+                    f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
+                    f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
+                    f"-pix_fmt yuv420p{_af} -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
+                    f"-movflags +faststart -preset {nvenc_preset} -loglevel error -stats \"{dst}\""
+                )
+            else:
+                # Synthesize clean stereo audio if source lacks audio
+                cmd = (
+                    f"{ffmpeg} -y -i \"{src}\" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 "
+                    f"-map 0:v -map 1:a "
+                    f"-r {fps} -s {resolution} -sws_flags lanczos "
+                    f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
+                    f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
+                    f"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 -shortest "
+                    f"-movflags +faststart -preset {nvenc_preset} -loglevel error -stats \"{dst}\""
+                )
+
+        if SHUTDOWN_EVENT.is_set():
+            return None
+        rc, err = run_proc_cancellable(cmd, prefer_shell=True)
+        if rc != 0:
+            # Log stderr for visibility
+            try:
+                _etxt = err.decode('utf-8', errors='ignore') if isinstance(err, (bytes, bytearray)) else str(err)
+                log("{@yellow}{@bold}WARN{@reset} Failed to normalize transition asset: {@white}" + name, 2)
+                log(_etxt, 2)
+            except Exception:
+                pass
+            # Retry without loudnorm only for intros/outros (non-silent path)
+            if (not force_silent_audio) and _aud_norm:
+                _af2 = ""
+                cmd2 = (
+                    f"{ffmpeg} -y -i \"{src}\" "
+                    f"-r {fps} -s {resolution} -sws_flags lanczos "
+                    f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
+                    f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
+                    f"-pix_fmt yuv420p{_af2} -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
+                    f"-movflags +faststart -preset {nvenc_preset} -loglevel error -stats \"{dst}\""
+                )
+                if SHUTDOWN_EVENT.is_set():
+                    return None
+                rc2, err2 = run_proc_cancellable(cmd2, prefer_shell=True)
+                if rc2 != 0:
+                    # Final fallback: synthesize clean silent audio
+                    cmd3 = (
+                        f"{ffmpeg} -y -i \"{src}\" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 "
+                        f"-map 0:v -map 1:a "
+                        f"-r {fps} -s {resolution} -sws_flags lanczos "
+                        f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
+                        f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
+                        f"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 -shortest "
+                        f"-movflags +faststart -preset {nvenc_preset} -loglevel error -stats \"{dst}\""
+                    )
+                    if SHUTDOWN_EVENT.is_set():
+                        return None
+                    rc3, err3 = run_proc_cancellable(cmd3, prefer_shell=True)
+                    if rc3 != 0:
+                        return None
+                    else:
+                        # Built with silent fallback
+                        try:
+                            _asset_manifest[name] = {"silent": True, "aud_norm": False}
+                            with open(manifest_path, 'w', encoding='utf-8') as _mf2:
+                                json.dump(_asset_manifest, _mf2, indent=2)
+                        except Exception:
+                            pass
+                        return f"{rel_assets_dir}/{name}"
+        # Successful build, record in manifest
+        try:
+            _asset_manifest[name] = {"silent": desired_silent, "aud_norm": desired_audnorm}
+            with open(manifest_path, 'w', encoding='utf-8') as _mf3:
+                json.dump(_asset_manifest, _mf3, indent=2)
         except Exception:
             pass
+        return f"{rel_assets_dir}/{name}"
+    # New sequencing: random(intro) -> static -> clip -> static -> random_chance(random(transition) -> static) -> ... -> random(outro)
+    # Pull lists and config values
+    try:
+        from config import intro as _intro_list  # type: ignore
+    except Exception:
+        _intro_list = []
+    try:
+        from config import outro as _outro_list  # type: ignore
+    except Exception:
+        _outro_list = []
+    try:
+        from config import transitions as _transitions_list  # type: ignore
+    except Exception:
+        _transitions_list = []
+    try:
+        from config import static as _static_name  # type: ignore
+    except Exception:
+        _static_name = 'static.mp4'
+    try:
+        from config import transition_probability as _trans_prob  # type: ignore
+    except Exception:
+        _trans_prob = 0.35
+    try:
+        from config import transitions_weights as _trans_weights  # type: ignore
+    except Exception:
+        _trans_weights = {}
+    try:
+        from config import transition_cooldown as _trans_cooldown  # type: ignore
+    except Exception:
+        _trans_cooldown = 0
+    try:
+        from config import silence_nonclip_asset_audio as _silence_nonclip  # type: ignore
+    except Exception:
+        _silence_nonclip = True
+    try:
+        from config import silence_transitions as _silence_transitions  # type: ignore
+    except Exception:
+        _silence_transitions = True
+    try:
+        from config import silence_static as _silence_static  # type: ignore
+    except Exception:
+        _silence_static = True
+    try:
+        from config import silence_intro_outro as _silence_intro_outro  # type: ignore
+    except Exception:
+        _silence_intro_outro = True
+
+    def _append_trans_file(name: str) -> bool:
+        if not name:
+            return False
+        # Use normalized copy to ensure decoder compatibility
+        rel_norm = _ensure_transcoded(name)
+        if rel_norm:
+            lines.append(f"file {rel_norm}")
+            return True
+        # If normalization fails or file missing, skip to avoid bad AAC streams
+        try:
+            log("{@yellow}{@bold}WARN{@reset} Skipping transition (normalization failed): {@white}" + str(name), 2)
+        except Exception:
+            pass
+        return False
+
+    # Intro (single random choice, if any), then static
+    if isinstance(_intro_list, (list, tuple)) and _intro_list:
+        _in_choice = random.choice(list(_intro_list))
+        if _append_trans_file(_in_choice):
+            _append_trans_file(_static_name)
+
     total = len(compilation)
-    for pos, clip in enumerate(compilation, start=1):
+    # Enable VT sequences on Windows for nicer updates
+    try:
+        if os.name == 'nt':
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+            mode = ctypes.c_uint32()
+            if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+                ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+                kernel32.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+    except Exception:
+        pass
+
+    # Behavior flags
+    try:
+        from config import max_concurrency as _max_workers  # type: ignore
+    except Exception:
+        _max_workers = 4
+    try:
+        from config import skip_bad_clip as _skip_bad  # type: ignore
+    except Exception:
+        _skip_bad = True
+    try:
+        from config import no_random_transitions as _no_rand  # type: ignore
+    except Exception:
+        _no_rand = False
+
+    # Progress board: print N lines and update in-place
+    _lock = threading.Lock()
+    def _status_text(label: str) -> str:
+        low = label.lower()
+        if low.startswith('failed'):
+            return str(chalk.red_bright.bold(label))
+        if 'done' in low:
+            return str(chalk.green_bright.bold(label))
+        if 'download' in low or 'avatar' in low:
+            return str(chalk.cyan(label))
+        if 'normalizing' in low or 'overlay' in low or 'processing' in low:
+            return str(chalk.yellow(label))
+        if 'queued' in low:
+            return str(chalk.gray(label))
+        return label
+    print(str(chalk.blue_bright(f"Preparing {total} clip(s)...")))
+    for i in range(1, total + 1):
+        print(f"Clip {i}: {_status_text('queued')}")
+
+    def _update_line(pos: int, text: str):
+        # pos is 1-based index within the board lines
+        with _lock:
+            # Move cursor up to the target line (header + total lines printed, we are at bottom)
+            offset = (total - (pos - 1))
+            sys.stdout.write(f"\x1b[{offset}A")
+            sys.stdout.write("\r\x1b[2K")
+            sys.stdout.write(f"Clip {pos}: {_status_text(text)}\n")
+            # Move back down to bottom
+            if offset > 1:
+                sys.stdout.write(f"\x1b[{offset - 1}B")
+            sys.stdout.flush()
+
+    # Prepare all clips concurrently but keep output ordering
+    def _prep(clip: ClipRow, pos: int) -> tuple[ClipRow, bool]:
         clip_folder = os.path.join(cache, str(clip[0]))
         ensure_dir(clip_folder)
-        download_avatar(clip)
-        # Informative download progress
-        log(f"{{@green}}Downloading clip {{@white}}({pos}{{@reset}}/{{@white}}{total}{{@reset}}){{@reset}} {{@cyan}}{clip[5]}", 1)
-        if download_clip(clip) != 1 and process_clip(clip) != 1:
-            lines.append(f'file {clip[0]}/{clip[0]}.mp4')
-            if os.path.exists(_trans_path):
-                lines.append(f'file ../transitions/{transition}')
-    if outro:
-        _outro_path = os.path.join(transitions_abs, outro)
-        if os.path.exists(_outro_path):
-            lines.append(f'file {rel_trans_dir}/{outro}')
-        else:
+        _update_line(pos, "Avatar downloading")
+        if SHUTDOWN_EVENT.is_set():
+            return clip, False
+        download_avatar(clip, quiet=True)
+        _update_line(pos, "Downloading clip")
+        d_rc = _retry(lambda: download_clip(clip, quiet=True))
+        if d_rc == 1:
+            _update_line(pos, "FAILED (download)")
+            return clip, False
+        if SHUTDOWN_EVENT.is_set():
+            return clip, False
+        _update_line(pos, "Normalizing" + ("/Overlay " if enable_overlay else ""))
+        p_rc = _retry(lambda: process_clip(clip, quiet=True))
+        if p_rc == 1:
+            _update_line(pos, "FAILED (process)")
+            return clip, False
+        _update_line(pos, "Done")
+        return clip, (p_rc != 1)
+
+    results: List[tuple[ClipRow, bool]] = [None] * total  # type: ignore
+    with ThreadPoolExecutor(max_workers=_max_workers) as ex:
+        futs = {ex.submit(_prep, clip, i + 1): i for i, clip in enumerate(compilation)}
+        for fut in as_completed(futs):
+            idx = futs[fut]
             try:
-                log("{@yellow}{@bold}WARN{@reset} Missing outro clip; skipping", 2)
+                results[idx] = fut.result()
+            except Exception:
+                results[idx] = (compilation[idx], False)
+
+    # recent transitions for simple cooldown avoidance
+    _recent_transitions: list[str] = []
+
+    def _weighted_transition_choice() -> Optional[str]:
+        if not (isinstance(_transitions_list, (list, tuple)) and _transitions_list):
+            return None
+        pool = list(_transitions_list)
+        # apply cooldown (avoid last N picks)
+        if _trans_cooldown and _recent_transitions:
+            pool = [t for t in pool if t not in _recent_transitions[-_trans_cooldown:]] or list(_transitions_list)
+        # build weights
+        weights = [float(_trans_weights.get(t, 1.0)) for t in pool]
+        try:
+            # normalize weights if all non-positive
+            if not any(w > 0 for w in weights):
+                weights = [1.0] * len(pool)
+            # Python's random.choices available from 3.6+
+            choice = random.choices(pool, weights=weights, k=1)[0]
+            return choice
+        except Exception:
+            return random.choice(pool)
+
+    for clip, ok in results:
+        if not ok:
+            if _skip_bad:
+                try:
+                    log("{@yellow}{@bold}WARN{@reset} Skipping failed clip: {@white}" + str(clip[0]), 2)
+                except Exception:
+                    pass
+                continue
+            else:
+                try:
+                    log("{@redbright}{@bold}Clip failed and skip disabled; aborting", 5)
+                except Exception:
+                    pass
+                break
+    # successful clip
+        lines.append(f'file {clip[0]}/{clip[0]}.mp4')
+        _append_trans_file(_static_name)
+        if not _no_rand and isinstance(_transitions_list, (list, tuple)) and _transitions_list:
+            try:
+                if random.random() < float(_trans_prob):
+                    _t_choice = _weighted_transition_choice()
+                    if _t_choice and _append_trans_file(_t_choice):
+                        _recent_transitions.append(_t_choice)
+                        _append_trans_file(_static_name)
             except Exception:
                 pass
+    # Outro (single random choice, if any). The preceding step already placed a static.
+    if isinstance(_outro_list, (list, tuple)) and _outro_list:
+        _out_choice = random.choice(list(_outro_list))
+        _append_trans_file(_out_choice)
     with open(path, 'w') as f:
         f.write('\n'.join(lines) + '\n')
 
@@ -268,8 +798,9 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
         tmpl = (ffmpegBuildSegments
             .replace('{idx}', str(idx))
             .replace('{date}', date_str))
-        cmd = ffmpeg + ' ' + replace_vars(tmpl, (str(idx), 0, '', '', 0, ''))
-        subprocess.call(cmd, shell=True, stdout=subprocess.PIPE)
+    cmd = ffmpeg + ' ' + replace_vars(tmpl, (str(idx), 0, '', '', 0, ''))
+    # Use cancellable runner for final concat as well
+    run_proc_cancellable(cmd, prefer_shell=True)
 
 
 # Backwards compatible aliases

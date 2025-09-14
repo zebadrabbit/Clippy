@@ -801,7 +801,16 @@ def main():  # noqa: C901
             base_names.append(f"{b_name}_{date_range}_part{i+1}.{_ext}")
     # Ensure names are unique upfront unless overwrite requested
     final_names = _ensure_unique_names(base_names, output, getattr(args, 'overwrite_output', False))
-    stage_two(comps, final_names)
+    try:
+        stage_two(comps, final_names)
+    except KeyboardInterrupt:
+        # Cooperative shutdown: signal pipeline to stop and clean up child procs
+        try:
+            from pipeline import request_shutdown
+            request_shutdown()
+        except Exception:
+            pass
+        log("{@yellow}{@bold}Interrupted by user (Ctrl-C). Stopping encoder and cleaning up...", 1)
     finals = finalize_outputs(
         args.broadcaster,
         window,
@@ -831,4 +840,17 @@ def main():  # noqa: C901
 
 
 if __name__ == "__main__":  # pragma: no cover
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        # Global catch in case Ctrl-C occurs outside main's guarded block
+        try:
+            from pipeline import request_shutdown
+            request_shutdown()
+        except Exception:
+            pass
+        try:
+            from utils import log as _log
+            _log("{@yellow}{@bold}Interrupted by user. Exiting.")
+        except Exception:
+            print("Interrupted by user. Exiting.")
