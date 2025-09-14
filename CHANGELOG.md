@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here. Dates are in YYYY-MM-DD and entries are grouped by date (newest first). This changelog blends commit history with implementation notes from development sessions to provide full context.
 
+## 2025-09-14 — v0.3.4
+
+- Repo hygiene — Remove portable CI and clean ignores
+  - Deleted `.github/workflows/build-portable.yml` (portable build disabled while we iterate Python-only).
+  - Cleaned `.gitignore` to drop PyInstaller/portable build remnants. If packaging returns, we’ll reintroduce targeted ignore rules.
+  - No functional changes to the app; health check and smoke/sequencing remain green.
+
+## 2025-09-14 — v0.3.3
+
+- Breaking/Docs — Removed portable build system; Python-only
+  - Deleted portable build scripts and artifacts; documentation updated to reflect running from source only.
+  - Kept `_internal` support for optional sample assets; `CLIPPY_USE_INTERNAL=1` continues to work.
+  - Files: removed `build/` folder, updated `README.md`, `scripts/README.md`, `_internal/README.md`.
+
 ## 2025-09-14 — v0.3.2
 
 - UX — Setup wizard default broadcaster visibility
@@ -131,5 +145,5 @@ The following changes were implemented and verified during development and refle
 ## Notes
 
 - Breaking change: `transitions/static.mp4` is now required. Place your asset in `transitions/` or provide `--transitions-dir`.
-- Portable builds package required assets and binaries; see README for details.
+- Project runs from source; optional `_internal` assets are supported via `CLIPPY_USE_INTERNAL=1`.
 

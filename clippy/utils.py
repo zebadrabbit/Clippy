@@ -165,19 +165,22 @@ def log(msg, level=0):
             chev = chalk.magenta_bright("›")
         out = chev + " " + body
     elif level == 5:
+        # Errors: render in bright red, including the leading symbol
         if is_styled:
             body = rendered
         else:
             try:
-                body = _style_label_value(rendered) if THEME else chalk.gray(rendered)
+                raw = _style_label_value(rendered) if THEME else rendered
             except Exception:
-                body = chalk.gray(rendered)
-        body = _accent_symbols(body)
-        # Use a cross to avoid Markdown heading ("# ")
+                raw = rendered
+            try:
+                body = THEME.error(raw) if THEME else chalk.red_bright(raw)
+            except Exception:
+                body = chalk.red_bright(raw)
         try:
-            x = THEME.symbol("✖") if THEME else chalk.magenta_bright("✖")
+            x = THEME.error("✖") if THEME else chalk.red_bright("✖")
         except Exception:
-            x = chalk.magenta_bright("✖")
+            x = chalk.red_bright("✖")
         out = x + " " + body
     else:
         if is_styled:
@@ -255,26 +258,7 @@ def resolve_transitions_dir() -> str:
             roots.append(os.path.abspath(str(cfg_dir)))
     except Exception:
         pass
-    # PyInstaller temp dir
-    try:
-        meipass = getattr(sys, '_MEIPASS', None)
-    except Exception:
-        meipass = None
-    if meipass:
-        if prefer_internal:
-            roots += [os.path.join(meipass, '_internal', 'transitions'), os.path.join(meipass, 'transitions')]
-        else:
-            roots += [os.path.join(meipass, 'transitions'), os.path.join(meipass, '_internal', 'transitions')]
-    # Frozen exe dir
-    try:
-        if getattr(sys, 'frozen', False):
-            exe_dir = os.path.dirname(sys.executable)
-            if prefer_internal:
-                roots += [os.path.join(exe_dir, '_internal', 'transitions'), os.path.join(exe_dir, 'transitions')]
-            else:
-                roots += [os.path.join(exe_dir, 'transitions'), os.path.join(exe_dir, '_internal', 'transitions')]
-    except Exception:
-        pass
+    # Source roots only: repo and CWD
     # Repo and CWD fallbacks
     try:
         repo_dir = os.path.dirname(os.path.abspath(__file__))
@@ -331,11 +315,6 @@ def find_transition_file(name: str) -> str | None:
                 candidates.append(os.path.abspath(str(cfg_dir)))
         except Exception:
             pass
-        # PyInstaller temp and frozen exe dirs
-        try:
-            meipass = getattr(sys, '_MEIPASS', None)
-        except Exception:
-            meipass = None
         def _add_pair(base: str):
             if use_internal:
                 candidates.append(os.path.join(base, '_internal', 'transitions'))
@@ -343,14 +322,6 @@ def find_transition_file(name: str) -> str | None:
             else:
                 candidates.append(os.path.join(base, 'transitions'))
                 candidates.append(os.path.join(base, '_internal', 'transitions'))
-        if meipass:
-            _add_pair(meipass)
-        try:
-            if getattr(sys, 'frozen', False):
-                exe_dir = os.path.dirname(sys.executable)
-                _add_pair(exe_dir)
-        except Exception:
-            pass
         try:
             repo_dir = os.path.dirname(os.path.abspath(__file__))
             _add_pair(repo_dir)

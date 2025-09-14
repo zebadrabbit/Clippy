@@ -1,13 +1,14 @@
 # scripts/
 
-This directory contains utility scripts that support setup, media preparation, validation, and packaging.
+This directory contains utility scripts that support setup, media preparation, and validation for running from source.
 
-- `setup_wizard.py` — Guided first-time setup. Creates `.env`, writes `clippy.yaml`, checks binaries, helps you choose a transitions folder (or prefer internal packaged ones), and can generate `run_clippy.ps1` for quick launching.
+- `setup_wizard.py` — Guided first-time setup. Creates `.env`, writes `clippy.yaml`, checks binaries, helps you choose a transitions folder (or prefer internal sample ones), and can generate `run_clippy.ps1` for quick launching.
 - `health_check.py` — Standalone preflight: verifies ffmpeg/yt-dlp presence, NVENC availability, Python packages, required folders, transitions/static.mp4, fonts, and `.env` credentials.
 - `import_media.py` — Normalize or convert any source video/image into a valid transition asset (`intro`, `transition`, `outro`, `static`). Ensures correct codecs, fps, resolution, and loudness.
 - `make_transitions.py` — Generate multiple short `transition_XX.mp4` clips by slicing random segments from a long source video.
 - `test_transitions.py` — Probe all files in `transitions/`, normalize into `cache/_trans` (48 kHz stereo AAC), and perform an optional audio-only concat validation.
 - `check_sequencing.py` — Validate a generated concat list file (e.g., `cache/comp0`) to ensure the sequence policy is obeyed.
+- `smoke_local.py` — Local end-to-end smoke test without Twitch. Copies `transitions/static.mp4` to `cache/smoketest/clip.mp4`, runs normalize/overlay, writes a concat file, and performs final concat. Useful to validate Windows quoting and shell invocation.
 
 ## Sequencing validator
 
@@ -43,11 +44,9 @@ Typical usage:
 
 - From source:
   - `python .\scripts\health_check.py`
-- Portable build:
-  - Use `Start-HealthCheck.bat` (Windows) or run `HealthCheck` binary.
 
 Notes:
-- The checker prefers local `bin/` and `assets/fonts/` paths when running from source, and bundled paths when frozen.
+- The checker prefers local `bin/` and `assets/fonts/` paths when running from source. If `_internal` assets exist and `CLIPPY_USE_INTERNAL=1` is set, those will be used for transitions.
 - Coloring is minimal and safe for Windows consoles.
 
 ## Transitions tools quick reference
@@ -82,3 +81,18 @@ python .\scripts\test_transitions.py --normalize --concat-audio-check
 # Verify a previously generated concat list (e.g., cache\comp0)
 python .\scripts\check_sequencing.py --comp .\cache\comp0 --transitions-dir .\transitions
 ```
+
+## Local smoke test (no Twitch)
+
+Quickly exercise the processing pipeline using only local assets:
+
+```powershell
+python .\scripts\smoke_local.py --overlay -y
+```
+
+This will:
+- Copy `transitions/static.mp4` to `cache/smoketest/clip.mp4`
+- Generate a round avatar for overlay (if Pillow available) and run overlay stage
+- Normalize, then concatenate into a final file in `cache/`
+
+Set `CLIPPY_DEBUG=1` to print full ffmpeg commands for troubleshooting.

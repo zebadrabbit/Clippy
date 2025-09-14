@@ -42,7 +42,8 @@ class Theme:
         self.path = lambda s: chalk.cyan(s)
         self.success = lambda s: chalk.cyan(s)
         self.warn = lambda s: chalk.magenta(s)
-        self.error = lambda s: chalk.magenta(s)
+        # Failures should be very obvious
+        self.error = lambda s: chalk.red_bright(s)
         # Prompt parts
         self.label = lambda s: chalk.cyan(s)
         self.default = lambda s: chalk.blue_bright(s)

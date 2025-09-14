@@ -9,7 +9,7 @@ assumed repo root is adjusted accordingly.
 """
 
 from typing import Any
-import os, sys
+import os
 
 # Load merged config from YAML/env/defaults
 try:
@@ -33,33 +33,23 @@ yt_format = globals().get('yt_format', "bestvideo[ext=mp4][height<=1080]+bestaud
 _PKG_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_DIR = os.path.abspath(os.path.join(_PKG_DIR, '..'))
 
-# ffmpeg / downloader binaries
-if getattr(sys, 'frozen', False):
-    # Running from PyInstaller bundle; prefer local binaries next to the exe
-    _EXE_DIR = os.path.dirname(sys.executable)
-    _FF = os.path.join(_EXE_DIR, 'ffmpeg.exe')
-    ffmpeg = _FF if os.path.exists(_FF) else 'ffmpeg'
-    _FP = os.path.join(_EXE_DIR, 'ffprobe.exe')
-    ffprobe = _FP if os.path.exists(_FP) else 'ffprobe'
-    _YTDLP = os.path.join(_EXE_DIR, 'yt-dlp.exe')
-    YTDL_BIN = _YTDLP if os.path.exists(_YTDLP) else 'yt-dlp'
+# ffmpeg / downloader binaries (source-only)
+# Try repo-level bin/ executables first, then fall back to PATH names.
+_bin_ff = os.path.join(_REPO_DIR, 'bin', 'ffmpeg.exe')
+ffmpeg = _bin_ff if os.path.exists(_bin_ff) else 'ffmpeg'
+_bin_fp = os.path.join(_REPO_DIR, 'bin', 'ffprobe.exe')
+ffprobe = _bin_fp if os.path.exists(_bin_fp) else 'ffprobe'
+# yt-dlp preferred; fall back to youtube-dl if present in bin/
+_bin_ytdlp = os.path.join(_REPO_DIR, 'bin', 'yt-dlp.exe')
+_bin_youtubedl = os.path.join(_REPO_DIR, 'bin', 'youtube-dl.exe')
+if os.path.exists(_bin_ytdlp):
+    YTDL_BIN = _bin_ytdlp
+elif os.path.exists(_bin_youtubedl):
+    YTDL_BIN = _bin_youtubedl
 else:
-    # When running from source, try to resolve repo-level bin/ executables first
-    _bin_ff = os.path.join(_REPO_DIR, 'bin', 'ffmpeg.exe')
-    ffmpeg = _bin_ff if os.path.exists(_bin_ff) else 'ffmpeg'
-    _bin_fp = os.path.join(_REPO_DIR, 'bin', 'ffprobe.exe')
-    ffprobe = _bin_fp if os.path.exists(_bin_fp) else 'ffprobe'
-    # yt-dlp preferred; fall back to youtube-dl if present in bin/
-    _bin_ytdlp = os.path.join(_REPO_DIR, 'bin', 'yt-dlp.exe')
-    _bin_youtubedl = os.path.join(_REPO_DIR, 'bin', 'youtube-dl.exe')
-    if os.path.exists(_bin_ytdlp):
-        YTDL_BIN = _bin_ytdlp
-    elif os.path.exists(_bin_youtubedl):
-        YTDL_BIN = _bin_youtubedl
-    else:
-        YTDL_BIN = 'yt-dlp'
+    YTDL_BIN = 'yt-dlp'
 
-# Ensure fontfile resolves in both source and frozen modes
+# Ensure fontfile resolves when running from source
 try:
     _ff = globals().get('fontfile', 'assets/fonts/Roboto-Medium.ttf')
     if not isinstance(_ff, str):

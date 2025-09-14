@@ -142,7 +142,8 @@ def run_proc(cmd: str, prefer_shell: bool = False):
                     pass
                 raise
         else:
-            tokens = cmd.split()
+            # Use shlex.split with posix=False to preserve quoted segments on Windows
+            tokens = shlex.split(cmd, posix=False)
             try:
                 proc = subprocess.run(tokens, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 return proc.returncode, proc.stderr
@@ -179,7 +180,8 @@ def run_proc_cancellable(cmd: str, prefer_shell: bool = False, progress_cb: Opti
             args = cmd
             use_shell = True
         else:
-            args = cmd.split()
+            # Respect quoted paths/args
+            args = shlex.split(cmd, posix=False)
             use_shell = False
     else:
         args = shlex.split(cmd)
@@ -460,7 +462,13 @@ def process_clip(clip: ClipRow, quiet: bool = False, on_norm_progress: Optional[
                 on_norm_progress(info['out_time'], _dur)
             except Exception:
                 pass
-    rc, err = run_proc_cancellable(_norm_cmd, prefer_shell=False, progress_cb=_norm_cb if on_norm_progress else None)
+    # Debug: show the full command when CLIPPY_DEBUG is set
+    try:
+        if os.getenv('CLIPPY_DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on'):
+            log('ffmpeg normalize cmd: ' + _norm_cmd, 1)
+    except Exception:
+        pass
+    rc, err = run_proc_cancellable(_norm_cmd, prefer_shell=True, progress_cb=_norm_cb if on_norm_progress else None)
     if rc != 0:
         if _is_interrupted(err):
             log('Normalization interrupted by user', 2)
@@ -491,6 +499,11 @@ def process_clip(clip: ClipRow, quiet: bool = False, on_norm_progress: Optional[
                     on_overlay_progress(info['out_time'], _dur)
                 except Exception:
                     pass
+        try:
+            if os.getenv('CLIPPY_DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on'):
+                log('ffmpeg overlay cmd: ' + _ovl_cmd, 1)
+        except Exception:
+            pass
         rc, err = run_proc_cancellable(_ovl_cmd, prefer_shell=True, progress_cb=_ovl_cb if on_overlay_progress else None)
         if rc != 0:
             if _is_interrupted(err):
@@ -1064,6 +1077,11 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
             sys.stdout.flush()
 
         # Use cancellable runner for final concat as well
+        try:
+            if os.getenv('CLIPPY_DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on'):
+                log('ffmpeg concat cmd: ' + cmd, 1)
+        except Exception:
+            pass
         rc, err = run_proc_cancellable(cmd, prefer_shell=True, progress_cb=_concat_progress)
         # Ensure we end the progress line cleanly
         try:

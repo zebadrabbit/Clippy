@@ -22,11 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-# When frozen, prefer the directory of the executable for locating assets
-if getattr(sys, "frozen", False):
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    BASE_DIR = ROOT
+BASE_DIR = ROOT
 
 from clippy.config import youtubeDl, ffmpeg, cache, output, fontfile  # noqa: E402
 from clippy.utils import resolve_transitions_dir  # noqa: E402
@@ -99,9 +95,6 @@ def check_ffmpeg_features(ffmpeg_path: str) -> None:
 
 
 def check_python_packages() -> None:
-    # In frozen/portable mode, Python packages inside the host env are irrelevant to the EXE
-    if getattr(sys, 'frozen', False):
-        return
     pkgs = [
         ("requests", "requests"),
         ("Pillow", "PIL"),
@@ -168,31 +161,7 @@ def check_dirs_and_assets(ffmpeg_path: str | None) -> None:
     if os.path.exists(font_abs):
         print(f"{status_tag('OK')} font present: {paint(font_abs, 'gray')}")
     else:
-        # If running frozen and font is inside _internal, surface it and create dirs
-        # Look for font under various internal locations
-        internal_font_candidates = [
-            os.path.join(BASE_DIR, '_internal', os.path.basename(fontfile)),
-            os.path.join(BASE_DIR, '_internal', 'assets', 'fonts', os.path.basename(fontfile)),
-        ]
-        assets_dir = os.path.join(BASE_DIR, os.path.dirname(fontfile)) if not os.path.isabs(fontfile) else os.path.dirname(fontfile)
-        try:
-            os.makedirs(assets_dir, exist_ok=True)
-        except Exception:
-            pass
-        restored = False
-        for cand in internal_font_candidates:
-            if os.path.exists(cand):
-                try:
-                    target = font_abs
-                    with open(cand, 'rb') as src, open(target, 'wb') as dst:
-                        dst.write(src.read())
-                    print(f"{status_tag('OK')} font restored to: {paint(target, 'gray')}")
-                    restored = True
-                    break
-                except Exception:
-                    pass
-        if not restored:
-            print(f"{status_tag('WARN')} font missing: {paint(font_abs, 'gray')}")
+        print(f"{status_tag('WARN')} font missing: {paint(font_abs, 'gray')}")
 
 
 def _parse_env_file(path: str) -> dict[str, str]:

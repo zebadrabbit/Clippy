@@ -37,17 +37,8 @@ Thumbs.db
 /cache/
 /output/
 
-# PyInstaller / build artifacts (keep build script tracked)
-/build/Clippy-portable.zip
-/build/build/
-/build/dist/
-/build/__pycache__/
-/build/*/*.toc
-/build/*/*.pkg
-/build/*/*.pyz
-/build/*/*.html
-/build/*/*.txt
-!/build/build.ps1
+# (legacy) PyInstaller artifacts were removed with the Python-only pivot
+# If reintroduced later, add build outputs here.
 
 # Generated media artifacts (keep transitions originals tracked separately if desired)
 *.mp4
@@ -57,6 +48,9 @@ Thumbs.db
 *.jpg
 *.jpeg
 *.gif
+
+# Configuration files (keep example files tracked)
+clippy.yaml
 
 # If you keep original transition assets under version control, explicitly negate them here:
 # !/transitions/intro_original.mp4

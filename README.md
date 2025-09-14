@@ -27,7 +27,7 @@ python .\scripts\setup_wizard.py
 - Optionally sets a default broadcaster so you can run without specifying `--broadcaster`
 - Checks for ffmpeg/yt-dlp and NVENC availability; suggests fixes if missing
 - Helps you select or create a transitions folder (`transitions/`), explains the required `static.mp4`
-- Offers to prefer packaged internal transitions with `CLIPPY_USE_INTERNAL=1`
+- Offers to use internal sample transitions with `CLIPPY_USE_INTERNAL=1` (when `_internal/transitions` exists)
 - You can run with just: `python .\main.py -y` after saving defaults
 
 You can re-run the wizard at any time to adjust settings; it will merge with the existing YAML and leave custom edits intact.
@@ -89,11 +89,11 @@ Sections include: Required, Window & selection, Output & formatting, Transitions
 
 ### Internal data and ENV
 
-- `static.mp4` is REQUIRED. If you ship a portable build, include it under `transitions/` (runtime) and/or `_internal/transitions/static.mp4` (packaged). Set `CLIPPY_USE_INTERNAL=1` to prefer packaged assets.
+- `static.mp4` is REQUIRED. Place it under `transitions/`. If you also have internal sample assets under `_internal/transitions`, set `CLIPPY_USE_INTERNAL=1` to prefer those.
 - Override transitions location with `TRANSITIONS_DIR` (absolute or relative path).
 - Common ENV:
   - `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`: Twitch API credentials
-  - `CLIPPY_USE_INTERNAL=1`: Prefer `_internal` packaged data
+  - `CLIPPY_USE_INTERNAL=1`: Prefer `_internal` sample data (when present)
   - `TRANSITIONS_DIR=path`: Use a specific transitions folder
 
 ### Transitions 101: creating and validating assets
@@ -146,28 +146,16 @@ python .\scripts\health_check.py
 - Pixelation at cuts? Try `--quality max` or `--bitrate 16M`.
 - Concat AAC errors? Ensure your transitions are normalized by running `python .\scripts\test_transitions.py --normalize`.
 
-## Distribute as a portable app (Windows)
-For non-technical users, build a zip they can unzip and run without installing Python:
+## Running from source (Python)
+This project now runs as a standard Python application. Use the setup steps above to configure your environment, then run commands like:
 
-1) Build (developer machine):
 ```powershell
-# from repo root
-powershell -ExecutionPolicy Bypass -File .\build\build.ps1 -Clean
+# Health check
+python .\scripts\health_check.py
+
+# Build a compilation (skip confirmation with -y)
+python .\main.py --broadcaster <name> -y
 ```
-
-This creates `Clippy-portable.zip` with:
-- Clippy.exe (bundled Python)
-- ffmpeg.exe, yt-dlp.exe
-- transitions/, Roboto-Medium.ttf, README.md
-- Start-Clippy.bat and .env.example
- - HealthCheck.exe
-
-2) End-user steps:
-- Unzip `Clippy-portable.zip`
-- Open `.env.example`, set TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET, save as `.env`
-- Double-click `Start-Clippy.bat` or run `Clippy.exe --broadcaster <name> -y`
-
-Optional: Create a shortcut to `Start-Clippy.bat` with your preferred default flags.
 
 ## Manual setup (optional)
 If you prefer not to use the wizard, you can create `.env` yourself and edit `clippy.yaml`:
