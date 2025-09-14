@@ -26,6 +26,11 @@ All notable changes to this project are documented here. Dates are in YYYY-MM-DD
   - Added an internal `ffprobe` duration probe helper for accurate progress computation.
   - Files: `pipeline.py`
 
+- Progress — Stage 2 concatenate progress
+  - Added a live progress indicator for the final concatenation step using `-progress` `out_time` and total duration from the concat list.
+  - Renders a single updating line with percent and time elapsed/total for each compilation.
+  - Files: `pipeline.py`
+
 - Fix — Stage 2 compile loop + finalize clarity
   - Ensure the concatenate (Stage 2) runs once per compilation index (bug caused only the last or a single output to be produced).
   - Finalize step now lists exactly which files were moved and warns for any missing compiled indices.
@@ -37,6 +42,12 @@ All notable changes to this project are documented here. Dates are in YYYY-MM-DD
   - Bundled `ffprobe` alongside `ffmpeg` and `yt-dlp` in the portable output.
   - Updated PyInstaller spec and build scripts to include `_internal`, fonts, transitions, and `ffprobe`.
   - Files: `build/Clippy.spec`, `build/build.ps1`, `build/build.sh`, `_internal/README.md`, `utils.py`
+
+- Changed — Cleaner Ctrl-C output during ffmpeg runs
+  - Paired `-progress` with `-nostats` to suppress noisy frame/fps/bitrate spam on interruption.
+  - Failure handling detects user interruption and logs concise messages (e.g., "Normalization interrupted by user") instead of large stderr dumps.
+  - Retry loops now stop immediately if a shutdown has been requested; transition asset normalization also uses `-nostats`.
+  - Files: `pipeline.py`
 
 - Health check & docs
   - Health check now hints using `CLIPPY_USE_INTERNAL=1` if `transitions/static.mp4` is missing.

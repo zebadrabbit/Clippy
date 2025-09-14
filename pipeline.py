@@ -41,6 +41,22 @@ SHUTDOWN_EVENT = threading.Event()
 _ACTIVE_PROCS: set[Popen] = set()
 _PROCS_LOCK = threading.Lock()
 
+def _is_interrupted(err: Optional[bytes | str]) -> bool:
+    """Heuristic to determine if a failure was due to user interruption.
+
+    Considers global shutdown flag and common substrings in stderr.
+    """
+    if SHUTDOWN_EVENT.is_set():
+        return True
+    try:
+        if err is None:
+            return False
+        s = err.decode('utf-8', errors='ignore') if isinstance(err, (bytes, bytearray)) else str(err)
+        s_low = s.lower()
+        return ('interrupted' in s_low) or ('terminated' in s_low) or ('signal' in s_low and 'term' in s_low)
+    except Exception:
+        return SHUTDOWN_EVENT.is_set()
+
 def _register_proc(p: Popen):
     with _PROCS_LOCK:
         _ACTIVE_PROCS.add(p)
@@ -280,6 +296,34 @@ def _ffprobe_duration(path: str) -> Optional[float]:
         return None
 
 
+def _sum_concat_duration(index: int) -> Optional[float]:
+    """Sum durations of files referenced by cache/comp{index} for progress percent.
+
+    Returns total seconds or None if the concat file is missing or no inputs found.
+    """
+    try:
+        concat_path = os.path.join(cache, f'comp{index}')
+        if not os.path.exists(concat_path):
+            return None
+        total = 0.0
+        with open(concat_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line.startswith('file '):
+                    continue
+                rel = line.split(' ', 1)[1].strip().strip("'\"")
+                # Paths in concat are relative to cache
+                src = os.path.join(cache, rel)
+                # Normalize separators
+                src = os.path.abspath(src)
+                dur = _ffprobe_duration(src)
+                if isinstance(dur, (int, float)) and dur > 0:
+                    total += float(dur)
+        return total if total > 0 else None
+    except Exception:
+        return None
+
+
 def ensure_dir(path: str):
     if not os.path.isdir(path):
         os.makedirs(path, exist_ok=True)
@@ -335,6 +379,8 @@ def download_clip(clip: ClipRow, quiet: bool = False) -> int:
 def _retry(fn, attempts: int = 3, backoff: float = 1.5):
     last = None
     for i in range(attempts):
+        if SHUTDOWN_EVENT.is_set():
+            return 1
         rc = fn()
         if rc == 0 or rc == 2:
             return rc
@@ -379,10 +425,15 @@ def process_clip(clip: ClipRow, quiet: bool = False, on_norm_progress: Optional[
         return 1
     # inject ffmpeg progress flags
     _norm_cmd = ffmpeg + ' ' + replace_vars(ffmpegNormalizeVideos, clip)
+    # Ensure we suppress ffmpeg periodic stats when using -progress
     if ' -stats ' in _norm_cmd:
         _norm_cmd = _norm_cmd.replace(' -stats ', ' -nostats -progress pipe:2 ')
     else:
-        _norm_cmd += ' -progress pipe:2'
+        # prefer appending both flags
+        if ' -progress ' not in _norm_cmd:
+            _norm_cmd += ' -progress pipe:2'
+        if ' -nostats' not in _norm_cmd:
+            _norm_cmd += ' -nostats'
     # probe duration for progress percentage
     _in_norm = os.path.join(os.path.join(cache, str(clip[0])), 'clip.mp4')
     _dur = _ffprobe_duration(_in_norm)
@@ -394,8 +445,11 @@ def process_clip(clip: ClipRow, quiet: bool = False, on_norm_progress: Optional[
                 pass
     rc, err = run_proc_cancellable(_norm_cmd, prefer_shell=False, progress_cb=_norm_cb if on_norm_progress else None)
     if rc != 0:
-        log('{@redbright}{@bold}Normalization failed', 5)
-        log(err, 5)
+        if _is_interrupted(err):
+            log('{@yellow}{@bold}Normalization interrupted by user', 2)
+        else:
+            log('{@redbright}{@bold}Normalization failed', 5)
+            log(err, 5)
         return 1
     try:
         os.remove(os.path.join(clip_dir, 'clip.mp4'))
@@ -410,7 +464,10 @@ def process_clip(clip: ClipRow, quiet: bool = False, on_norm_progress: Optional[
         if ' -stats ' in _ovl_cmd:
             _ovl_cmd = _ovl_cmd.replace(' -stats ', ' -nostats -progress pipe:2 ')
         else:
-            _ovl_cmd += ' -progress pipe:2'
+            if ' -progress ' not in _ovl_cmd:
+                _ovl_cmd += ' -progress pipe:2'
+            if ' -nostats' not in _ovl_cmd:
+                _ovl_cmd += ' -nostats'
         def _ovl_cb(info: dict):
             if on_overlay_progress and 'out_time' in info and _dur:
                 try:
@@ -419,8 +476,11 @@ def process_clip(clip: ClipRow, quiet: bool = False, on_norm_progress: Optional[
                     pass
         rc, err = run_proc_cancellable(_ovl_cmd, prefer_shell=True, progress_cb=_ovl_cb if on_overlay_progress else None)
         if rc != 0:
-            log('{@redbright}{@bold}Overlay failed', 5)
-            log(err, 5)
+            if _is_interrupted(err):
+                log('{@yellow}{@bold}Overlay interrupted by user', 2)
+            else:
+                log('{@redbright}{@bold}Overlay failed', 5)
+                log(err, 5)
             return 1
     else:
         # If overlay disabled, use normalized as final
@@ -582,7 +642,7 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
                 f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
                 f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
                 f"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 -shortest "
-                f"-movflags +faststart -preset {nvenc_preset} -loglevel error -stats \"{dst}\""
+                f"-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats \"{dst}\""
             )
         else:
             _af = " -af loudnorm=I=-16:TP=-1.5:LRA=11" if _aud_norm else ""
@@ -593,7 +653,7 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
                     f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
                     f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
                     f"-pix_fmt yuv420p{_af} -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
-                    f"-movflags +faststart -preset {nvenc_preset} -loglevel error -stats \"{dst}\""
+                    f"-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats \"{dst}\""
                 )
             else:
                 # Synthesize clean stereo audio if source lacks audio
@@ -604,7 +664,7 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
                     f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
                     f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
                     f"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 -shortest "
-                    f"-movflags +faststart -preset {nvenc_preset} -loglevel error -stats \"{dst}\""
+                    f"-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats \"{dst}\""
                 )
 
         if SHUTDOWN_EVENT.is_set():
@@ -614,10 +674,15 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
             # Log stderr for visibility
             try:
                 _etxt = err.decode('utf-8', errors='ignore') if isinstance(err, (bytes, bytearray)) else str(err)
-                log("{@yellow}{@bold}WARN{@reset} Failed to normalize transition asset: {@white}" + name, 2)
-                log(_etxt, 2)
+                if _is_interrupted(err):
+                    log("{@yellow}{@bold}Transition build interrupted by user{@reset}", 2)
+                else:
+                    log("{@yellow}{@bold}WARN{@reset} Failed to normalize transition asset: {@white}" + name, 2)
+                    log(_etxt, 2)
             except Exception:
                 pass
+            if SHUTDOWN_EVENT.is_set():
+                return None
             # Retry without loudnorm only for intros/outros (non-silent path)
             if (not force_silent_audio) and _aud_norm:
                 _af2 = ""
@@ -627,7 +692,7 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
                     f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
                     f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
                     f"-pix_fmt yuv420p{_af2} -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
-                    f"-movflags +faststart -preset {nvenc_preset} -loglevel error -stats \"{dst}\""
+                    f"-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats \"{dst}\""
                 )
                 if SHUTDOWN_EVENT.is_set():
                     return None
@@ -641,7 +706,7 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
                         f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
                         f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
                         f"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 -shortest "
-                        f"-movflags +faststart -preset {nvenc_preset} -loglevel error -stats \"{dst}\""
+                        f"-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats \"{dst}\""
                     )
                     if SHUTDOWN_EVENT.is_set():
                         return None
@@ -921,13 +986,53 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
             .replace('{idx}', str(idx))
             .replace('{date}', date_str))
         cmd = ffmpeg + ' ' + replace_vars(tmpl, (str(idx), 0, '', '', 0, ''))
+        # Inject progress reporting
+        if ' -stats ' in cmd:
+            cmd = cmd.replace(' -stats ', ' -nostats -progress pipe:2 ')
+        else:
+            cmd += ' -progress pipe:2'
+
+        total = _sum_concat_duration(idx)
+
+        def _fmt_time(secs: float) -> str:
+            try:
+                secs_int = int(secs)
+                m, s = divmod(secs_int, 60)
+                h, m = divmod(m, 60)
+                if h > 0:
+                    return f"{h:02d}:{m:02d}:{s:02d}"
+                return f"{m:02d}:{s:02d}"
+            except Exception:
+                return "--:--"
+
+        # Render a single progress line that updates in-place
+        def _concat_progress(info: dict):
+            if 'out_time' not in info:
+                return
+            done = float(info['out_time'])
+            if total and total > 0:
+                pct = max(0, min(100, int((done/total)*100)))
+                sys.stdout.write(f"\r{chalk.yellow('Concatenating')} {chalk.white(out_name)}: {pct}% ({_fmt_time(done)}/{_fmt_time(total)})   ")
+            else:
+                sys.stdout.write(f"\r{chalk.yellow('Concatenating')} {chalk.white(out_name)}: {_fmt_time(done)}   ")
+            sys.stdout.flush()
+
         # Use cancellable runner for final concat as well
-        rc, err = run_proc_cancellable(cmd, prefer_shell=True)
+        rc, err = run_proc_cancellable(cmd, prefer_shell=True, progress_cb=_concat_progress)
+        # Ensure we end the progress line cleanly
+        try:
+            sys.stdout.write("\r\n")
+            sys.stdout.flush()
+        except Exception:
+            pass
         if rc != 0:
             try:
-                _etxt = err.decode('utf-8', errors='ignore') if isinstance(err, (bytes, bytearray)) else str(err)
-                log("{@redbright}{@bold}Concat failed for index {@reset}{@white}" + str(idx), 5)
-                log(_etxt, 5)
+                if _is_interrupted(err):
+                    log("{@yellow}{@bold}Concatenation interrupted by user{@reset}", 2)
+                else:
+                    _etxt = err.decode('utf-8', errors='ignore') if isinstance(err, (bytes, bytearray)) else str(err)
+                    log("{@redbright}{@bold}Concat failed for index {@reset}{@white}" + str(idx), 5)
+                    log(_etxt, 5)
             except Exception:
                 pass
 
