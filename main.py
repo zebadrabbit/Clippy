@@ -41,77 +41,86 @@ import pipeline as pipeline_mod
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Build Twitch clip compilations (no Discord)")
-    p.add_argument("--broadcaster", required=True, help="Broadcaster login name (e.g. theflood)")
-    p.add_argument("--client-id", dest="client_id", help="Twitch Client ID (else TWITCH_CLIENT_ID env)")
-    p.add_argument("--client-secret", dest="client_secret", help="Twitch Client Secret (else env)")
-    p.add_argument("--start", help="Start date (MM/DD/YYYY). Interpreted as 00:00:00Z of that day.")
-    p.add_argument("--end", help="End date (MM/DD/YYYY). Interpreted as 23:59:59Z of that day.")
-    p.add_argument("--min-views", dest="reactionThreshold", type=int, default=reactionThreshold, help="Minimum view count (maps to reactions)")
-    p.add_argument("--max-clips", type=int, default=100, help="Max clips to fetch before filtering")
-    p.add_argument("--clips", dest="amountOfClips", type=int, default=amountOfClips, help="Clips per compilation")
-    p.add_argument("--compilations", dest="amountOfCompilations", type=int, default=amountOfCompilations, help="Number of compilations to create")
-    p.add_argument("--keep-cache", action="store_true", help="Do not delete per-clip cache after finishing")
-    p.add_argument(
-        "--quality",
-        choices=["balanced", "high", "max"],
-        help="Quality preset that adjusts bitrate (overridden by --bitrate)",
+    class WideHelp(argparse.HelpFormatter):
+        def __init__(self, *args, **kwargs):
+            kwargs.setdefault("max_help_position", 32)
+            kwargs.setdefault("width", 110)
+            super().__init__(*args, **kwargs)
+
+    p = argparse.ArgumentParser(
+        description="Build Twitch clip compilations (no Discord)",
+        formatter_class=WideHelp,
     )
-    p.add_argument(
-        "--bitrate",
-        help="Override video bitrate target, e.g. 12M",
-    )
-    p.add_argument(
-        "--resolution",
-        help="Override output resolution, e.g. 1920x1080 or 1280x720",
-    )
-    p.add_argument(
-        "--format",
-        choices=["mp4", "mkv"],
-        help="Container format for final output",
-    )
-    p.add_argument(
-        "--auto-expand",
-        action="store_true",
-        help="If not enough clips, auto-expand the start date backwards in steps to gather more",
-    )
-    p.add_argument(
-        "--expand-step-days",
-        type=int,
-        default=7,
-        help="How many days to extend the lookback per expansion step (default 7)",
-    )
-    p.add_argument(
-        "--max-lookback-days",
-        type=int,
-        default=90,
-        help="Maximum total lookback from the end date when auto-expanding (default 90)",
-    )
-    p.add_argument(
-        "-y", "--yes",
-        action="store_true",
-    help="Auto-confirm the settings prompt",
-    )
-    # Additional overrides for robustness and convenience
-    p.add_argument("--fps", type=str, help="Override output framerate, e.g. 60")
-    p.add_argument("--audio-bitrate", dest="audio_bitrate", type=str, help="Override audio bitrate, e.g. 192k")
-    p.add_argument("--cache-dir", dest="cache_dir", type=str, help="Cache directory path")
-    p.add_argument("--output-dir", dest="output_dir", type=str, help="Output directory path")
-    p.add_argument("--intro", type=str, help="Intro clip filename in transitions dir (e.g., intro.mp4 or empty to disable)")
-    p.add_argument("--outro", type=str, help="Outro clip filename in transitions dir (e.g., outro.mp4 or empty to disable)")
-    p.add_argument("--transition", type=str, help="Transition clip between items (default static.mp4)")
-    p.add_argument("--transitions-dir", dest="transitions_dir", type=str, help="Path to transitions directory (overrides env and defaults)")
-    p.add_argument("--no-overlay", action="store_true", help="Disable overlay stage for speed")
-    p.add_argument("--rebuild", action="store_true", help="Force rebuild even if intermediate files exist")
-    p.add_argument("--yt-format", dest="yt_format", type=str, help="yt-dlp --format string override")
-    # Encoder tuning
-    p.add_argument("--cq", type=str, help="NVENC constant quality (lower is higher quality)")
-    p.add_argument("--preset", dest="nvenc_preset", type=str, choices=["slow","medium","fast","hp","hq","bd","ll","llhq","llhp"], help="NVENC preset")
-    p.add_argument("--gop", type=str, help="GOP size, e.g. 120")
-    p.add_argument("--rc-lookahead", type=str, help="NVENC rc-lookahead frames")
-    p.add_argument("--spatial-aq", type=str, help="NVENC spatial AQ enable (0/1)")
-    p.add_argument("--temporal-aq", type=str, help="NVENC temporal AQ enable (0/1)")
-    p.add_argument("--aq-strength", type=str, help="NVENC AQ strength 0-15")
+
+    # Required / identity
+    g_required = p.add_argument_group("Required")
+    g_required.add_argument("--broadcaster", required=True, help="Broadcaster login name (e.g. theflood)")
+    g_required.add_argument("--client-id", dest="client_id", help="Twitch Client ID (else TWITCH_CLIENT_ID env)")
+    g_required.add_argument("--client-secret", dest="client_secret", help="Twitch Client Secret (else env)")
+
+    # Window and selection
+    g_window = p.add_argument_group("Window & selection")
+    g_window.add_argument("--start", help="Start date (MM/DD/YYYY). Interpreted as 00:00:00Z of that day.")
+    g_window.add_argument("--end", help="End date (MM/DD/YYYY). Interpreted as 23:59:59Z of that day.")
+    g_window.add_argument("--min-views", dest="reactionThreshold", type=int, default=reactionThreshold, help="Minimum view count (maps to reactions)")
+    g_window.add_argument("--max-clips", type=int, default=100, help="Max clips to fetch before filtering")
+    g_window.add_argument("--clips", dest="amountOfClips", type=int, default=amountOfClips, help="Clips per compilation")
+    g_window.add_argument("--compilations", dest="amountOfCompilations", type=int, default=amountOfCompilations, help="Number of compilations to create")
+    g_window.add_argument("--auto-expand", action="store_true", help="If not enough clips, auto-expand the start date backwards in steps to gather more")
+    g_window.add_argument("--expand-step-days", type=int, default=7, help="How many days to extend the lookback per expansion step (default 7)")
+    g_window.add_argument("--max-lookback-days", type=int, default=90, help="Maximum total lookback from the end date when auto-expanding (default 90)")
+    g_window.add_argument("--seed", type=int, help="Random seed for reproducible intro/outro/transition selection")
+
+    # Output & formatting
+    g_output = p.add_argument_group("Output & formatting")
+    g_output.add_argument("--quality", choices=["balanced", "high", "max"], help="Quality preset that adjusts bitrate (overridden by --bitrate)")
+    g_output.add_argument("--bitrate", help="Override video bitrate target, e.g. 12M")
+    g_output.add_argument("--resolution", help="Override output resolution, e.g. 1920x1080 or 1280x720")
+    g_output.add_argument("--format", choices=["mp4", "mkv"], help="Container format for final output")
+    g_output.add_argument("--fps", type=str, help="Override output framerate, e.g. 60")
+    g_output.add_argument("--audio-bitrate", dest="audio_bitrate", type=str, help="Override audio bitrate, e.g. 192k")
+    g_output.add_argument("--yt-format", dest="yt_format", type=str, help="yt-dlp --format string override")
+    g_output.add_argument("--overwrite-output", action="store_true", help="Overwrite existing files in output (else auto-suffix _1, _2, ...)")
+
+    # Transitions & sequencing
+    g_trans = p.add_argument_group("Transitions & sequencing")
+    g_trans.add_argument("--intro", type=str, help="Override: single intro filename (transitions/) to force a specific intro for this run")
+    g_trans.add_argument("--outro", type=str, help="Override: single outro filename (transitions/) to force a specific outro for this run")
+    g_trans.add_argument("--transition", type=str, help="Override: single transition filename used when chosen; static is always placed between segments")
+    g_trans.add_argument("--transition-prob", dest="transition_prob", type=float, help="Probability 0..1 to insert a random transition between clips (default from config)")
+    g_trans.add_argument("--no-random-transitions", action="store_true", help="Disable random transitions (keeps static-only between clips)")
+    g_trans.add_argument("--transitions-dir", dest="transitions_dir", type=str, help="Path to transitions directory (overrides env and defaults)")
+    g_trans.add_argument("--rebuild-transitions", action="store_true", help="Force re-encode of transitions assets into cache/_trans")
+    g_trans.add_argument("--no-audio-normalize-transitions", action="store_true", help="Disable loudness normalization for transitions normalization")
+
+    # Performance & robustness
+    g_perf = p.add_argument_group("Performance & robustness")
+    g_perf.add_argument("--max-concurrency", type=int, help="Max workers for download/normalize stage")
+    g_perf.add_argument("--skip-bad-clip", action="store_true", help="Skip failed clips instead of aborting")
+    g_perf.add_argument("--no-overlay", action="store_true", help="Disable overlay stage for speed")
+    g_perf.add_argument("--rebuild", action="store_true", help="Force rebuild even if intermediate files exist")
+
+    # Cache management
+    g_cache = p.add_argument_group("Cache management")
+    g_cache.add_argument("--cache-dir", dest="cache_dir", type=str, help="Cache directory path")
+    g_cache.add_argument("--output-dir", dest="output_dir", type=str, help="Output directory path")
+    g_cache.add_argument("--keep-cache", action="store_true", help="Do not delete per-clip cache after finishing")
+    g_cache.add_argument("--purge-cache", action="store_true", help="Purge entire cache after run (ignore --keep-cache and cache_preserve_dirs)")
+
+    # Encoder tuning (NVENC)
+    g_nvenc = p.add_argument_group("Encoder (NVENC) tuning")
+    g_nvenc.add_argument("--cq", type=str, help="NVENC constant quality (lower is higher quality)")
+    g_nvenc.add_argument("--preset", dest="nvenc_preset", type=str, choices=["slow","medium","fast","hp","hq","bd","ll","llhq","llhp"], help="NVENC preset")
+    g_nvenc.add_argument("--gop", type=str, help="GOP size, e.g. 120")
+    g_nvenc.add_argument("--rc-lookahead", type=str, help="NVENC rc-lookahead frames")
+    g_nvenc.add_argument("--spatial-aq", type=str, help="NVENC spatial AQ enable (0/1)")
+    g_nvenc.add_argument("--temporal-aq", type=str, help="NVENC temporal AQ enable (0/1)")
+    g_nvenc.add_argument("--aq-strength", type=str, help="NVENC AQ strength 0-15")
+
+    # Misc
+    g_misc = p.add_argument_group("Misc")
+    g_misc.add_argument("-y", "--yes", action="store_true", help="Auto-confirm the settings prompt")
+
     return p.parse_args()
 
 
@@ -193,8 +202,40 @@ def resolve_date_window(start_str: Optional[str], end_str: Optional[str]) -> Tup
 def _sanitize_filename(s: str) -> str:
     return re.sub(r'[^A-Za-z0-9._-]+', '_', s)[:80]
 
+def _ensure_unique_names(base_names: list[str], out_dir: str, overwrite: bool) -> list[str]:
+    """Return names unique within out_dir by appending _1, _2, ... before extension.
+    If overwrite=True, returns base_names unchanged.
+    Ensures uniqueness within this batch and against existing files on disk.
+    """
+    if overwrite:
+        return list(base_names)
+    used: set[str] = set()
+    try:
+        for fname in os.listdir(out_dir):
+            used.add(fname.lower())
+    except Exception:
+        pass
+    result: list[str] = []
+    for name in base_names:
+        if name.lower() not in used and name.lower() not in (n.lower() for n in result):
+            result.append(name)
+            used.add(name.lower())
+            continue
+        # split name/ext
+        root, ext = os.path.splitext(name)
+        k = 1
+        while True:
+            cand = f"{root}_{k}{ext}"
+            low = cand.lower()
+            if low not in used and low not in (n.lower() for n in result):
+                result.append(cand)
+                used.add(low)
+                break
+            k += 1
+    return result
 
-def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str]], compilation_count: int, keep_cache: bool) -> List[str]:
+
+def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str]], compilation_count: int, keep_cache: bool, final_names: Optional[List[str]] = None, overwrite_output: bool = False, purge_cache: bool = False) -> List[str]:
     """Move compiled files from cache to output with improved naming then optionally clean cache."""
     from utils import log  # local import to avoid circular
     log("{@green}Finalizing outputs", 1)
@@ -214,16 +255,19 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
         else:
             date_range = datetime.utcnow().strftime('%Y-%m-%d')
         # Build final names in index order
+        # Determine container extension used by ffmpeg for cache outputs
         try:
-            from config import container_ext as _ext
+            from config import container_ext as _ext_cfg
         except Exception:
-            _ext = 'mp4'
-        final_names: List[str] = []
-        for i in range(compilation_count):
-            if compilation_count == 1:
-                final_names.append(f"{b_name}_{date_range}_compilation.{_ext}")
-            else:
-                final_names.append(f"{b_name}_{date_range}_part{i+1}.{_ext}")
+            _ext_cfg = 'mp4'
+        # Use provided final names (preferred), else derive from broadcaster/date
+        if final_names is None:
+            final_names = []
+            for i in range(compilation_count):
+                if compilation_count == 1:
+                    final_names.append(f"{b_name}_{date_range}_compilation.{_ext_cfg}")
+                else:
+                    final_names.append(f"{b_name}_{date_range}_part{i+1}.{_ext_cfg}")
 
         moved = 0
         # Move cache outputs to output dir with final names using their index
@@ -232,16 +276,35 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
             # It uses: {cache}/complete_{date}_{idx}.{ext}
             # Recreate the expected cache filename for idx i
             date_str = time.strftime('%d_%m_%y')
-            cache_name = f"complete_{date_str}_{i}.{_ext}"
+            cache_name = f"complete_{date_str}_{i}.{_ext_cfg}"
             src = os.path.join(cache, cache_name)
             if not os.path.exists(src):
                 # If file wasn't found (e.g., different date formatting), fallback: scan for matching idx
                 for fname in os.listdir(cache):
-                    if fname.startswith(f"complete_") and fname.endswith(f"_{i}.{_ext}"):
+                    if fname.startswith(f"complete_") and fname.endswith(f"_{i}.{_ext_cfg}"):
                         src = os.path.join(cache, fname)
                         break
             if os.path.exists(src):
                 dest = os.path.join(output, final_names[i])
+                # If overwrite requested, remove existing file to avoid errors
+                if overwrite_output and os.path.exists(dest):
+                    try:
+                        os.remove(dest)
+                    except Exception:
+                        pass
+                # If still exists and overwrite is False (unexpected if names were uniquified), auto-suffix here as a last resort
+                if (not overwrite_output) and os.path.exists(dest):
+                    root, ext = os.path.splitext(final_names[i])
+                    k = 1
+                    while True:
+                        cand = f"{root}_{k}{ext}"
+                        _new = os.path.join(output, cand)
+                        if not os.path.exists(_new):
+                            dest = _new
+                            # Update name so manifest reports actual file
+                            final_names[i] = cand
+                            break
+                        k += 1
                 shutil.move(src, dest)
                 moved += 1
         log("{@blue}Moved {@white}" + str(moved) + "{@blue} file(s) to {@cyan}output", 2)
@@ -249,14 +312,23 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
         log("{@redbright}{@bold}Finalize failed:{@reset} {@white}" + str(e), 5)
         return []
 
-    if keep_cache:
+    if keep_cache and not purge_cache:
         log('{@green}Cache retained{@reset} ({@cyan}--keep-cache set{@reset})', 0)
-    return final_names
-
+        return final_names
     # clean cache except leave directory itself
     log('{@green}Cleaning cache', 1)
     try:
+        preserve_set = set()
+        if not purge_cache:
+            try:
+                from config import cache_preserve_dirs as _preserve
+            except Exception:
+                _preserve = []
+            preserve_set = {d.strip().lower() for d in _preserve if isinstance(d, str)}
         for entry in os.listdir(cache):
+            # skip preserved directories (relative names)
+            if entry.strip().lower() in preserve_set:
+                continue
             path = os.path.join(cache, entry)
             try:
                 if os.path.isdir(path):
@@ -363,6 +435,13 @@ def main():  # noqa: C901
     ensure_twitch_credentials_if_needed()
 
     args = parse_args()
+    # Seed randomness if provided early
+    if getattr(args, 'seed', None) is not None:
+        try:
+            import random as _rnd
+            _rnd.seed(int(args.seed))
+        except Exception:
+            pass
     amountOfClips = args.amountOfClips
     amountOfCompilations = args.amountOfCompilations
     reactionThreshold = args.reactionThreshold
@@ -416,12 +495,50 @@ def main():  # noqa: C901
         cache = args.cache_dir
     if args.output_dir:
         output = args.output_dir
+    # Runtime overrides: if provided, convert to singleton lists to align with pipeline's list-based selection
     if args.intro is not None:
-        intro = args.intro or ''
+        try:
+            import config as _cfg
+            _cfg.intro = [args.intro] if args.intro else []
+        except Exception:
+            pass
     if args.outro is not None:
-        outro = args.outro or ''
+        try:
+            import config as _cfg
+            _cfg.outro = [args.outro] if args.outro else []
+        except Exception:
+            pass
     if args.transition is not None:
-        transition = args.transition or transition
+        try:
+            import config as _cfg
+            if args.transition:
+                _cfg.transitions = [args.transition]
+        except Exception:
+            pass
+    if args.transition_prob is not None:
+        try:
+            import config as _cfg
+            _cfg.transition_probability = max(0.0, min(1.0, float(args.transition_prob)))
+        except Exception:
+            pass
+    if args.no_random_transitions:
+        try:
+            import config as _cfg
+            _cfg.no_random_transitions = True
+        except Exception:
+            pass
+    if args.skip_bad_clip:
+        try:
+            import config as _cfg
+            _cfg.skip_bad_clip = True
+        except Exception:
+            pass
+    if args.max_concurrency is not None:
+        try:
+            import config as _cfg
+            _cfg.max_concurrency = max(1, int(args.max_concurrency))
+        except Exception:
+            pass
     if args.transitions_dir:
         # Make resolver see the override
         os.environ['TRANSITIONS_DIR'] = args.transitions_dir
@@ -459,9 +576,7 @@ def main():  # noqa: C901
         pipeline_mod.audio_bitrate = audio_bitrate
         pipeline_mod.cache = cache
         pipeline_mod.output = output
-        pipeline_mod.intro = intro
-        pipeline_mod.outro = outro
-        pipeline_mod.transition = transition
+    # no direct single-file intro/outro/transition globals; pipeline reads from config lists at runtime
         pipeline_mod.enable_overlay = enable_overlay
         pipeline_mod.rebuild = rebuild
     except Exception:
@@ -487,6 +602,16 @@ def main():  # noqa: C901
     # Fail fast if required transition is missing
     ensure_transitions_static_present(getattr(args, 'transitions_dir', None))
 
+    # Apply transitions controls to config (used by pipeline write_concat_file)
+    try:
+        import config as _cfg
+        if getattr(args, 'rebuild_transitions', False):
+            _cfg.transitions_rebuild = True
+        if getattr(args, 'no_audio_normalize_transitions', False):
+            _cfg.audio_normalize_transitions = False
+    except Exception:
+        pass
+
     # Interactive confirmation (default). Use -y/--yes to skip.
     if not getattr(args, "yes", False):
         try:
@@ -511,45 +636,21 @@ def main():  # noqa: C901
             log("  {@green}Output dir{@reset}: {@white}" + str(output), 1)
             log("  {@green}FFmpeg{@reset}: {@white}bitrate=" + str(bitrate) + ", fps=" + str(fps) + ", res=" + str(resolution), 1)
             log("  {@green}Format{@reset}: {@white}" + str(container_ext) + " {@gray}(" + (container_flags or 'no extra flags') + ")", 1)
-            log("  {@green}Transitions{@reset}: {@white}intro=" + str(intro or 'none') + ", transition=" + str(transition) + ", outro=" + str(outro or 'none'), 1)
+            try:
+                import config as _cfg
+                _intro_list = getattr(_cfg, 'intro', [])
+                _outro_list = getattr(_cfg, 'outro', [])
+                _transitions_list = getattr(_cfg, 'transitions', [])
+                _tprob = getattr(_cfg, 'transition_probability', 0.35)
+                _norand = getattr(_cfg, 'no_random_transitions', False)
+                log("  {@green}Transitions{@reset}: {@white}static.mp4 required, intro choices=" + str(len(_intro_list)) + ", transitions choices=" + str(len(_transitions_list)) + ", outro choices=" + str(len(_outro_list)) + ", prob=" + str(_tprob) + (" {@gray}(random transitions disabled)" if _norand else ""), 1)
+            except Exception:
+                pass
             log("  {@green}Keep cache{@reset}: {@white}" + ("true" if args.keep_cache else "false"), 1)
             log("  {@green}Overlay{@reset}: {@white}" + ("enabled" if enable_overlay else "disabled"), 1)
             log("  {@green}Rebuild{@reset}: {@white}" + ("true" if rebuild else "false"), 1)
-            # Verify intro/outro presence if configured (empty disables)
-            try:
-                from config import intro as _cfg_intro, outro as _cfg_outro  # type: ignore
-            except Exception:
-                _cfg_intro, _cfg_outro = intro, outro
-            import os as _os
-            _warnings: list[str] = []
-            _t_dir = _os.path.join('.', 'transitions')
-            if _cfg_intro:
-                if not _os.path.exists(_os.path.join(_t_dir, _cfg_intro)):
-                    _warnings.append(f"Intro file missing: transitions/{_cfg_intro}")
-            if _cfg_outro:
-                if not _os.path.exists(_os.path.join(_t_dir, _cfg_outro)):
-                    _warnings.append(f"Outro file missing: transitions/{_cfg_outro}")
-            if _warnings:
-                for w in _warnings:
-                    log("{@yellow}{@bold}WARN{@reset} " + w, 1)
-                log("{@cyan}You can continue without intro/outro or place the files and rerun.", 1)
-                ans = input("Proceed anyway? [y/N]: ").strip().lower()
-                if ans in ("n", "no", ""):
-                    raise SystemExit("Aborted by user (missing intro/outro)")
-                # User chose to proceed: disable whichever are missing so pipeline will skip them
-                try:
-                    if _cfg_intro and not _os.path.exists(_os.path.join(_t_dir, _cfg_intro)):
-                        log("{@cyan}Proceeding without intro clip (will be skipped)", 1)
-                        intro = ''
-                        pipeline_mod.intro = ''
-                    if _cfg_outro and not _os.path.exists(_os.path.join(_t_dir, _cfg_outro)):
-                        log("{@cyan}Proceeding without outro clip (will be skipped)", 1)
-                        outro = ''
-                        pipeline_mod.outro = ''
-                except Exception:
-                    pass
-            else:
-                ans = input("Proceed? [Y/n]: ").strip().lower()
+            # No strict intro/outro checks now; static is required and verified earlier.
+            ans = input("Proceed? [Y/n]: ").strip().lower()
             if ans in ("n", "no"):
                 raise SystemExit("Aborted by user")
         except EOFError:
@@ -692,14 +793,40 @@ def main():  # noqa: C901
         from config import container_ext as _ext
     except Exception:
         _ext = 'mp4'
-    final_names = []
+    base_names = []
     for i in range(len(comps)):
         if len(comps) == 1:
-            final_names.append(f"{b_name}_{date_range}_compilation.{_ext}")
+            base_names.append(f"{b_name}_{date_range}_compilation.{_ext}")
         else:
-            final_names.append(f"{b_name}_{date_range}_part{i+1}.{_ext}")
+            base_names.append(f"{b_name}_{date_range}_part{i+1}.{_ext}")
+    # Ensure names are unique upfront unless overwrite requested
+    final_names = _ensure_unique_names(base_names, output, getattr(args, 'overwrite_output', False))
     stage_two(comps, final_names)
-    finalize_outputs(args.broadcaster, window, len(comps), args.keep_cache)
+    finals = finalize_outputs(
+        args.broadcaster,
+        window,
+        len(comps),
+        args.keep_cache,
+        final_names=final_names,
+        overwrite_output=getattr(args, 'overwrite_output', False),
+        purge_cache=getattr(args, 'purge_cache', False),
+    )
+    # Write manifest.json with metadata and clip IDs per compilation
+    try:
+        import json as _json, os as _os
+        manifest = {
+            "broadcaster": args.broadcaster,
+            "window": {"start": window[0], "end": window[1]},
+            "files": finals,
+            "compilations": [[row[0] for row in comp] for comp in comps],
+            "created_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+        _m_path = _os.path.join(output, "manifest.json")
+        with open(_m_path, "w", encoding="utf-8") as f:
+            _json.dump(manifest, f, indent=2)
+        log("{@green}Wrote manifest:{@reset} {@cyan}" + _m_path, 1)
+    except Exception as e:
+        log("{@yellow}{@bold}WARN{@reset} Failed to write manifest: {@white}" + str(e), 2)
     log("{@green}Done", 2)
 
 
