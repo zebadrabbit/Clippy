@@ -1,8 +1,14 @@
 """
-	Global configuration for the clip compilation pipeline.
+Global configuration for the clip compilation pipeline.
 
-	Secrets (client IDs, secrets) must live in environment variables or `.env`.
+Notes:
+- Secrets (client IDs, secrets) must live in environment variables or `.env`.
+- This file is grouped into logical sections; variable names and defaults are unchanged to avoid breaking imports.
 """
+
+# =============================================================
+# Core selection & counts
+# =============================================================
 
 # how many clips we should get
 amountOfClips = 12
@@ -10,20 +16,78 @@ amountOfClips = 12
 # how many segments
 amountOfCompilations = 2
 
-# minimum view count (stored in `reactions` column) to include a clip
+# minimum view count
 reactionThreshold = 1
 
 # compilation file naming:  compilation_d_m_yy.mp4
 outputFormat = 'compilation_'
 
+# =============================================================
+# Assets & overlay
+# =============================================================
 # font to use for overlay (prefer assets/fonts when present)
 fontfile = "assets/fonts/Roboto-Medium.ttf"
 
-# transition things - relative to cache
-transition = 'static.mp4'
-intro = 'intro.mp4'
-outro = 'outro.mp4'
+# file names for transitions, intro, outro
+static = 'static.mp4'
+intro = [
+	'intro.mp4', 
+	'intro_2.mp4'
+]
+outro = [
+	'outro.mp4', 
+	'outro_2.mp4'
+]
+transitions = [
+	'transition_01.mp4', 
+	'transition_02.mp4', 
+	'transition_03.mp4', 
+	'transition_05.mp4', 
+	'transition_07.mp4',
+	'transition_08.mp4'	
+]
 
+# =============================================================
+# Transitions & sequencing
+# =============================================================
+# probability (0.0 - 1.0) to insert a random transition between clips (each gap independent)
+transition_probability = 0.35
+
+# Disable random transitions entirely (still uses static.mp4 between clips)
+no_random_transitions = False
+
+# Concurrency for clip preparation (downloads/normalization)
+max_concurrency = 4
+
+# Behavior when a clip fails after retries: if True, skip the clip; if False, abort the run
+skip_bad_clip = True
+
+# Normalize audio on transitions during internal normalization (cache/_trans) using EBU R128 loudnorm
+# This helps keep loudness consistent between assets. Can be disabled.
+audio_normalize_transitions = True
+
+# Force re-encode of transitions assets into cache/_trans even if a normalized copy already exists
+transitions_rebuild = False
+
+# By default, do NOT silence any non-clip assets. All audio is ON unless specified.
+silence_nonclip_asset_audio = False
+
+# Granular audio silencing controls (applied when silence_nonclip_asset_audio = False)
+# Defaults: keep audio for transitions, static, and intro/outro.
+silence_transitions = False
+silence_static = False
+silence_intro_outro = False
+
+# Weighted transition selection and simple cooldown
+# - transitions_weights: dict of { filename: weight } where higher weight increases selection likelihood
+#   Any missing file uses weight 1.0. Only applies when transitions are enabled by probability.
+# - transition_cooldown: number of most recent transition picks to avoid repeating immediately (0 disables)
+transitions_weights: dict[str, float] = {}
+transition_cooldown: int = 1
+
+# =============================================================
+# Encoding: video/audio & quality
+# =============================================================
 # bitrate target (used as maxrate with NVENC vbr)
 bitrate = "12M"
 
@@ -36,8 +100,15 @@ fps = "60"
 # resolution
 resolution = "1920x1080"
 
+# =============================================================
+# Paths: cache/output & preservation
+# =============================================================
 # cache directory for work we're going to do
 cache = "./cache"
+
+# cache subdirectories to preserve on cleanup (relative names)
+# Default preserves normalized transitions to avoid costly re-encodes between runs.
+cache_preserve_dirs = ["_trans"]
 
 # output the compilation to here
 output = "./output"
@@ -48,6 +119,9 @@ rebuild = False
 # overlay control
 enable_overlay = True
 
+# =============================================================
+# Ingest: yt-dlp formats
+# =============================================================
 # yt-dlp format selection (applied within youtubeDlOptions)
 # twitch formats via --list-formats <clip_url> look like:
 #    ID           EXT RESOLUTION FPS │ PROTO │ VCODEC  ACODEC
@@ -61,6 +135,9 @@ enable_overlay = True
 #    1080         mp4 1080p       60 │ https │ unknown unknown
 yt_format = "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]"
 
+# =============================================================
+# Encoder tuning (NVENC)
+# =============================================================
 # NVENC encoder tuning (applied in all ffmpeg templates)
 # See ffmpeg -h encoder=h264_nvenc for available values
 nvenc_preset = "slow"
@@ -72,8 +149,10 @@ spatial_aq = "1"
 temporal_aq = "1"
 
 
-# #############################################################
+# =============================================================
 # DO NOT EDIT BELOW THIS LINE UNLESS YOU KNOW WHAT YOU'RE DOING
+# (but feel free to read it)
+# =============================================================
 
 # ffmpeg / downloader binaries
 import os, sys  # noqa: E401
@@ -82,6 +161,8 @@ if getattr(sys, 'frozen', False):
 	_EXE_DIR = os.path.dirname(sys.executable)
 	_FF = os.path.join(_EXE_DIR, 'ffmpeg.exe')
 	ffmpeg = _FF if os.path.exists(_FF) else 'ffmpeg'
+	_FP = os.path.join(_EXE_DIR, 'ffprobe.exe')
+	ffprobe = _FP if os.path.exists(_FP) else 'ffprobe'
 	_YTDLP = os.path.join(_EXE_DIR, 'yt-dlp.exe')
 	YTDL_BIN = _YTDLP if os.path.exists(_YTDLP) else 'yt-dlp'
 else:
@@ -89,6 +170,8 @@ else:
 	_ROOT = os.path.dirname(os.path.abspath(__file__))
 	_bin_ff = os.path.join(_ROOT, 'bin', 'ffmpeg.exe')
 	ffmpeg = _bin_ff if os.path.exists(_bin_ff) else 'ffmpeg'
+	_bin_fp = os.path.join(_ROOT, 'bin', 'ffprobe.exe')
+	ffprobe = _bin_fp if os.path.exists(_bin_fp) else 'ffprobe'
 	# yt-dlp preferred; fall back to youtube-dl if present in bin/
 	_bin_ytdlp = os.path.join(_ROOT, 'bin', 'yt-dlp.exe')
 	_bin_youtubedl = os.path.join(_ROOT, 'bin', 'youtube-dl.exe')
@@ -116,7 +199,7 @@ ffmpegNormalizeVideos = (
 	'-r {fps} -s {resolution} -sws_flags lanczos '
 	'-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} '
 	'-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} '
-	'-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} '
+	'-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 '
 	'-movflags +faststart -preset {nvenc_preset} -loglevel error -stats -y {cache}/{message_id}/normalized.mp4'
 )
 ffmpegApplyOverlay = (
@@ -130,7 +213,7 @@ ffmpegApplyOverlay = (
 	"-r {fps} -s {resolution} -sws_flags lanczos "
 	"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
 	"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
-	"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} "
+	"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
 	"-movflags +faststart -preset {nvenc_preset} -loglevel error -stats -y {cache}/{message_id}/{message_id}.mp4"
 )
 container_ext = "mp4"
@@ -140,7 +223,7 @@ ffmpegBuildSegments = (
 	'-r {fps} -s {resolution} -sws_flags lanczos '
 	'-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} '
 	'-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} '
-	'-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} '
+	'-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 '
 	'{container_flags} -preset {nvenc_preset} -loglevel error -stats -y {cache}/complete_{date}_{idx}.{ext}'
 )
 ffmpegCreateThumbnail = '-ss 00:00:05 -i {cache}/{message_id}/{message_id}.mp4 -vframes 1 -s {resolution} {cache}/{message_id}/preview.png'
