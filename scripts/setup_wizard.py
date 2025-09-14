@@ -20,6 +20,28 @@ except Exception:  # pragma: no cover
             return lambda s: s
     chalk = _Plain()  # type: ignore
 
+# --- BBS-style theme (cool cyan/blue/gray) ----------------------------------
+class _Theme:
+    def __init__(self):
+        # Core palette
+        self.bar = lambda s: chalk.gray(s)
+        self.title = lambda s: chalk.cyan_bright(s)
+        self.header = lambda s: chalk.cyan_bright(s)
+        self.section = lambda s: chalk.blue(s)
+        self.text = lambda s: chalk.gray(s)
+        self.path = lambda s: chalk.cyan(s)
+        self.success = lambda s: chalk.cyan(s)
+        self.warn = lambda s: chalk.magenta(s)
+        self.error = lambda s: chalk.magenta(s)
+        # Prompt parts
+        self.label = lambda s: chalk.cyan(s)
+        self.default = lambda s: chalk.blue_bright(s)
+        self.sep = lambda s: chalk.gray(s)
+        self.choice_default = lambda s: chalk.cyan_bright(s)
+        self.choice_other = lambda s: chalk.gray(s)
+
+THEME = _Theme()
+
 # Enable Windows VT so ANSI colors render in default console
 def _enable_windows_vt():
     if os.name != 'nt':
@@ -89,80 +111,91 @@ PS1_HEADER = """
 def _print_header():
     _enable_windows_vt()
     bar = "=" * 46
-    title = chalk.green_bright("Clippy Setup Wizard")
-    ver = chalk.gray(f"(v{CLIPPY_VERSION})") if CLIPPY_VERSION else ""
-    print(chalk.gray(bar))
+    title = THEME.title("Clippy Setup Wizard")
+    ver = THEME.text(f"(v{CLIPPY_VERSION})") if CLIPPY_VERSION else ""
+    print(THEME.bar(bar))
     print(f"{title}  {ver}")
-    print(chalk.cyan("This will help you get set up with Twitch credentials and sensible defaults."))
-    print(chalk.cyan("You can re-run this anytime; it writes a .env and helper script."))
-    print(chalk.gray(bar) + "\n")
+    print(THEME.text("This will help you get set up with Twitch credentials and sensible defaults."))
+    print(THEME.text("You can re-run this anytime; it writes a .env and helper script."))
+    print(THEME.bar(bar) + "\n")
 
 
 def _prompt_str(label: str, default: Optional[str] = None, secret: bool = False) -> str:
     d = f" [{default}]" if default not in (None, "") else ""
     while True:
-        val = input(chalk.yellow(f"{label}{d}: ")).strip()
+        prompt = THEME.label(label)
+        if d:
+            prompt += THEME.default(d)
+        prompt += THEME.sep(": ")
+        val = input(prompt).strip()
         if not val and default is not None:
             return str(default)
         if val:
             return val
-        print(chalk.red_bright("Please enter a value."))
+        print(THEME.error("Please enter a value."))
 
 
 def _prompt_int(label: str, default: int, min_v: Optional[int] = None, max_v: Optional[int] = None) -> int:
     while True:
-        s = input(chalk.yellow(f"{label} [{default}]: ")).strip()
+        prompt = THEME.label(label) + THEME.default(f" [{default}]") + THEME.sep(": ")
+        s = input(prompt).strip()
         if not s:
             return int(default)
         try:
             v = int(s)
             if min_v is not None and v < min_v:
-                print(chalk.red_bright(f"Minimum is {min_v}"))
+                print(THEME.error(f"Minimum is {min_v}"))
                 continue
             if max_v is not None and v > max_v:
-                print(chalk.red_bright(f"Maximum is {max_v}"))
+                print(THEME.error(f"Maximum is {max_v}"))
                 continue
             return v
         except Exception:
-            print(chalk.red_bright("Please enter a whole number."))
+            print(THEME.error("Please enter a whole number."))
 
 
 def _prompt_float(label: str, default: float, min_v: Optional[float] = None, max_v: Optional[float] = None) -> float:
     while True:
-        s = input(chalk.yellow(f"{label} [{default}]: ")).strip()
+        prompt = THEME.label(label) + THEME.default(f" [{default}]") + THEME.sep(": ")
+        s = input(prompt).strip()
         if not s:
             return float(default)
         try:
             v = float(s)
             if min_v is not None and v < min_v:
-                print(chalk.red_bright(f"Minimum is {min_v}"))
+                print(THEME.error(f"Minimum is {min_v}"))
                 continue
             if max_v is not None and v > max_v:
-                print(chalk.red_bright(f"Maximum is {max_v}"))
+                print(THEME.error(f"Maximum is {max_v}"))
                 continue
             return v
         except Exception:
-            print(chalk.red_bright("Please enter a number."))
+            print(THEME.error("Please enter a number."))
 
 
 def _prompt_yes_no(label: str, default_yes: bool = True) -> bool:
-    d = "Y/n" if default_yes else "y/N"
+    # Render BBS-style choice with highlighted default
+    if default_yes:
+        d_colored = THEME.choice_default("[Y") + THEME.sep("/") + THEME.choice_other("n]")
+    else:
+        d_colored = THEME.choice_other("[y/") + THEME.choice_default("N]")
     while True:
-        s = input(chalk.yellow(f"{label} [{d}]: ")).strip().lower()
+        prompt = THEME.label(label) + THEME.sep(" ") + d_colored + THEME.sep(": ")
+        s = input(prompt).strip().lower()
         if not s:
             return default_yes
         if s in ("y", "yes"):
             return True
         if s in ("n", "no"):
             return False
-        print(chalk.red_bright("Please answer y or n."))
+        print(THEME.error("Please answer y or n."))
 
 
 def _quality_menu() -> tuple[str, str]:
-    print("\n" + chalk.blue_bright("Quality presets:"))
-    print(chalk.gray("  1) balanced  (video ~10-12M, good for 1080p60 uploads)"))
-    print(chalk.gray("  2) high      (video ~12-14M, higher quality, larger files)"))
-    print(chalk.gray("  3) max       (video ~16M+, best quality, large files)"))
+    print("\n" + THEME.section("Quality presets:"))
+    print(THEME.text("  1) balanced  (video ~10-12M, good for 1080p60 uploads)"))
+    print(THEME.text("  2) high      (video ~12-14M, higher quality, larger files)"))
+    print(THEME.text("  3) max       (video ~16M+, best quality, large files)"))
     choice = _prompt_int("Choose quality preset", 1, 1, 3)
     if choice == 1:
         return ("balanced", "10M")
@@ -172,11 +205,11 @@ def _quality_menu() -> tuple[str, str]:
 
 
 def _transitions_explain():
-    print("\n" + chalk.blue_bright("Transitions & sequencing:"))
-    print(chalk.gray("  - static.mp4 is placed between every segment to provide a clean cut buffer."))
-    print(chalk.gray("  - You can optionally insert random transitions (video effects) between some clips."))
-    print(chalk.gray("  - Probability controls how often a transition (beyond static) appears."))
-    print(chalk.gray("  - You can silence audio on transitions/intro/outro if you prefer no music there."))
+    print("\n" + THEME.section("Transitions & sequencing:"))
+    print(THEME.text("  - static.mp4 is placed between every segment to provide a clean cut buffer."))
+    print(THEME.text("  - You can optionally insert random transitions (video effects) between some clips."))
+    print(THEME.text("  - Probability controls how often a transition (beyond static) appears."))
+    print(THEME.text("  - You can silence audio on transitions/intro/outro if you prefer no music there."))
 
 
 def _find_static_candidates() -> list[Path]:
@@ -193,9 +226,9 @@ def main():
     _print_header()
 
     # Step 1: Twitch credentials
-    print(chalk.magenta_bright("Step 1: Twitch Client ID & Secret"))
-    print(chalk.gray("  Get credentials: https://dev.twitch.tv/console/apps (create an application)"))
-    print(chalk.gray("  For this tool, the Client Credentials flow is used; redirect URL is not required for clip fetching."))
+    print(THEME.header("Step 1: Twitch Client ID & Secret"))
+    print(THEME.text("  Get credentials: https://dev.twitch.tv/console/apps (create an application)"))
+    print(THEME.text("  For this tool, the Client Credentials flow is used; redirect URL is not required for clip fetching."))
     env_path = Path(".env")
     existing = {}
     if env_path.is_file():
@@ -214,13 +247,13 @@ def main():
     client_secret = _prompt_str("Twitch Client Secret", sec_default or None)
 
     # Step 2: Defaults for selection
-    print("\n" + chalk.magenta_bright("Step 2: Clip selection defaults"))
+    print("\n" + THEME.header("Step 2: Clip selection defaults"))
     min_views = _prompt_int("Minimum views to include a clip", DEFAULT_MIN_VIEWS, 0)
     clips_per_comp = _prompt_int("Clips per compilation", DEFAULT_CLIPS, 1)
     num_compilations = _prompt_int("Number of compilations per run", DEFAULT_COMPS, 1)
 
     # Step 3: Quality and format
-    print("\n" + chalk.magenta_bright("Step 3: Output quality & format"))
+    print("\n" + THEME.header("Step 3: Output quality & format"))
     preset_name, bitrate = _quality_menu()
     resolution = _prompt_str("Resolution (e.g., 1920x1080)", DEFAULT_RES)
     fps = _prompt_str("Framerate (e.g., 60)", DEFAULT_FPS)
@@ -236,14 +269,14 @@ def main():
     silence_static = _prompt_yes_no("Silence static.mp4 audio?", default_yes=DEFAULT_SILENCE_STATIC)
 
     # Step 5: Paths & concurrency
-    print("\n" + chalk.magenta_bright("Step 5: Paths & concurrency"))
+    print("\n" + THEME.header("Step 5: Paths & concurrency"))
     cache_dir = _prompt_str("Cache directory", DEFAULT_CACHE)
     output_dir = _prompt_str("Output directory", DEFAULT_OUTPUT)
     conc = _prompt_int("Max concurrent workers (downloads/normalize)", DEFAULT_CONC, 1)
 
     # Step 6: Transitions location
-    print("\n" + chalk.magenta_bright("Step 6: Transitions directory"))
-    print(chalk.gray("  The tool requires transitions/static.mp4. You can set a custom directory or use the bundled internal data."))
+    print("\n" + THEME.header("Step 6: Transitions directory"))
+    print(THEME.text("  The tool requires transitions/static.mp4. You can set a custom directory or use the bundled internal data."))
     use_internal = _prompt_yes_no("Prefer bundled internal transitions when available?", default_yes=True)
     trans_dir = _prompt_str("Custom transitions directory (blank to skip)", "")
 
@@ -258,9 +291,9 @@ def main():
         lines.append(f"TRANSITIONS_DIR={trans_dir}")
     try:
         env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        print("\n" + chalk.green_bright(f"Wrote {env_path.resolve()}"))
+        print("\n" + THEME.success(f"Wrote {env_path.resolve()}"))
     except Exception as e:
-        print("\n" + chalk.yellow(f"WARN: Failed to write .env: {e}"))
+        print("\n" + THEME.warn(f"WARN: Failed to write .env: {e}"))
 
     # Write YAML config (clippy.yaml)
     cfg = {
@@ -300,15 +333,15 @@ def main():
         yaml_text = yaml.safe_dump(cfg, sort_keys=False)
         yaml_path = Path("clippy.yaml")
         yaml_path.write_text(yaml_text, encoding="utf-8")
-        print(chalk.green_bright(f"Wrote {yaml_path.resolve()}"))
+        print(THEME.success(f"Wrote {yaml_path.resolve()}"))
     except Exception as e:
         # Fallback to JSON if PyYAML missing
         try:
             json_path = Path("clippy.yaml.json")
             json_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-            print(chalk.yellow(f"PyYAML not available; wrote JSON fallback: {json_path.resolve()}"))
+            print(THEME.warn(f"PyYAML not available; wrote JSON fallback: {json_path.resolve()}"))
         except Exception as e2:
-            print(chalk.yellow(f"WARN: Failed to write config file: {e} / {e2}"))
+            print(THEME.warn(f"WARN: Failed to write config file: {e} / {e2}"))
 
     # Generate a PowerShell helper script with suggestions
     broadcaster_placeholder = "<your_twitch_login>"
@@ -341,21 +374,21 @@ def main():
     run_ps1 = Path("run_clippy.ps1")
     try:
         run_ps1.write_text(helper, encoding="utf-8")
-        print(chalk.green_bright(f"Wrote {run_ps1.resolve()}"))
+        print(THEME.success(f"Wrote {run_ps1.resolve()}"))
     except Exception as e:
-        print(chalk.yellow(f"WARN: Failed to write {run_ps1.name}: {e}"))
+        print(THEME.warn(f"WARN: Failed to write {run_ps1.name}: {e}"))
 
     # Final checks & suggestions
-    print("\n" + chalk.blue_bright("Final checks:"))
+    print("\n" + THEME.section("Final checks:"))
     statics = _find_static_candidates()
     if statics:
-        print(chalk.gray(f"  Found static.mp4 here: {statics[0]}"))
+        print(THEME.text("  Found static.mp4 here: ") + THEME.path(f"{statics[0]}"))
     else:
-        print(chalk.yellow("  static.mp4 not found in transitions/. If you don't have one, set CLIPPY_USE_INTERNAL=1 or set --transitions-dir."))
-    print("\n" + chalk.green_bright("All set! Next steps:"))
-    print(chalk.gray("  1) Edit run_clippy.ps1 to set your broadcaster login."))
-    print(chalk.gray("  2) Open a PowerShell and run: .\\run_clippy.ps1"))
-    print(chalk.gray("  3) Check output/ for your compiled videos and manifest.json"))
+        print(THEME.warn("  static.mp4 not found in transitions/. If you don't have one, set CLIPPY_USE_INTERNAL=1 or set --transitions-dir."))
+    print("\n" + THEME.header("All set! Next steps:"))
+    print(THEME.text("  1) Edit run_clippy.ps1 to set your broadcaster login."))
+    print(THEME.text("  2) Open a PowerShell and run: .\\run_clippy.ps1"))
+    print(THEME.text("  3) Check output/ for your compiled videos and manifest.json"))
 
 
 if __name__ == "__main__":
