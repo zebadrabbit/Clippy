@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. Dates are in YYYY-MM-DD and entries are grouped by date (newest first). This changelog blends commit history with implementation notes from development sessions to provide full context.
 
-## 2025-09-14
+## 2025-09-14 — v0.3.0
 
 - Added — Graceful interruption and shutdown
   - Ctrl-C now cooperatively stops work: signals threads, terminates any running ffmpeg/yt-dlp processes, and performs cleanup.

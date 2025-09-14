@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from typing import Optional
+from . import __version__
 from config import reactionThreshold, amountOfClips, amountOfCompilations
 
 
@@ -85,5 +86,6 @@ def parse_args() -> argparse.Namespace:
     # Misc
     g_misc = p.add_argument_group("Misc")
     g_misc.add_argument("-y", "--yes", action="store_true", help="Auto-confirm the settings prompt")
+    g_misc.add_argument("--version", action="version", version=f"Clippy {__version__}")
 
     return p.parse_args()

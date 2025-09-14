@@ -56,6 +56,7 @@ from pipeline import create_compilations_from, stage_one, stage_two  # DB remove
 import pipeline as pipeline_mod
 from clippy.cli import parse_args
 from clippy.banner import show_banner
+from clippy import __version__ as CLIPPY_VERSION
 from clippy.window import resolve_date_window, summarize as _summarize
 from clippy.naming import sanitize_filename as _sanitize_filename, ensure_unique_names as _ensure_unique_names, finalize_outputs
 from clippy.runtime import ensure_twitch_credentials_if_needed, ensure_transitions_static_present
@@ -73,11 +74,16 @@ def main():  # noqa: C901
     # Show banner unless help is requested or non-interactive
     # Peek at argv for -h/--help to avoid printing above help output
     _argv = [a.lower() for a in sys.argv[1:]]
-    if not any(a in ('-h', '--help') for a in _argv):
+    if not any(a in ('-h', '--help', '--version') for a in _argv):
         try:
             show_banner()
         except Exception:
             pass
+        try:
+            from yachalk import chalk as _chalk
+            print(str(_chalk.gray(f"Version {CLIPPY_VERSION}")))
+        except Exception:
+            print(f"Version {CLIPPY_VERSION}")
     args = parse_args()
     # Seed randomness if provided early
     if getattr(args, 'seed', None) is not None:
@@ -470,6 +476,7 @@ def main():  # noqa: C901
         manifest = {
             "broadcaster": args.broadcaster,
             "window": {"start": window[0], "end": window[1]},
+            "version": CLIPPY_VERSION,
             "files": finals,
             "compilations": [[row[0] for row in comp] for comp in comps],
             "created_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
