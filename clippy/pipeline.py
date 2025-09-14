@@ -37,10 +37,10 @@ except Exception:  # pragma: no cover
 import requests
 from PIL import Image
 
-from config import *  # noqa: F401,F403
+from clippy.config import *  # noqa: F401,F403
 # Hint static analyzers about the specific names we rely on from config
 try:  # pragma: no cover - purely for type checkers
-    from config import (
+    from clippy.config import (
         cache, output,
         rebuild, enable_overlay,
         reactionThreshold, amountOfClips, amountOfCompilations,
@@ -52,7 +52,7 @@ try:  # pragma: no cover - purely for type checkers
     )
 except Exception:
     pass
-from utils import log, replace_vars, resolve_transitions_dir, find_transition_file
+from clippy.utils import log, replace_vars, resolve_transitions_dir, find_transition_file
 
 ClipRow = Tuple[str, float, str, str, int, str]  # (id, created_ts, author, avatar_url, views, url)
 
@@ -566,43 +566,43 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
 
         # Behavior knobs
         try:
-            from config import transitions_rebuild as _rebuild_trans  # type: ignore
+            from clippy.config import transitions_rebuild as _rebuild_trans  # type: ignore
         except Exception:
             _rebuild_trans = False
         try:
-            from config import audio_normalize_transitions as _aud_norm  # type: ignore
+            from clippy.config import audio_normalize_transitions as _aud_norm  # type: ignore
         except Exception:
             _aud_norm = True
         try:
-            from config import transitions as _cfg_transitions  # type: ignore
+            from clippy.config import transitions as _cfg_transitions  # type: ignore
         except Exception:
             _cfg_transitions = []
         try:
-            from config import static as _cfg_static  # type: ignore
+            from clippy.config import static as _cfg_static  # type: ignore
         except Exception:
             _cfg_static = 'static.mp4'
         try:
-            from config import intro as _cfg_intro  # type: ignore
+            from clippy.config import intro as _cfg_intro  # type: ignore
         except Exception:
             _cfg_intro = []
         try:
-            from config import outro as _cfg_outro  # type: ignore
+            from clippy.config import outro as _cfg_outro  # type: ignore
         except Exception:
             _cfg_outro = []
         try:
-            from config import silence_nonclip_asset_audio as _silence_nonclip  # type: ignore
+            from clippy.config import silence_nonclip_asset_audio as _silence_nonclip  # type: ignore
         except Exception:
             _silence_nonclip = True
         try:
-            from config import silence_transitions as _silence_transitions  # type: ignore
+            from clippy.config import silence_transitions as _silence_transitions  # type: ignore
         except Exception:
             _silence_transitions = True
         try:
-            from config import silence_static as _silence_static  # type: ignore
+            from clippy.config import silence_static as _silence_static  # type: ignore
         except Exception:
             _silence_static = True
         try:
-            from config import silence_intro_outro as _silence_intro_outro  # type: ignore
+            from clippy.config import silence_intro_outro as _silence_intro_outro  # type: ignore
         except Exception:
             _silence_intro_outro = True
 
@@ -751,47 +751,47 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
     # New sequencing: random(intro) -> static -> clip -> static -> random_chance(random(transition) -> static) -> ... -> random(outro)
     # Pull lists and config values
     try:
-        from config import intro as _intro_list  # type: ignore
+        from clippy.config import intro as _intro_list  # type: ignore
     except Exception:
         _intro_list = []
     try:
-        from config import outro as _outro_list  # type: ignore
+        from clippy.config import outro as _outro_list  # type: ignore
     except Exception:
         _outro_list = []
     try:
-        from config import transitions as _transitions_list  # type: ignore
+        from clippy.config import transitions as _transitions_list  # type: ignore
     except Exception:
         _transitions_list = []
     try:
-        from config import static as _static_name  # type: ignore
+        from clippy.config import static as _static_name  # type: ignore
     except Exception:
         _static_name = 'static.mp4'
     try:
-        from config import transition_probability as _trans_prob  # type: ignore
+        from clippy.config import transition_probability as _trans_prob  # type: ignore
     except Exception:
         _trans_prob = 0.35
     try:
-        from config import transitions_weights as _trans_weights  # type: ignore
+        from clippy.config import transitions_weights as _trans_weights  # type: ignore
     except Exception:
         _trans_weights = {}
     try:
-        from config import transition_cooldown as _trans_cooldown  # type: ignore
+        from clippy.config import transition_cooldown as _trans_cooldown  # type: ignore
     except Exception:
         _trans_cooldown = 0
     try:
-        from config import silence_nonclip_asset_audio as _silence_nonclip  # type: ignore
+        from clippy.config import silence_nonclip_asset_audio as _silence_nonclip  # type: ignore
     except Exception:
         _silence_nonclip = True
     try:
-        from config import silence_transitions as _silence_transitions  # type: ignore
+        from clippy.config import silence_transitions as _silence_transitions  # type: ignore
     except Exception:
         _silence_transitions = True
     try:
-        from config import silence_static as _silence_static  # type: ignore
+        from clippy.config import silence_static as _silence_static  # type: ignore
     except Exception:
         _silence_static = True
     try:
-        from config import silence_intro_outro as _silence_intro_outro  # type: ignore
+        from clippy.config import silence_intro_outro as _silence_intro_outro  # type: ignore
     except Exception:
         _silence_intro_outro = True
 
@@ -832,15 +832,15 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
 
     # Behavior flags
     try:
-        from config import max_concurrency as _max_workers  # type: ignore
+        from clippy.config import max_concurrency as _max_workers  # type: ignore
     except Exception:
         _max_workers = 4
     try:
-        from config import skip_bad_clip as _skip_bad  # type: ignore
+        from clippy.config import skip_bad_clip as _skip_bad  # type: ignore
     except Exception:
         _skip_bad = True
     try:
-        from config import no_random_transitions as _no_rand  # type: ignore
+        from clippy.config import no_random_transitions as _no_rand  # type: ignore
     except Exception:
         _no_rand = False
 
@@ -958,7 +958,7 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
             # normalize weights if all non-positive
             if not any(w > 0 for w in weights):
                 weights = [1.0] * len(pool)
-            # Python's random.choices available from 3.6+
+            # Python's random.choices available from 3.6+ 
             choice = random.choices(pool, weights=weights, k=1)[0]
             return choice
         except Exception:

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. Dates are in YYYY-MM-DD and entries are grouped by date (newest first). This changelog blends commit history with implementation notes from development sessions to provide full context.
 
+## 2025-09-14 — v0.3.2
+
+- UX — Setup wizard default broadcaster visibility
+  - Step 2 now always displays the current default broadcaster, showing "(none)" when unset.
+  - Prefers the flattened `default_broadcaster` key from the merged config, with a fallback to `identity.broadcaster`.
+  - Adds a hint to leave the prompt blank to keep the current value.
+  - Files: `scripts/setup_wizard.py`
+
 ## 2025-09-14 — v0.3.0
 
 - Cleanup — Remove legacy inline color tags and dead code
@@ -79,7 +87,7 @@ All notable changes to this project are documented here. Dates are in YYYY-MM-DD
   - Commits: 093e01a, 64e64d1, 3e739f7, b80ee15
 - Fixes
   - Correct transition path checks; display final intended filenames during compilation; finalize outputs with proper container extension.
-  - Make frozen HealthCheck import config correctly by bundling it and resolving paths; update Windows/Linux builds.
+  - Make frozen HealthCheck import clippy.config correctly by bundling it and resolving paths; update Windows/Linux builds.
   - Commits: 02f7374, 29d4b8e
 - Docs/Tooling
   - Add READMEs for build and scripts; add Linux `build.sh` for portable build.

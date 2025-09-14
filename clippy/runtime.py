@@ -40,7 +40,7 @@ def ensure_twitch_credentials_if_needed():
     _load_env_if_present()
 
     try:
-        from utils import log  # type: ignore
+        from clippy.utils import log  # type: ignore
     except Exception:
         def log(msg, level=0):
             print(msg)
@@ -61,7 +61,7 @@ def ensure_twitch_credentials_if_needed():
 def ensure_transitions_static_present(transitions_dir: Optional[str] = None):
     """Resolve transitions directory and require static.mp4 to exist; exit with a helpful error if missing."""
     try:
-        from utils import resolve_transitions_dir  # type: ignore
+        from clippy.utils import resolve_transitions_dir  # type: ignore
     except Exception:
         def resolve_transitions_dir():
             import os as _os
@@ -72,7 +72,7 @@ def ensure_transitions_static_present(transitions_dir: Optional[str] = None):
     tdir = resolve_transitions_dir()
     static_path = os.path.join(tdir, 'static.mp4')
     try:
-        from utils import log as _log  # type: ignore
+        from clippy.utils import log as _log  # type: ignore
     except Exception:
         def _log(msg, level=0):
             print(msg)

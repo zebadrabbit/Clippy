@@ -76,7 +76,7 @@ pyinstaller "${PY_ARGS[@]}"
 # Build a companion HealthCheck binary
 pyinstaller --noconfirm --clean --onefile --name HealthCheck \
   --paths .. \
-  --hidden-import config \
+  --hidden-import clippy.config \
   ../scripts/health_check.py
 cp -f ./dist/HealthCheck ./dist/Clippy/ || true
 

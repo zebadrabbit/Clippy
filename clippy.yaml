@@ -2,6 +2,8 @@ selection:
   min_views: 1
   clips_per_compilation: 12
   compilations: 2
+identity:
+  broadcaster: theflood
 sequencing:
   transition_probability: 0.35
   no_random_transitions: false
@@ -35,4 +37,4 @@ behavior:
 assets:
   static: static.mp4
 _meta:
-  generated_by: setup_wizard v0.3.0
+  generated_by: setup_wizard v0.3.1

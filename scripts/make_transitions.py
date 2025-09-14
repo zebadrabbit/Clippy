@@ -38,7 +38,7 @@ def _try_import_defaults() -> Tuple[int, int, int]:
 	"""Try to get default (width, height, fps) from config; else use 1920x1080@60."""
 	width, height, fps = 1920, 1080, 60
 	try:
-		import config as _cfg  # type: ignore
+		import clippy.config as _cfg  # type: ignore
 		# resolution like "1920x1080"
 		res = getattr(_cfg, 'resolution', '1920x1080')
 		if isinstance(res, str) and 'x' in res:
@@ -60,7 +60,7 @@ def _resolve_ffmpeg_tools() -> Tuple[str, str]:
 	"""
 	ffmpeg = 'ffmpeg'
 	try:
-		import config as _cfg  # type: ignore
+		import clippy.config as _cfg  # type: ignore
 		ffmpeg = getattr(_cfg, 'ffmpeg', 'ffmpeg')
 	except Exception:
 		pass
@@ -82,7 +82,7 @@ def _resolve_out_dir(cli_out: Optional[str]) -> str:
 		return os.path.abspath(cli_out)
 	# Prefer utils.resolve_transitions_dir() if available
 	try:
-		from utils import resolve_transitions_dir  # type: ignore
+		from clippy.utils import resolve_transitions_dir  # type: ignore
 		return os.path.abspath(resolve_transitions_dir())
 	except Exception:
 		return os.path.abspath(os.path.join(ROOT, 'transitions'))

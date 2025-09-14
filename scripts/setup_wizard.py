@@ -65,7 +65,7 @@ except Exception:
 
 try:
     # Import defaults for suggestions
-    from config import (
+    from clippy.config import (
         amountOfClips as DEFAULT_CLIPS,
         amountOfCompilations as DEFAULT_COMPS,
         reactionThreshold as DEFAULT_MIN_VIEWS,
@@ -83,6 +83,17 @@ try:
         silence_static as DEFAULT_SILENCE_STATIC,
         silence_intro_outro as DEFAULT_SILENCE_INTRO_OUTRO,
     )
+    try:
+        from clippy.config_loader import load_merged_config  # type: ignore
+        _existing_cfg = load_merged_config() or {}
+        # Prefer flattened key produced by loader; fallback to nested identity if present
+        DEFAULT_BROADCASTER = (
+            _existing_cfg.get('default_broadcaster') or
+            (_existing_cfg.get('identity') or {}).get('broadcaster') or
+            None
+        )
+    except Exception:
+        DEFAULT_BROADCASTER = None
 except Exception:
     # Fallbacks if config import fails
     DEFAULT_CLIPS = 12
@@ -244,11 +255,15 @@ def main():
     client_secret = _prompt_str("Twitch Client Secret", sec_default or None)
 
     # Step 2: Defaults for selection and identity
-    print("\n" + THEME.header("Step 2: Clip selection defaults"))
+    print("\n" + THEME.header("Step 2: Clip selection & identity"))
+    _shown = str(DEFAULT_BROADCASTER) if (DEFAULT_BROADCASTER not in (None, "")) else "(none)"
+    print(THEME.text("  Current default broadcaster:") + " " + THEME.path(_shown))
+    print(THEME.text("  Set a default to skip typing --broadcaster each run (leave blank to keep)."))
+
     min_views = _prompt_int("Minimum views to include a clip", DEFAULT_MIN_VIEWS, 0)
     clips_per_comp = _prompt_int("Clips per compilation", DEFAULT_CLIPS, 1)
     num_compilations = _prompt_int("Number of compilations per run", DEFAULT_COMPS, 1)
-    default_broadcaster = _prompt_str("Default broadcaster login (optional)", "")
+    default_broadcaster = _prompt_str("Default broadcaster", DEFAULT_BROADCASTER or "")
 
     # Step 3: Quality and format
     print("\n" + THEME.header("Step 3: Output quality & format"))

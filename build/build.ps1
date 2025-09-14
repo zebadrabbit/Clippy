@@ -148,7 +148,7 @@ Write-Host '==> Building HealthCheck utility'
 $hcArgs = @(
   '--noconfirm','--clean','--onefile','--name','HealthCheck',
   '--paths','..',
-  '--hidden-import','config',
+  '--hidden-import','clippy.config',
   '..\\scripts\\health_check.py'
 )
 & pyinstaller @hcArgs

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
-from utils import log
+from clippy.utils import log
 
 
 def _parse_simple_date(s: str) -> datetime:

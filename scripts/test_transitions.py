@@ -11,8 +11,8 @@ _REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from config import ffmpeg, ffprobe, cache, fps, resolution, bitrate, audio_bitrate, cq, gop, rc_lookahead, spatial_aq, temporal_aq, aq_strength, nvenc_preset
-from utils import log, resolve_transitions_dir
+from clippy.config import ffmpeg, ffprobe, cache, fps, resolution, bitrate, audio_bitrate, cq, gop, rc_lookahead, spatial_aq, temporal_aq, aq_strength, nvenc_preset
+from clippy.utils import log, resolve_transitions_dir
 
 
 def run(cmd: List[str]) -> Tuple[int, bytes, bytes]:

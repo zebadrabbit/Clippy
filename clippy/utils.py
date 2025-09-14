@@ -1,4 +1,4 @@
-from config import *  # noqa: F401,F403
+from clippy.config import *  # noqa: F401,F403
 
 from yachalk import chalk
 try:
@@ -23,7 +23,7 @@ def _cfg_get(name: str, default=None):
     except Exception:
         pass
     try:
-        import config as _cfg  # type: ignore
+        import clippy.config as _cfg  # type: ignore
         return getattr(_cfg, name)
     except Exception:
         return default
@@ -211,121 +211,93 @@ def replace_vars(s, m):
     s = s.replace('{audio_bitrate}', _cfg_get('audio_bitrate', ''))
     s = s.replace('{fps}', _cfg_get('fps', ''))
     s = s.replace('{resolution}', _cfg_get('resolution', ''))
+    # Encoder tuning parameters
+    s = s.replace('{cq}', _cfg_get('cq', ''))
+    s = s.replace('{gop}', _cfg_get('gop', ''))
+    s = s.replace('{rc_lookahead}', _cfg_get('rc_lookahead', ''))
+    s = s.replace('{spatial_aq}', _cfg_get('spatial_aq', ''))
+    s = s.replace('{aq_strength}', _cfg_get('aq_strength', ''))
+    s = s.replace('{temporal_aq}', _cfg_get('temporal_aq', ''))
+    s = s.replace('{nvenc_preset}', _cfg_get('nvenc_preset', ''))
+    # Container settings
+    s = s.replace('{ext}', _cfg_get('container_ext', 'mp4'))
+    s = s.replace('{container_flags}', _cfg_get('container_flags', '-movflags +faststart'))
     # yt-dlp format string
     try:
-        from config import yt_format
+        from clippy.config import yt_format
         s = s.replace('{yt_format}', yt_format)
     except Exception:
         pass
-    # ffmpeg path for yt-dlp --ffmpeg-location
+    # ffmpeg path into youtubeDl options
     try:
-        from config import ffmpeg as _ff
+        from clippy.config import ffmpeg as _ff
         s = s.replace('{ffmpeg_path}', _ff)
-    except Exception:
-        pass
-    # NVENC tuning placeholders (if defined)
-    try:
-        from config import cq, gop, rc_lookahead, spatial_aq, temporal_aq, aq_strength, nvenc_preset
-        s = s.replace('{cq}', cq)
-        s = s.replace('{gop}', gop)
-        s = s.replace('{rc_lookahead}', rc_lookahead)
-        s = s.replace('{spatial_aq}', spatial_aq)
-        s = s.replace('{temporal_aq}', temporal_aq)
-        s = s.replace('{aq_strength}', aq_strength)
-        s = s.replace('{nvenc_preset}', nvenc_preset)
-    except Exception:
-        pass
-    # optional container parameters
-    try:
-        from config import container_ext, container_flags
-        s = s.replace('{ext}', container_ext)
-        s = s.replace('{container_flags}', container_flags)
     except Exception:
         pass
     return s
 
 def resolve_transitions_dir() -> str:
-    """Resolve the absolute transitions directory.
-
-    Order of preference:
-    - TRANSITIONS_DIR env var (absolute or relative to CWD)
-    - If CLIPPY_USE_INTERNAL=1, prefer bundled/internal locations first
-    - config.transitions_dir if defined
-    - PyInstaller MEIPASS (onefile temp dir): <MEIPASS>/transitions, <MEIPASS>/_internal/transitions
-    - Next to the executable when frozen: <exe>/transitions, <exe>/_internal/transitions
-    - Project source locations: <repo>/transitions, <repo>/_internal/transitions
-    - Working directory variants: ./transitions, ./_internal/transitions
-    Returns an absolute path; if none exist, returns ./transitions (absolute) as default.
-    """
-    candidates: list[str] = []
-    # Env
-    env_dir = os.getenv('TRANSITIONS_DIR')
-    if env_dir:
-        candidates.append(os.path.abspath(env_dir))
-    use_internal = os.getenv('CLIPPY_USE_INTERNAL', '').strip().lower() in ('1', 'true', 'yes', 'on')
-    # Config-specified dir (optional)
     try:
-        import config as _cfg  # type: ignore
-        cfg_dir = getattr(_cfg, 'transitions_dir', None)
-        if cfg_dir:
-            candidates.append(os.path.abspath(str(cfg_dir)))
+        env_dir = os.getenv('TRANSITIONS_DIR')
+        if env_dir:
+            return os.path.abspath(env_dir)
     except Exception:
         pass
-    # PyInstaller MEIPASS (onefile extracts here)
+    # Respect packaged/internal preference
+    prefer_internal = os.getenv('CLIPPY_USE_INTERNAL', '').strip().lower() in ('1', 'true', 'yes', 'on')
+    roots: list[str] = []
+    try:
+        import clippy.config as _cfg  # type: ignore
+        cfg_dir = getattr(_cfg, 'transitions_dir', None)
+        if cfg_dir:
+            roots.append(os.path.abspath(str(cfg_dir)))
+    except Exception:
+        pass
+    # PyInstaller temp dir
     try:
         meipass = getattr(sys, '_MEIPASS', None)
     except Exception:
         meipass = None
     if meipass:
-        if use_internal:
-            candidates.insert(0, os.path.join(meipass, '_internal', 'transitions'))
-            candidates.insert(1, os.path.join(meipass, 'transitions'))
+        if prefer_internal:
+            roots += [os.path.join(meipass, '_internal', 'transitions'), os.path.join(meipass, 'transitions')]
         else:
-            candidates.append(os.path.join(meipass, 'transitions'))
-            candidates.append(os.path.join(meipass, '_internal', 'transitions'))
-    # Frozen bundle locations
+            roots += [os.path.join(meipass, 'transitions'), os.path.join(meipass, '_internal', 'transitions')]
+    # Frozen exe dir
     try:
         if getattr(sys, 'frozen', False):
             exe_dir = os.path.dirname(sys.executable)
-            if use_internal:
-                candidates.insert(0, os.path.join(exe_dir, '_internal', 'transitions'))
-                candidates.insert(1, os.path.join(exe_dir, 'transitions'))
+            if prefer_internal:
+                roots += [os.path.join(exe_dir, '_internal', 'transitions'), os.path.join(exe_dir, 'transitions')]
             else:
-                candidates.append(os.path.join(exe_dir, 'transitions'))
-                candidates.append(os.path.join(exe_dir, '_internal', 'transitions'))
+                roots += [os.path.join(exe_dir, 'transitions'), os.path.join(exe_dir, '_internal', 'transitions')]
     except Exception:
         pass
-    # Source tree locations
+    # Repo and CWD fallbacks
     try:
         repo_dir = os.path.dirname(os.path.abspath(__file__))
-        if use_internal:
-            candidates.append(os.path.join(repo_dir, '_internal', 'transitions'))
-            candidates.append(os.path.join(repo_dir, 'transitions'))
+        if prefer_internal:
+            roots += [os.path.join(repo_dir, '..', '_internal', 'transitions'), os.path.join(repo_dir, '..', 'transitions')]
         else:
-            candidates.append(os.path.join(repo_dir, 'transitions'))
-            candidates.append(os.path.join(repo_dir, '_internal', 'transitions'))
+            roots += [os.path.join(repo_dir, '..', 'transitions'), os.path.join(repo_dir, '..', '_internal', 'transitions')]
     except Exception:
         pass
-    # Working dir variants
     try:
         cwd = os.getcwd()
-        if use_internal:
-            candidates.append(os.path.join(cwd, '_internal', 'transitions'))
-            candidates.append(os.path.join(cwd, 'transitions'))
+        if prefer_internal:
+            roots += [os.path.join(cwd, '_internal', 'transitions'), os.path.join(cwd, 'transitions')]
         else:
-            candidates.append(os.path.join(cwd, 'transitions'))
-            candidates.append(os.path.join(cwd, '_internal', 'transitions'))
+            roots += [os.path.join(cwd, 'transitions'), os.path.join(cwd, '_internal', 'transitions')]
     except Exception:
         pass
-    for p in candidates:
+    for r in roots:
         try:
-            if p and os.path.isdir(p):
-                return os.path.abspath(p)
+            if r and os.path.isdir(r):
+                return os.path.abspath(r)
         except Exception:
             continue
-    # Fallback to ./transitions absolute
     try:
-        return os.path.abspath(os.path.join(os.getcwd(), 'transitions'))
+        return os.path.abspath('transitions')
     except Exception:
         return os.path.abspath('transitions')
 
@@ -351,7 +323,7 @@ def find_transition_file(name: str) -> str | None:
         use_internal = os.getenv('CLIPPY_USE_INTERNAL', '').strip().lower() in ('1', 'true', 'yes', 'on')
         # Config-specified dir
         try:
-            import config as _cfg  # type: ignore
+            import clippy.config as _cfg  # type: ignore
             cfg_dir = getattr(_cfg, 'transitions_dir', None)
             if cfg_dir:
                 candidates.append(os.path.abspath(str(cfg_dir)))
@@ -403,11 +375,10 @@ def find_transition_file(name: str) -> str | None:
 def prep_work():
     # make our workspace
     def _display_path(p: str) -> str:
-        # Normalize slashes for the host OS in logs only
-        if os.name == 'nt':
-            return p.replace('/', '\\')
-        return p
-
+        try:
+            return os.path.abspath(p)
+        except Exception:
+            return p
     def _ensure_dir(path: str, label: str):
         try:
             if not os.path.exists(path):
@@ -420,6 +391,7 @@ def prep_work():
         try:
             readme_path = os.path.join(path, 'README.md')
             if not os.path.exists(readme_path):
+                os.makedirs(path, exist_ok=True)
                 with open(readme_path, 'w', encoding='utf-8') as f:
                     f.write(content)
         except Exception as e:
@@ -432,8 +404,7 @@ def prep_work():
         "# cache\n\n"
         "Temporary working directory.\n\n"
         "- Each clip gets its own subfolder with intermediate files (clip.mp4, normalized.mp4, preview.png).\n"
-        "- Compilation concat list files (compN) are written here.\n"
-        "- Safe to delete; it will be recreated on next run unless --keep-cache is used.\n"
+        "- Stage 2 outputs are written as complete_<date>_<idx>.<ext> before being moved to output/.\n"
     ))
 
     # output dir
@@ -443,28 +414,17 @@ def prep_work():
         "# output\n\n"
         "Final compilations are moved here after encoding.\n\n"
         "- Filenames include the broadcaster and date range.\n"
-        "- Share or upload these files; contents here are not required for future runs.\n"
+        "- Use --overwrite-output to replace existing files, else _1, _2 suffixes are added.\n"
     ))
 
-    # transitions dir (resolved dynamically)
+    # transitions dir
     transitions_dir = resolve_transitions_dir()
-    if not os.path.exists(transitions_dir):
-        _ensure_dir(transitions_dir, 'transitions')
     _ensure_readme(transitions_dir, (
         "# transitions\n\n"
         "Put your intro/outro/transition clips here.\n\n"
-        "Rules: static.mp4 is REQUIRED and is placed between every segment.\n"
-        "You can provide multiple intros/outros/transitions (e.g., intro_2.mp4, transition_05.mp4);\n"
-        "the app randomly picks intros/outros and may insert random transitions between clips.\n\n"
-        "Examples:\n"
-        "- intro.mp4, intro_2.mp4 (optional, random one chosen)\n"
-        "- static.mp4  (required)\n"
-        "- transition_01.mp4 ... transition_10.mp4 (optional random inserts)\n"
-        "- outro.mp4, outro_2.mp4 (optional, random one chosen)\n\n"
-        "Files are referenced relative to the cache directory using ffmpeg concat.\n"
+        "- static.mp4 is REQUIRED.\n"
+        "- You can provide intro_2.mp4, outro_2.mp4, transition_01.mp4, etc.\n"
     ))
-
-    # Require transitions/static.mp4 to be present; do not auto-create or copy
     try:
         static_path = os.path.join(transitions_dir, 'static.mp4')
         if not os.path.exists(static_path):

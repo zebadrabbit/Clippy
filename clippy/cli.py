@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from typing import Optional
 from . import __version__
-from config import reactionThreshold, amountOfClips, amountOfCompilations
+from clippy.config import reactionThreshold, amountOfClips, amountOfCompilations
 
 
 def parse_args() -> argparse.Namespace:

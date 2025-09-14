@@ -34,7 +34,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from config import (
+from clippy.config import (
     ffmpeg,
     fps,
     resolution,
@@ -50,15 +50,15 @@ from config import (
 )
 # container flags may not be present in older configs
 try:
-    from config import container_flags  # type: ignore
+    from clippy.config import container_flags  # type: ignore
 except Exception:
     container_flags = "-movflags +faststart"
 try:
-    from config import audio_normalize_transitions  # type: ignore
+    from clippy.config import audio_normalize_transitions  # type: ignore
 except Exception:
     audio_normalize_transitions = True
 
-from utils import resolve_transitions_dir, log
+from clippy.utils import resolve_transitions_dir, log
 
 
 def _run(cmd: str) -> Tuple[int, str]:

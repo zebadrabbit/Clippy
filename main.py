@@ -38,10 +38,10 @@ import sys
 from typing import List, Tuple, Optional
 from datetime import datetime, timedelta, timezone
 
-from config import *  # noqa: F401,F403
-from utils import log, prep_work
-import utils as utils_mod
-from twitch_ingest import (
+from clippy.config import *  # noqa: F401,F403
+from clippy.utils import log, prep_work
+import clippy.utils as utils_mod
+from clippy.twitch_ingest import (
     load_credentials,
     get_app_access_token,
     resolve_user,
@@ -51,8 +51,8 @@ from twitch_ingest import (
 )
 
 # Import processing helpers from existing main module
-from pipeline import create_compilations_from, stage_one, stage_two  # DB removed
-import pipeline as pipeline_mod
+from clippy.pipeline import create_compilations_from, stage_one, stage_two  # DB removed
+import clippy.pipeline as pipeline_mod
 from clippy.cli import parse_args
 from clippy.banner import show_banner
 from clippy import __version__ as CLIPPY_VERSION
@@ -103,14 +103,14 @@ def main():  # noqa: C901
 
     # Propagate requested counts to config and pipeline modules so they don't use defaults
     try:
-        import config as _cfg
+        import clippy.config as _cfg
         _cfg.amountOfClips = amountOfClips
         _cfg.amountOfCompilations = amountOfCompilations
         _cfg.reactionThreshold = reactionThreshold
     except Exception:
         pass
     try:
-        import pipeline as _pl
+        import clippy.pipeline as _pl
         _pl.amountOfClips = amountOfClips
         _pl.amountOfCompilations = amountOfCompilations
         _pl.reactionThreshold = reactionThreshold
@@ -155,44 +155,44 @@ def main():  # noqa: C901
     # Runtime overrides: if provided, convert to singleton lists to align with pipeline's list-based selection
     if args.intro is not None:
         try:
-            import config as _cfg
+            import clippy.config as _cfg
             _cfg.intro = [args.intro] if args.intro else []
         except Exception:
             pass
     if args.outro is not None:
         try:
-            import config as _cfg
+            import clippy.config as _cfg
             _cfg.outro = [args.outro] if args.outro else []
         except Exception:
             pass
     if args.transition is not None:
         try:
-            import config as _cfg
+            import clippy.config as _cfg
             if args.transition:
                 _cfg.transitions = [args.transition]
         except Exception:
             pass
     if args.transition_prob is not None:
         try:
-            import config as _cfg
+            import clippy.config as _cfg
             _cfg.transition_probability = max(0.0, min(1.0, float(args.transition_prob)))
         except Exception:
             pass
     if args.no_random_transitions:
         try:
-            import config as _cfg
+            import clippy.config as _cfg
             _cfg.no_random_transitions = True
         except Exception:
             pass
     if args.skip_bad_clip:
         try:
-            import config as _cfg
+            import clippy.config as _cfg
             _cfg.skip_bad_clip = True
         except Exception:
             pass
     if args.max_concurrency is not None:
         try:
-            import config as _cfg
+            import clippy.config as _cfg
             _cfg.max_concurrency = max(1, int(args.max_concurrency))
         except Exception:
             pass
@@ -200,7 +200,7 @@ def main():  # noqa: C901
         # Make resolver see the override
         os.environ['TRANSITIONS_DIR'] = args.transitions_dir
         try:
-            from utils import log as _log
+            from clippy.utils import log as _log
             _log("Transitions directory override: " + os.path.abspath(args.transitions_dir), 1)
         except Exception:
             pass
@@ -249,7 +249,7 @@ def main():  # noqa: C901
     # yt-dlp format override via config string
     if args.yt_format:
         try:
-            import config as _cfg
+            import clippy.config as _cfg
             _cfg.yt_format = args.yt_format
             # Rebuild youtubeDlOptions string if present
             if hasattr(_cfg, 'youtubeDlOptions'):
@@ -261,7 +261,7 @@ def main():  # noqa: C901
 
     # Apply transitions controls to config (used by pipeline write_concat_file)
     try:
-        import config as _cfg
+        import clippy.config as _cfg
         if getattr(args, 'rebuild_transitions', False):
             _cfg.transitions_rebuild = True
         if getattr(args, 'no_audio_normalize_transitions', False):
@@ -310,7 +310,7 @@ def main():  # noqa: C901
                 return str(_chalk.white(v))
             # Gather values
             try:
-                import config as _cfg
+                import clippy.config as _cfg
                 _intro_list = getattr(_cfg, 'intro', [])
                 _outro_list = getattr(_cfg, 'outro', [])
                 _transitions_list = getattr(_cfg, 'transitions', [])
@@ -486,7 +486,7 @@ def main():  # noqa: C901
     else:
         date_range = datetime.utcnow().strftime('%Y-%m-%d')
     try:
-        from config import container_ext as _ext
+        from clippy.config import container_ext as _ext
     except Exception:
         _ext = 'mp4'
     base_names = []
@@ -503,7 +503,7 @@ def main():  # noqa: C901
     except KeyboardInterrupt:
         # Cooperative shutdown: signal pipeline to stop and clean up child procs
         try:
-            from pipeline import request_shutdown
+            from clippy.pipeline import request_shutdown
             request_shutdown()
         except Exception:
             pass
@@ -545,12 +545,12 @@ if __name__ == "__main__":  # pragma: no cover
     except KeyboardInterrupt:
         # Global catch in case Ctrl-C occurs outside main's guarded block
         try:
-            from pipeline import request_shutdown
+            from clippy.pipeline import request_shutdown
             request_shutdown()
         except Exception:
             pass
         try:
-            from utils import log as _log
+            from clippy.utils import log as _log
             _log("Interrupted by user. Exiting.")
         except Exception:
             print("Interrupted by user. Exiting.")

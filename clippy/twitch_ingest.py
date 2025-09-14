@@ -27,7 +27,7 @@ import os
 import time
 import typing as _t
 import requests
-from utils import log, fix_ascii
+from clippy.utils import log, fix_ascii
 
 HelixHeaders = _t.Dict[str, str]
 

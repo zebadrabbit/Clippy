@@ -28,8 +28,8 @@ if getattr(sys, "frozen", False):
 else:
     BASE_DIR = ROOT
 
-from config import youtubeDl, ffmpeg, cache, output, fontfile  # noqa: E402
-from utils import resolve_transitions_dir  # noqa: E402
+from clippy.config import youtubeDl, ffmpeg, cache, output, fontfile  # noqa: E402
+from clippy.utils import resolve_transitions_dir  # noqa: E402
 from clippy.theme import enable_windows_vt, status_tag, THEME, paint  # type: ignore  # noqa: E402
 
 
@@ -137,7 +137,7 @@ def check_dirs_and_assets(ffmpeg_path: str | None) -> None:
         print("        Try setting CLIPPY_USE_INTERNAL=1 if you packaged _internal/transitions/static.mp4")
     # counts for intros/outros/transitions and probability
     try:
-        import config as _cfg
+        import clippy.config as _cfg
         def _count(names: list[str]) -> int:
             c = 0
             for n in (names or []):

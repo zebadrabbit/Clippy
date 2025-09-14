@@ -48,8 +48,8 @@ def ensure_unique_names(base_names: List[str], out_dir: str, overwrite: bool) ->
 def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str]], compilation_count: int, keep_cache: bool, final_names: Optional[List[str]] = None, overwrite_output: bool = False, purge_cache: bool = False) -> List[str]:
     """Move compiled files from cache to output with improved naming then optionally clean cache."""
     # Import late to avoid circulars
-    from config import cache, output
-    from utils import log  # local import to avoid circular
+    from clippy.config import cache, output
+    from clippy.utils import log  # local import to avoid circular
     log("Finalizing outputs", 1)
     try:
         b_name = sanitize_filename(broadcaster.lower()) or 'broadcaster'
@@ -67,7 +67,7 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
             date_range = datetime.utcnow().strftime('%Y-%m-%d')
         # Determine container extension used by ffmpeg for cache outputs
         try:
-            from config import container_ext as _ext_cfg
+            from clippy.config import container_ext as _ext_cfg
         except Exception:
             _ext_cfg = 'mp4'
         # Use provided final names (preferred), else derive from broadcaster/date
@@ -145,7 +145,7 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
         preserve_set = set()
         if not purge_cache:
             try:
-                from config import cache_preserve_dirs as _preserve
+                from clippy.config import cache_preserve_dirs as _preserve
             except Exception:
                 _preserve = []
             preserve_set = {d.strip().lower() for d in _preserve if isinstance(d, str)}
