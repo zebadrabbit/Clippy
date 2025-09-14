@@ -11,34 +11,34 @@ Notes:
 # =============================================================
 
 # how many clips we should get
-amountOfClips = 12
+amountOfClips: int = 12  # number of clips per compilation
 
 # how many segments
-amountOfCompilations = 2
+amountOfCompilations: int = 2  # number of compilations to create
 
 # minimum view count
-reactionThreshold = 1
+reactionThreshold: int = 1  # minimum views to include a clip
 
 # compilation file naming:  compilation_d_m_yy.mp4
-outputFormat = 'compilation_'
+outputFormat: str = 'compilation_'  # base prefix for output naming
 
 # =============================================================
 # Assets & overlay
 # =============================================================
 # font to use for overlay (prefer assets/fonts when present)
-fontfile = "assets/fonts/Roboto-Medium.ttf"
+fontfile: str = "assets/fonts/Roboto-Medium.ttf"  # font path for overlay drawtext
 
 # file names for transitions, intro, outro
-static = 'static.mp4'
-intro = [
+static: str = 'static.mp4'  # required spacer clip used between segments
+intro: list[str] = [
 	'intro.mp4', 
 	'intro_2.mp4'
 ]
-outro = [
+outro: list[str] = [
 	'outro.mp4', 
 	'outro_2.mp4'
 ]
-transitions = [
+transitions: list[str] = [
 	'transition_01.mp4', 
 	'transition_02.mp4', 
 	'transition_03.mp4', 
@@ -51,32 +51,32 @@ transitions = [
 # Transitions & sequencing
 # =============================================================
 # probability (0.0 - 1.0) to insert a random transition between clips (each gap independent)
-transition_probability = 0.35
+transition_probability: float = 0.35  # probability to insert a transition between clips
 
 # Disable random transitions entirely (still uses static.mp4 between clips)
-no_random_transitions = False
+no_random_transitions: bool = False  # disable transitions entirely (still use static)
 
 # Concurrency for clip preparation (downloads/normalization)
-max_concurrency = 4
+max_concurrency: int = 4  # worker threads for download/normalize stage
 
 # Behavior when a clip fails after retries: if True, skip the clip; if False, abort the run
-skip_bad_clip = True
+skip_bad_clip: bool = True  # skip failed clips instead of aborting
 
 # Normalize audio on transitions during internal normalization (cache/_trans) using EBU R128 loudnorm
 # This helps keep loudness consistent between assets. Can be disabled.
-audio_normalize_transitions = True
+audio_normalize_transitions: bool = True  # apply loudnorm to non-clip assets (intro/static/transition/outro)
 
 # Force re-encode of transitions assets into cache/_trans even if a normalized copy already exists
-transitions_rebuild = False
+transitions_rebuild: bool = False  # force rebuild of normalized non-clip assets
 
 # By default, do NOT silence any non-clip assets. All audio is ON unless specified.
-silence_nonclip_asset_audio = False
+silence_nonclip_asset_audio: bool = False  # default: keep audio for non-clip assets unless overridden
 
 # Granular audio silencing controls (applied when silence_nonclip_asset_audio = False)
 # Defaults: keep audio for transitions, static, and intro/outro.
-silence_transitions = False
-silence_static = False
-silence_intro_outro = False
+silence_transitions: bool = False  # silence audio specifically for transitions when false global
+silence_static: bool = False       # silence audio for static spacer when false global
+silence_intro_outro: bool = False  # silence audio for intros/outros when false global
 
 # Weighted transition selection and simple cooldown
 # - transitions_weights: dict of { filename: weight } where higher weight increases selection likelihood
@@ -89,35 +89,35 @@ transition_cooldown: int = 1
 # Encoding: video/audio & quality
 # =============================================================
 # bitrate target (used as maxrate with NVENC vbr)
-bitrate = "12M"
+bitrate: str = "12M"  # target video bitrate (used as maxrate)
 
 # audio bitrate
-audio_bitrate = "192k"
+audio_bitrate: str = "192k"  # target audio bitrate
 
 # framrate
-fps = "60"
+fps: str = "60"  # output frames per second
 
 # resolution
-resolution = "1920x1080"
+resolution: str = "1920x1080"  # output resolution
 
 # =============================================================
 # Paths: cache/output & preservation
 # =============================================================
 # cache directory for work we're going to do
-cache = "./cache"
+cache: str = "./cache"  # working directory for intermediates
 
 # cache subdirectories to preserve on cleanup (relative names)
 # Default preserves normalized transitions to avoid costly re-encodes between runs.
-cache_preserve_dirs = ["_trans"]
+cache_preserve_dirs: list[str] = ["_trans"]  # cache subfolders to keep on cleanup
 
 # output the compilation to here
-output = "./output"
+output: str = "./output"  # final outputs directory
 
 # whether to rebuild clips even if outputs already exist
-rebuild = False
+rebuild: bool = False  # force per-clip rebuild even if outputs exist
 
 # overlay control
-enable_overlay = True
+enable_overlay: bool = True  # draw text/avatar overlay on clips
 
 # =============================================================
 # Ingest: yt-dlp formats
@@ -133,20 +133,20 @@ enable_overlay = True
 #    480          mp4 480p        30 │ https │ unknown unknown
 #    720          mp4 720p        60 │ https │ unknown unknown
 #    1080         mp4 1080p       60 │ https │ unknown unknown
-yt_format = "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]"
+yt_format: str = "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]"  # yt-dlp format
 
 # =============================================================
 # Encoder tuning (NVENC)
 # =============================================================
 # NVENC encoder tuning (applied in all ffmpeg templates)
 # See ffmpeg -h encoder=h264_nvenc for available values
-nvenc_preset = "slow"
-cq = "19"
-gop = "120"
-rc_lookahead = "20"
-aq_strength = "8"
-spatial_aq = "1"
-temporal_aq = "1"
+nvenc_preset: str = "slow"  # NVENC preset
+cq: str = "19"              # NVENC constant quality value (lower is better)
+gop: str = "120"            # keyframe interval
+rc_lookahead: str = "20"    # rate-control lookahead frames
+aq_strength: str = "8"      # adaptive quantization strength
+spatial_aq: str = "1"       # enable spatial AQ (0/1)
+temporal_aq: str = "1"      # enable temporal AQ (0/1)
 
 
 # =============================================================
