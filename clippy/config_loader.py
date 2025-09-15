@@ -71,6 +71,10 @@ DEFAULTS: Dict[str, Any] = {
     "container_ext": "mp4",
     "container_flags": "-movflags +faststart",
     "yt_format": "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]",
+
+    # Discord (optional)
+    "discord_channel_id": None,
+    "discord_message_limit": 200,
 }
 
 
@@ -165,6 +169,7 @@ def load_merged_config(defaults: dict[str, Any] | None = None, env: dict[str, st
     beh = data.get("behavior", {}) if isinstance(data, dict) else {}
     assets = data.get("assets", {}) if isinstance(data, dict) else {}
     identity = data.get("identity", {}) if isinstance(data, dict) else {}
+    discord = data.get("discord", {}) if isinstance(data, dict) else {}
 
     # Map fields to existing names
     merged["amountOfClips"] = _coerce_int(sel.get("clips_per_compilation"), merged.get("amountOfClips"))
@@ -212,12 +217,19 @@ def load_merged_config(defaults: dict[str, Any] | None = None, env: dict[str, st
     # Identity
     merged["default_broadcaster"] = _coerce_str(identity.get("broadcaster"), merged.get("default_broadcaster", ""))
 
+    # Discord
+    try:
+        ch_val = discord.get("channel_id") if isinstance(discord, dict) else None
+        merged["discord_channel_id"] = int(ch_val) if ch_val is not None else merged.get("discord_channel_id")
+    except Exception:
+        pass
+    merged["discord_message_limit"] = _coerce_int(discord.get("message_limit") if isinstance(discord, dict) else None, merged.get("discord_message_limit", 200))
+
     # Environment overrides (non-secret convenience)
     if env.get("TRANSITIONS_DIR"):
         merged["TRANSITIONS_DIR"] = env.get("TRANSITIONS_DIR")
         # also expose as config.transitions_dir for compatibility with utils
         merged["transitions_dir"] = env.get("TRANSITIONS_DIR")
-    if env.get("CLIPPY_USE_INTERNAL"):
-        merged["CLIPPY_USE_INTERNAL"] = env.get("CLIPPY_USE_INTERNAL")
+    # Deprecated: CLIPPY_USE_INTERNAL support removed; prefer explicit TRANSITIONS_DIR
 
     return merged

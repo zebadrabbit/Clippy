@@ -248,8 +248,6 @@ def resolve_transitions_dir() -> str:
             return os.path.abspath(env_dir)
     except Exception:
         pass
-    # Respect packaged/internal preference
-    prefer_internal = os.getenv('CLIPPY_USE_INTERNAL', '').strip().lower() in ('1', 'true', 'yes', 'on')
     roots: list[str] = []
     try:
         import clippy.config as _cfg  # type: ignore
@@ -262,18 +260,12 @@ def resolve_transitions_dir() -> str:
     # Repo and CWD fallbacks
     try:
         repo_dir = os.path.dirname(os.path.abspath(__file__))
-        if prefer_internal:
-            roots += [os.path.join(repo_dir, '..', '_internal', 'transitions'), os.path.join(repo_dir, '..', 'transitions')]
-        else:
-            roots += [os.path.join(repo_dir, '..', 'transitions'), os.path.join(repo_dir, '..', '_internal', 'transitions')]
+        roots += [os.path.join(repo_dir, '..', 'transitions')]
     except Exception:
         pass
     try:
         cwd = os.getcwd()
-        if prefer_internal:
-            roots += [os.path.join(cwd, '_internal', 'transitions'), os.path.join(cwd, 'transitions')]
-        else:
-            roots += [os.path.join(cwd, 'transitions'), os.path.join(cwd, '_internal', 'transitions')]
+        roots += [os.path.join(cwd, 'transitions')]
     except Exception:
         pass
     for r in roots:
@@ -290,8 +282,7 @@ def resolve_transitions_dir() -> str:
 def find_transition_file(name: str) -> str | None:
     """Find a transition asset by name across all known roots.
 
-    Respects CLIPPY_USE_INTERNAL preference order but will fall back to
-    non-internal roots if the file is not present in the preferred location.
+    Searches common roots (TRANSITIONS_DIR, config transitions_dir, repo, CWD) and returns the first match.
     Returns absolute file path if found, else None.
     """
     try:
@@ -306,7 +297,6 @@ def find_transition_file(name: str) -> str | None:
         env_dir = os.getenv('TRANSITIONS_DIR')
         if env_dir:
             candidates.append(os.path.abspath(env_dir))
-        use_internal = os.getenv('CLIPPY_USE_INTERNAL', '').strip().lower() in ('1', 'true', 'yes', 'on')
         # Config-specified dir
         try:
             import clippy.config as _cfg  # type: ignore
@@ -315,21 +305,16 @@ def find_transition_file(name: str) -> str | None:
                 candidates.append(os.path.abspath(str(cfg_dir)))
         except Exception:
             pass
-        def _add_pair(base: str):
-            if use_internal:
-                candidates.append(os.path.join(base, '_internal', 'transitions'))
-                candidates.append(os.path.join(base, 'transitions'))
-            else:
-                candidates.append(os.path.join(base, 'transitions'))
-                candidates.append(os.path.join(base, '_internal', 'transitions'))
+        def _add(base: str):
+            candidates.append(os.path.join(base, 'transitions'))
         try:
             repo_dir = os.path.dirname(os.path.abspath(__file__))
-            _add_pair(repo_dir)
+            _add(repo_dir)
         except Exception:
             pass
         try:
             cwd = os.getcwd()
-            _add_pair(cwd)
+            _add(cwd)
         except Exception:
             pass
         # Now test each candidate

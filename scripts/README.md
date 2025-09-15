@@ -2,7 +2,7 @@
 
 This directory contains utility scripts that support setup, media preparation, and validation for running from source.
 
-- `setup_wizard.py` — Guided first-time setup. Creates `.env`, writes `clippy.yaml`, checks binaries, helps you choose a transitions folder (or prefer internal sample ones), and can generate `run_clippy.ps1` for quick launching.
+- `setup_wizard.py` — Guided first-time setup. Creates `.env`, writes `clippy.yaml`, checks binaries, helps you choose a transitions folder, and can generate `run_clippy.ps1` for quick launching. Includes optional Discord setup.
 - `health_check.py` — Standalone preflight: verifies ffmpeg/yt-dlp presence, NVENC availability, Python packages, required folders, transitions/static.mp4, fonts, and `.env` credentials.
 - `import_media.py` — Normalize or convert any source video/image into a valid transition asset (`intro`, `transition`, `outro`, `static`). Ensures correct codecs, fps, resolution, and loudness.
 - `make_transitions.py` — Generate multiple short `transition_XX.mp4` clips by slicing random segments from a long source video.
@@ -31,7 +31,8 @@ If the file doesn’t exist yet, run a small compile first (e.g., `--clips 4 --c
   - Pick quality preset and tune resolution/fps/audio
   - Configure transitions behavior and audio preferences
   - Set cache/output paths and concurrency
-  - Prefer bundled transitions via `CLIPPY_USE_INTERNAL=1` or specify a transitions directory
+  - Specify a transitions directory via TRANSITIONS_DIR or place assets under transitions/
+  - Optional: configure Discord (channel ID, token check); preserves existing settings on re-run
   - Generates a ready-to-run PowerShell helper `run_clippy.ps1`
 
 Usage (PowerShell):
@@ -46,8 +47,12 @@ Typical usage:
   - `python .\scripts\health_check.py`
 
 Notes:
-- The checker prefers local `bin/` and `assets/fonts/` paths when running from source. If `_internal` assets exist and `CLIPPY_USE_INTERNAL=1` is set, those will be used for transitions.
+- The checker prefers local `bin/` and `assets/fonts/` paths when running from source.
 - Coloring is minimal and safe for Windows consoles.
+
+## Discord usage
+
+See the main README “Discord mode (optional)” section for end-to-end setup and requirements.
 
 ## Transitions tools quick reference
 

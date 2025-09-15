@@ -107,6 +107,12 @@ def check_python_packages() -> None:
             print(f"{status_tag('OK')} Python package: {display}")
         except Exception:
             print(f"{status_tag('MISSING')} Python package: {display}")
+    # Optional
+    try:
+        __import__("discord")
+        print(f"{status_tag('OK')} Python package: discord.py (optional)")
+    except Exception:
+        print(f"{status_tag('INFO')} Python package: discord.py not installed (Discord mode optional)")
 
 
 def check_dirs_and_assets(ffmpeg_path: str | None) -> None:
@@ -127,7 +133,6 @@ def check_dirs_and_assets(ffmpeg_path: str | None) -> None:
         print(f"{status_tag('OK')} transitions/static.mp4 present")
     else:
         print(f"{status_tag('MISSING')} transitions/static.mp4 missing (required)")
-        print("        Try setting CLIPPY_USE_INTERNAL=1 if you packaged _internal/transitions/static.mp4")
     # counts for intros/outros/transitions and probability
     try:
         import clippy.config as _cfg

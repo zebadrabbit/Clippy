@@ -17,8 +17,8 @@ Normalization & audio policy:
 
 Resolution order for transitions directory:
 1) `TRANSITIONS_DIR` environment variable (absolute or relative)
-2) Packaged internal data when `CLIPPY_USE_INTERNAL=1`
-3) Standard locations next to the executable or repository (e.g., `./transitions`, `./_internal/transitions`)
+2) `transitions_dir` in `clippy.yaml` (if set)
+3) Repository `./transitions` or current working directory `./transitions`
 
 Tips:
 - `static.mp4` is required; the pipeline inserts it between every clip.

@@ -4,6 +4,7 @@ Create highlight compilations directly from Twitch clips. Audio is ON by default
 
 ## Features
 - Twitch Helix ingestion with simple date window and auto-expand lookback
+- Discord channel ingestion (optional): read clip links from a Discord channel using discord.py
 - Min-views filter, weighted selection, and themed colorized logs
 - Creator avatar overlay, transitions, and output finalization to `output/`
 - yt-dlp downloads with retries; `.env` or env-based credentials
@@ -22,12 +23,15 @@ python .\scripts\setup_wizard.py
 ```
 
 ### What the setup wizard does
+- Source selection: choose Twitch or Discord as your clip source
 - Guides you through entering your Twitch credentials and saves them to a `.env` file
 - Writes a starter `clippy.yaml` with sensible defaults (clips per compilation, min views, quality, fps/resolution)
 - Optionally sets a default broadcaster so you can run without specifying `--broadcaster`
+- Discord setup (optional): prompts for Discord channel ID and supports masked bot token entry; can perform a quick token login check
+- Preserves existing settings on re-run (including Discord config); secrets are masked in prompts
 - Checks for ffmpeg/yt-dlp and NVENC availability; suggests fixes if missing
 - Helps you select or create a transitions folder (`transitions/`), explains the required `static.mp4`
-- Offers to use internal sample transitions with `CLIPPY_USE_INTERNAL=1` (when `_internal/transitions` exists)
+- Requires `transitions/static.mp4`; you can set a custom directory with `--transitions-dir` or TRANSITIONS_DIR
 - You can run with just: `python .\main.py -y` after saving defaults
 
 You can re-run the wizard at any time to adjust settings; it will merge with the existing YAML and leave custom edits intact.
@@ -40,7 +44,7 @@ You can re-run the wizard at any time to adjust settings; it will merge with the
 Key env vars (advanced):
 - `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` – Twitch credentials used by the Helix API
 - `TRANSITIONS_DIR` – point to a custom transitions folder (`static.mp4` required)
-- `CLIPPY_USE_INTERNAL=1` – prefer packaged `_internal/transitions` when available
+  
 
 ## Usage
 Basic:
@@ -51,6 +55,26 @@ python main.py --broadcaster somechannel --max-clips 80 --clips 12 --compilation
 Confirm settings (default prompt) or skip with `-y`:
 ```powershell
 python main.py --broadcaster somechannel -y
+```
+### Discord mode (optional)
+
+Prerequisites:
+- A Discord bot in your server with permission to read the target channel
+- The “Message Content Intent” enabled for your bot in the Discord Developer Portal
+- Bot token saved to `.env` as `DISCORD_TOKEN`
+
+Config:
+- Set `discord.channel_id` and optional `discord.message_limit` in `clippy.yaml`
+- Or pass `--discord-channel-id` and `--discord-limit` on the CLI
+
+Run:
+```powershell
+python .\main.py --discord --discord-channel-id 123456789012345678 -y
+```
+
+What happens:
+- Clippy reads recent messages from the channel, extracts Twitch clip links, resolves them via Helix, and builds compilations
+- Logs display the channel name (e.g., “Guild / #clips”), the number of links found, raw clips fetched, clips after min-views, and compilations created
 ```
 
 Auto-expand lookback to gather more clips:
@@ -89,11 +113,11 @@ Sections include: Required, Window & selection, Output & formatting, Transitions
 
 ### Internal data and ENV
 
-- `static.mp4` is REQUIRED. Place it under `transitions/`. If you also have internal sample assets under `_internal/transitions`, set `CLIPPY_USE_INTERNAL=1` to prefer those.
+- `static.mp4` is REQUIRED. Place it under `transitions/` or point TRANSITIONS_DIR to a folder that contains it.
 - Override transitions location with `TRANSITIONS_DIR` (absolute or relative path).
 - Common ENV:
   - `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`: Twitch API credentials
-  - `CLIPPY_USE_INTERNAL=1`: Prefer `_internal` sample data (when present)
+  - TRANSITIONS_DIR: Set a custom transitions directory
   - `TRANSITIONS_DIR=path`: Use a specific transitions folder
 
 ### Transitions 101: creating and validating assets
