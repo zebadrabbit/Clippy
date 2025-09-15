@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 import re
 import asyncio
-from typing import List
+from typing import List, Tuple
 
 import discord
 
@@ -38,8 +38,11 @@ def extract_clip_ids_from_text(text: str) -> List[str]:
     return out
 
 
-async def fetch_recent_clip_ids(token: str, channel_id: int, limit: int = 200) -> List[str]:
+async def fetch_recent_clip_ids(token: str, channel_id: int, limit: int = 200) -> Tuple[List[str], str]:
     """Fetch recent messages from a channel and extract Twitch clip IDs.
+
+    Returns a tuple of (ids, channel_display_name) where channel_display_name is
+    something like "Guild Name / #general" or just "#general" if no guild.
 
     - token: Discord bot token
     - channel_id: numeric ID of the channel to read
@@ -54,6 +57,7 @@ async def fetch_recent_clip_ids(token: str, channel_id: int, limit: int = 200) -
             self._channel_id = channel_id
             self._limit = limit
             self.ids: List[str] = []
+            self.channel_display: str = f"channel:{channel_id}"
 
         async def on_ready(self):
             channel = self.get_channel(self._channel_id)
@@ -63,6 +67,16 @@ async def fetch_recent_clip_ids(token: str, channel_id: int, limit: int = 200) -
                 except Exception as e:
                     await self.close()
                     raise RuntimeError(f"Failed to fetch channel: {e}")
+            # Build a friendly display name for logs
+            try:
+                name = getattr(channel, "name", None) or str(self._channel_id)
+                guild = getattr(getattr(channel, "guild", None), "name", None)
+                if guild:
+                    self.channel_display = f"{guild} / #{name}"
+                else:
+                    self.channel_display = f"#{name}"
+            except Exception:
+                self.channel_display = f"channel:{self._channel_id}"
             if not hasattr(channel, "history"):
                 await self.close()
                 raise RuntimeError("Channel does not support history() (must be TextChannel)")
@@ -84,7 +98,7 @@ async def fetch_recent_clip_ids(token: str, channel_id: int, limit: int = 200) -
         if i and i not in seen:
             seen.add(i)
             out.append(i)
-    return out
+    return out, client.channel_display
 
 
 def load_discord_token(arg_token: str | None = None) -> str:

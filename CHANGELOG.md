@@ -1,4 +1,23 @@
 # Changelog
+## 2025-09-14 — v0.3.5
+
+- Feature — Discord mode UX and summaries
+  - Show friendly Discord channel name (e.g., "Guild / #clips") when ingesting.
+  - Log a concise summary for Discord runs: links found, raw clips fetched, filtered count, and compilations created.
+  - Remove duplicate "Created N compilations" log (now logged once from the pipeline).
+  - Normalize manifest path display to forward slashes on Windows.
+  - Files: `clippy/discord_ingest.py`, `main.py`.
+
+- Wizard — Safer prompts and preservation
+  - Source selection includes Discord; prompts mask secrets and can validate the bot token with a quick login.
+  - Re-running the wizard preserves existing Discord settings unless explicitly changed.
+  - Files: `scripts/setup_wizard.py`.
+
+- Docs — Update READMEs and examples
+  - Document Discord mode setup and usage, wizard flow, and transitions directory precedence.
+  - Ensure references to internal assets fallback are removed; clarify `TRANSITIONS_DIR` usage and `static.mp4` requirement.
+  - Files: `README.md`, `scripts/README.md`, `transitions/README.md`, `clippy.yaml.example`.
+
 
 All notable changes to this project are documented here. Dates are in YYYY-MM-DD and entries are grouped by date (newest first). This changelog blends commit history with implementation notes from development sessions to provide full context.
 
@@ -13,7 +32,7 @@ All notable changes to this project are documented here. Dates are in YYYY-MM-DD
 
 - Breaking/Docs — Removed portable build system; Python-only
   - Deleted portable build scripts and artifacts; documentation updated to reflect running from source only.
-  - Kept `_internal` support for optional sample assets; `CLIPPY_USE_INTERNAL=1` continues to work.
+  - Removed `_internal` sample asset fallback and CLIPPY_USE_INTERNAL; use TRANSITIONS_DIR instead.
   - Files: removed `build/` folder, updated `README.md`, `scripts/README.md`, `_internal/README.md`.
 
 ## 2025-09-14 — v0.3.2
@@ -72,8 +91,8 @@ All notable changes to this project are documented here. Dates are in YYYY-MM-DD
   - Files: `pipeline.py`, `clippy/naming.py`
 
 - Packaging — Internal data and ffprobe
-  - New internal data support: `_internal/` folder packaged and discoverable at runtime; resolver honors `CLIPPY_USE_INTERNAL=1` to prefer bundled assets.
-  - `transitions/static.mp4` is REQUIRED; build now stages it into `_internal/transitions/static.mp4` (and includes `transitions/` externally) to guarantee availability in portable builds.
+  - Internal data fallback removed; runtime resolver now uses TRANSITIONS_DIR, repo transitions/, or CWD transitions/.
+  - `transitions/static.mp4` is REQUIRED; ensure it exists under your transitions directory.
   - Bundled `ffprobe` alongside `ffmpeg` and `yt-dlp` in the portable output.
   - Updated PyInstaller spec and build scripts to include `_internal`, fonts, transitions, and `ffprobe`.
   - Files: `build/Clippy.spec`, `build/build.ps1`, `build/build.sh`, `_internal/README.md`, `utils.py`
@@ -85,8 +104,8 @@ All notable changes to this project are documented here. Dates are in YYYY-MM-DD
   - Files: `pipeline.py`
 
 - Health check & docs
-  - Health check now hints using `CLIPPY_USE_INTERNAL=1` if `transitions/static.mp4` is missing.
-  - README: grouped “Internal data and ENV” section covering `CLIPPY_USE_INTERNAL`, `TRANSITIONS_DIR`, and static.mp4 requirement.
+  - Health check messaging updated to focus on transitions directory and static.mp4 requirement.
+  - README updated to remove `CLIPPY_USE_INTERNAL` and clarify TRANSITIONS_DIR usage.
   - Files: `scripts/health_check.py`, `README.md`
 
 ## 2025-09-13
@@ -144,6 +163,6 @@ The following changes were implemented and verified during development and refle
 
 ## Notes
 
-- Breaking change: `transitions/static.mp4` is now required. Place your asset in `transitions/` or provide `--transitions-dir`.
-- Project runs from source; optional `_internal` assets are supported via `CLIPPY_USE_INTERNAL=1`.
+- Breaking change: `transitions/static.mp4` is required. Place your asset in `transitions/` or provide `--transitions-dir`.
+- Project runs from source.
 

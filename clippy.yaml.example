@@ -83,7 +83,10 @@ discord:
   channel_id: 000000000000000000
   # How many recent messages to scan for clip links
   message_limit: 200
+  # Notes:
+  # - Save your bot token in .env as DISCORD_TOKEN (do not put secrets in YAML)
+  # - Enable "Message Content Intent" in the Discord Developer Portal
 
 # Notes:
 # - Use TRANSITIONS_DIR env var to point to a custom transitions folder.
-# - Set CLIPPY_USE_INTERNAL=1 to prefer packaged internal transitions/static when available.
+# - Set TRANSITIONS_DIR to a custom directory if your transitions are not under ./transitions.
