@@ -230,7 +230,6 @@ def load_merged_config(defaults: dict[str, Any] | None = None, env: dict[str, st
         merged["TRANSITIONS_DIR"] = env.get("TRANSITIONS_DIR")
         # also expose as config.transitions_dir for compatibility with utils
         merged["transitions_dir"] = env.get("TRANSITIONS_DIR")
-    if env.get("CLIPPY_USE_INTERNAL"):
-        merged["CLIPPY_USE_INTERNAL"] = env.get("CLIPPY_USE_INTERNAL")
+    # Deprecated: CLIPPY_USE_INTERNAL support removed; prefer explicit TRANSITIONS_DIR
 
     return merged

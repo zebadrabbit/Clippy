@@ -122,12 +122,26 @@ def _print_header():
     print(THEME.bar(bar) + "\n")
 
 
+def _mask_default(s: str, left: int = 6, right: int = 2) -> str:
+    try:
+        if not s:
+            return s
+        if len(s) <= left + right + 3:
+            # For very short strings, show first half and last char
+            cut = max(1, len(s) // 2)
+            return f"{s[:cut]}…{s[-1:]}"
+        return f"{s[:left]}…{s[-right:]}"
+    except Exception:
+        return s
+
+
 def _prompt_str(label: str, default: Optional[str] = None, secret: bool = False) -> str:
     d = f"{default}" if default not in (None, "") else ""
     while True:
         prompt = THEME.label(label)
         if d:
-            prompt += THEME.sep(" [") + THEME.default(d) + THEME.sep("]")
+            disp = _mask_default(d) if secret else d
+            prompt += THEME.sep(" [") + THEME.default(disp) + THEME.sep("]")
         prompt += THEME.sep(": ")
         val = input(prompt).strip()
         if not val and default is not None:
@@ -218,7 +232,6 @@ def _find_static_candidates() -> list[Path]:
     root = Path(__file__).resolve().parents[1]
     candidates = [
         root / "transitions" / "static.mp4",
-        root / "_internal" / "transitions" / "static.mp4",
         root / "cache" / "_trans" / "static.mp4",
     ]
     return [p for p in candidates if p.is_file()]
@@ -266,30 +279,103 @@ def main():
             pass
     cid_default = existing.get("TWITCH_CLIENT_ID") or os.getenv("TWITCH_CLIENT_ID", "")
     sec_default = existing.get("TWITCH_CLIENT_SECRET") or os.getenv("TWITCH_CLIENT_SECRET", "")
-    client_id = _prompt_str("Twitch Client ID", cid_default or None)
-    client_secret = _prompt_str("Twitch Client Secret", sec_default or None)
+    client_id = _prompt_str("Twitch Client ID", cid_default or None, secret=True)
+    client_secret = _prompt_str("Twitch Client Secret", sec_default or None, secret=True)
 
-    # Step 2: Defaults for selection and identity (broadcaster prompt only for Twitch source)
-    print("\n" + THEME.header("Step 2: Clip selection & identity"))
-    if source_choice == "twitch":
-        _shown = str(DEFAULT_BROADCASTER) if (DEFAULT_BROADCASTER not in (None, "")) else "(none)"
-        print(THEME.text("  Current default broadcaster:") + " " + THEME.path(_shown))
-        print(THEME.text("  Set a default to skip typing --broadcaster each run (leave blank to keep)."))
+    # Step 2 (Discord only): Discord configuration (moved near top)
+    discord_section = None
+    discord_token = ""
+    if source_choice == "discord":
+        print("\n" + THEME.header("Step 2: Discord setup"))
+        print(THEME.text("  1) Enable Developer Mode in Discord: User Settings -> Advanced -> Developer Mode"))
+        print(THEME.text("  2) Right-click the target channel -> Copy Channel ID"))
+        print(THEME.text("  3) Create a bot at https://discord.com/developers/applications and copy the Bot Token (Bot tab)"))
+        print(THEME.text("  4) Ensure the 'Message Content Intent' is enabled for your bot"))
+        print(THEME.text("  5) Invite the bot to your server with permissions to read the channel"))
+        # Defaults: from clippy.yaml (via load_merged_config) and .env
+        try:
+            ch_def = _existing_cfg.get('discord_channel_id') if isinstance(_existing_cfg, dict) else None
+            lim_def = int(_existing_cfg.get('discord_message_limit', 200)) if isinstance(_existing_cfg, dict) else 200
+        except Exception:
+            ch_def = None
+            lim_def = 200
+        tok_def = existing.get("DISCORD_TOKEN") or os.getenv("DISCORD_TOKEN", "")
+        ch = _prompt_str("Discord channel ID (numeric)", str(ch_def) if ch_def else None)
+        lim = _prompt_int("Discord message scan limit", lim_def, 1)
+        discord_token = _prompt_str("Discord bot token (stored in .env)", tok_def or None, secret=True)
+        try:
+            discord_section = {"channel_id": int(ch), "message_limit": int(lim)}
+        except Exception:
+            discord_section = {"channel_id": ch, "message_limit": int(lim)}
+
+        # Optional: quick token validation (no-op login)
+        def _mask(s: str) -> str:
+            try:
+                return _mask_default(s)
+            except Exception:
+                return s
+        try:
+            # Only attempt if a token string is present
+            if discord_token:
+                try:
+                    import discord  # type: ignore
+                    import asyncio  # type: ignore
+                except Exception:
+                    print(THEME.warn("  Skipping token validation: discord.py not installed"))
+                else:
+                    async def _login_once(tok: str) -> tuple[bool, str]:
+                        try:
+                            intents = discord.Intents.none()
+                            client = discord.Client(intents=intents)
+                            try:
+                                await client.login(tok)
+                            except discord.LoginFailure:
+                                return False, "Invalid Discord token (login failed)"
+                            except Exception as e:
+                                return False, f"Login error: {e}"
+                            finally:
+                                try:
+                                    await client.close()
+                                except Exception:
+                                    pass
+                            return True, "Discord token login OK"
+                        except Exception as e:
+                            return False, f"Validation error: {e}"
+                    try:
+                        ok, msg = asyncio.run(asyncio.wait_for(_login_once(discord_token), timeout=6.0))
+                        if ok:
+                            print(THEME.success("  ✔ Discord token validated (login OK)"))
+                            print(THEME.text("    Ensure 'Message Content Intent' is enabled for your bot in the Developer Portal."))
+                        else:
+                            print(THEME.warn("  ⚠ Discord token check: " + msg))
+                            print(THEME.text("    Tip: Copy the token from the Bot tab (not Application ID/Public Key)."))
+                    except Exception as e:
+                        print(THEME.warn(f"  ⚠ Token validation skipped (timeout or error): {e}"))
+            else:
+                print(THEME.warn("  No Discord token provided; you'll need DISCORD_TOKEN in .env for --discord mode."))
+        except Exception:
+            # Non-fatal; continue wizard
+            pass
+
+    # Step 3: Defaults for selection and identity (always capture a broadcaster name)
+    print("\n" + THEME.header("Step 3: Clip selection & identity"))
+    _shown = str(DEFAULT_BROADCASTER) if (DEFAULT_BROADCASTER not in (None, "")) else "(none)"
+    print(THEME.text("  Current default broadcaster:") + " " + THEME.path(_shown))
+    print(THEME.text("  Even in Discord mode, we use a broadcaster name for naming and defaults."))
+    print(THEME.text("  Set a default to skip typing --broadcaster each run (leave blank to keep)."))
     min_views = _prompt_int("Minimum views to include a clip", DEFAULT_MIN_VIEWS, 0)
     clips_per_comp = _prompt_int("Clips per compilation", DEFAULT_CLIPS, 1)
     num_compilations = _prompt_int("Number of compilations per run", DEFAULT_COMPS, 1)
-    default_broadcaster = ""
-    if source_choice == "twitch":
-        default_broadcaster = _prompt_str("Default broadcaster", DEFAULT_BROADCASTER or "")
+    default_broadcaster = _prompt_str("Default broadcaster (Twitch username)", DEFAULT_BROADCASTER or "")
 
-    # Step 3: Quality and format
-    print("\n" + THEME.header("Step 3: Output quality & format"))
+    # Step 4: Quality and format
+    print("\n" + THEME.header("Step 4: Output quality & format"))
     preset_name, bitrate = _quality_menu()
     resolution = _prompt_str("Resolution (e.g., 1920x1080)", DEFAULT_RES)
     fps = _prompt_str("Framerate (e.g., 60)", DEFAULT_FPS)
     audio_br = _prompt_str("Audio bitrate (e.g., 192k)", DEFAULT_AUDIO_BR)
 
-    # Step 4: Transitions
+    # Step 5: Transitions
     _transitions_explain()
     use_random = not _prompt_yes_no("Disable random transitions?", default_yes=DEFAULT_NO_RANDOM)
     trans_prob = DEFAULT_TRANS_PROB
@@ -297,54 +383,44 @@ def main():
         trans_prob = _prompt_float("Probability to insert a transition (0.0 - 1.0)", DEFAULT_TRANS_PROB, 0.0, 1.0)
     silence_static = _prompt_yes_no("Silence static.mp4 audio?", default_yes=DEFAULT_SILENCE_STATIC)
 
-    # Step 5: Paths & concurrency
-    print("\n" + THEME.header("Step 5: Paths & concurrency"))
+    # Step 6: Paths & concurrency
+    print("\n" + THEME.header("Step 6: Paths & concurrency"))
     cache_dir = _prompt_str("Cache directory", DEFAULT_CACHE)
     output_dir = _prompt_str("Output directory", DEFAULT_OUTPUT)
     conc = _prompt_int("Max concurrent workers (downloads/normalize)", DEFAULT_CONC, 1)
 
-    # Step 6: Transitions location
-    print("\n" + THEME.header("Step 6: Transitions directory"))
-    print(THEME.text("  The tool requires transitions/static.mp4. You can set a custom directory or use the bundled internal data."))
-    use_internal = _prompt_yes_no("Prefer bundled internal transitions when available?", default_yes=True)
+    # Step 7: Transitions location
+    print("\n" + THEME.header("Step 7: Transitions directory"))
+    print(THEME.text("  The tool requires transitions/static.mp4. Place one in transitions/ or set a custom directory."))
     trans_dir = _prompt_str("Custom transitions directory (blank to skip)", "")
 
-    # Step 7 (Discord only): Discord configuration
-    discord_section = None
-    discord_token = ""
-    if source_choice == "discord":
-        print("\n" + THEME.header("Step 7: Discord setup"))
-        print(THEME.text("  1) Enable Developer Mode in Discord: User Settings -> Advanced -> Developer Mode"))
-        print(THEME.text("  2) Right-click the target channel -> Copy Channel ID"))
-        print(THEME.text("  3) Create a bot at https://discord.com/developers/applications and copy the Bot Token"))
-        print(THEME.text("  4) Ensure the 'Message Content Intent' is enabled for your bot"))
-        print(THEME.text("  5) Invite the bot to your server with permissions to read the channel"))
-        ch = _prompt_str("Discord channel ID (numeric)")
-        lim = _prompt_int("Discord message scan limit", 200, 1)
-        discord_token = _prompt_str("Discord bot token (stored in .env)")
-        try:
-            discord_section = {"channel_id": int(ch), "message_limit": int(lim)}
-        except Exception:
-            discord_section = {"channel_id": ch, "message_limit": int(lim)}
-
-    # Write .env
-    lines = [
-        f"TWITCH_CLIENT_ID={client_id}",
-        f"TWITCH_CLIENT_SECRET={client_secret}",
-    ]
-    if use_internal:
-        lines.append("CLIPPY_USE_INTERNAL=1")
+    # Write .env (merge with existing to avoid dropping values like DISCORD_TOKEN)
+    env_out = dict(existing)
+    env_out["TWITCH_CLIENT_ID"] = client_id
+    env_out["TWITCH_CLIENT_SECRET"] = client_secret
     if trans_dir:
-        lines.append(f"TRANSITIONS_DIR={trans_dir}")
+        env_out["TRANSITIONS_DIR"] = trans_dir
+    # Preserve TRANSITIONS_DIR if user left blank
+    # Update DISCORD_TOKEN only if provided this run (e.g., in Discord mode); otherwise preserve existing
     if discord_token:
-        lines.append(f"DISCORD_TOKEN={discord_token}")
+        env_out["DISCORD_TOKEN"] = discord_token
+    # Emit in a stable order (Twitch first), then others
+    ordered_keys = ["TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET", "TRANSITIONS_DIR", "DISCORD_TOKEN"]
+    other_items = [(k, v) for k, v in env_out.items() if k not in ordered_keys]
+    lines = []
+    for k in ordered_keys:
+        if k in env_out and env_out[k] not in (None, ""):
+            lines.append(f"{k}={env_out[k]}")
+    for k, v in other_items:
+        if v not in (None, ""):
+            lines.append(f"{k}={v}")
     try:
         env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         print("\n" + THEME.success(f"Wrote {env_path.resolve()}"))
     except Exception as e:
         print("\n" + THEME.warn(f"WARN: Failed to write .env: {e}"))
 
-    # Write YAML config (clippy.yaml)
+    # Write YAML config (clippy.yaml) — preserve existing discord section if not updated this run
     cfg = {
         "selection": {
             "min_views": min_views,
@@ -379,10 +455,27 @@ def main():
         },
         "_meta": {"generated_by": f"setup_wizard v{CLIPPY_VERSION}"},
     }
-    if discord_section:
-        cfg["discord"] = discord_section
+    # Load existing YAML (if any) to preserve discord block when not provided this run
+    existing_yaml = {}
     try:
         import yaml  # type: ignore
+        yaml_path = Path("clippy.yaml")
+        if yaml_path.is_file():
+            existing_yaml = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+            if not isinstance(existing_yaml, dict):
+                existing_yaml = {}
+    except Exception:
+        existing_yaml = {}
+    if discord_section:
+        cfg["discord"] = discord_section
+    else:
+        # Keep prior discord settings if present in file
+        try:
+            if isinstance(existing_yaml, dict) and existing_yaml.get("discord"):
+                cfg["discord"] = existing_yaml.get("discord")
+        except Exception:
+            pass
+    try:
         yaml_text = yaml.safe_dump(cfg, sort_keys=False)
         yaml_path = Path("clippy.yaml")
         yaml_path.write_text(yaml_text, encoding="utf-8")
@@ -404,7 +497,7 @@ def main():
     if statics:
         print(THEME.text("  Found static.mp4 here: ") + THEME.path(f"{statics[0]}"))
     else:
-        print(THEME.warn("  static.mp4 not found in transitions/. If you don't have one, set CLIPPY_USE_INTERNAL=1 or set --transitions-dir."))
+        print(THEME.warn("  static.mp4 not found in transitions/. Place one there or set --transitions-dir to a folder that contains it."))
     print("\n" + THEME.header("All set! Next steps:"))
     if source_choice == "discord":
         print(THEME.text("  1) Run a compile using Discord as the source:"))
