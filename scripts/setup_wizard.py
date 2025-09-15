@@ -227,10 +227,31 @@ def _find_static_candidates() -> list[Path]:
 def main():
     _print_header()
 
-    # Step 1: Twitch credentials
+    # Step 0: Choose source of clips
+    print(THEME.header("Step 0: Choose your clip source"))
+    print(THEME.text("  You can fetch clips directly from Twitch (by broadcaster)"))
+    print(THEME.text("  or read links from a specific Discord channel."))
+    print(THEME.text("  Note: Even in Discord mode, Twitch API credentials are required to resolve clip details."))
+    print("")
+    print(THEME.section("Sources:"))
+    print(THEME.text("  1) Twitch (Helix) — fetch recent clips for a broadcaster"))
+    print(THEME.text("  2) Discord channel — users paste clip links; we'll read and resolve them"))
+    def _prompt_source() -> str:
+        while True:
+            s = input(THEME.label("Select source") + THEME.sep(" [") + THEME.choice_default("1") + THEME.sep("/2]: ")).strip()
+            if not s:
+                return "twitch"
+            if s in ("1", "t", "T", "twitch"):
+                return "twitch"
+            if s in ("2", "d", "D", "discord"):
+                return "discord"
+            print(THEME.error("Please enter 1 or 2."))
+    source_choice = _prompt_source()
+
+    # Step 1: Twitch credentials (required for either source)
     print(THEME.header("Step 1: Twitch Client ID & Secret"))
     print(THEME.text("  Get credentials: https://dev.twitch.tv/console/apps (create an application)"))
-    print(THEME.text("  For this tool, the Client Credentials flow is used; redirect URL is not required for clip fetching."))
+    print(THEME.text("  Client Credentials flow is used; redirect URL is not required for clip fetching."))
     env_path = Path(".env")
     existing = {}
     if env_path.is_file():
@@ -248,16 +269,18 @@ def main():
     client_id = _prompt_str("Twitch Client ID", cid_default or None)
     client_secret = _prompt_str("Twitch Client Secret", sec_default or None)
 
-    # Step 2: Defaults for selection and identity
+    # Step 2: Defaults for selection and identity (broadcaster prompt only for Twitch source)
     print("\n" + THEME.header("Step 2: Clip selection & identity"))
-    _shown = str(DEFAULT_BROADCASTER) if (DEFAULT_BROADCASTER not in (None, "")) else "(none)"
-    print(THEME.text("  Current default broadcaster:") + " " + THEME.path(_shown))
-    print(THEME.text("  Set a default to skip typing --broadcaster each run (leave blank to keep)."))
-
+    if source_choice == "twitch":
+        _shown = str(DEFAULT_BROADCASTER) if (DEFAULT_BROADCASTER not in (None, "")) else "(none)"
+        print(THEME.text("  Current default broadcaster:") + " " + THEME.path(_shown))
+        print(THEME.text("  Set a default to skip typing --broadcaster each run (leave blank to keep)."))
     min_views = _prompt_int("Minimum views to include a clip", DEFAULT_MIN_VIEWS, 0)
     clips_per_comp = _prompt_int("Clips per compilation", DEFAULT_CLIPS, 1)
     num_compilations = _prompt_int("Number of compilations per run", DEFAULT_COMPS, 1)
-    default_broadcaster = _prompt_str("Default broadcaster", DEFAULT_BROADCASTER or "")
+    default_broadcaster = ""
+    if source_choice == "twitch":
+        default_broadcaster = _prompt_str("Default broadcaster", DEFAULT_BROADCASTER or "")
 
     # Step 3: Quality and format
     print("\n" + THEME.header("Step 3: Output quality & format"))
@@ -286,6 +309,24 @@ def main():
     use_internal = _prompt_yes_no("Prefer bundled internal transitions when available?", default_yes=True)
     trans_dir = _prompt_str("Custom transitions directory (blank to skip)", "")
 
+    # Step 7 (Discord only): Discord configuration
+    discord_section = None
+    discord_token = ""
+    if source_choice == "discord":
+        print("\n" + THEME.header("Step 7: Discord setup"))
+        print(THEME.text("  1) Enable Developer Mode in Discord: User Settings -> Advanced -> Developer Mode"))
+        print(THEME.text("  2) Right-click the target channel -> Copy Channel ID"))
+        print(THEME.text("  3) Create a bot at https://discord.com/developers/applications and copy the Bot Token"))
+        print(THEME.text("  4) Ensure the 'Message Content Intent' is enabled for your bot"))
+        print(THEME.text("  5) Invite the bot to your server with permissions to read the channel"))
+        ch = _prompt_str("Discord channel ID (numeric)")
+        lim = _prompt_int("Discord message scan limit", 200, 1)
+        discord_token = _prompt_str("Discord bot token (stored in .env)")
+        try:
+            discord_section = {"channel_id": int(ch), "message_limit": int(lim)}
+        except Exception:
+            discord_section = {"channel_id": ch, "message_limit": int(lim)}
+
     # Write .env
     lines = [
         f"TWITCH_CLIENT_ID={client_id}",
@@ -295,6 +336,8 @@ def main():
         lines.append("CLIPPY_USE_INTERNAL=1")
     if trans_dir:
         lines.append(f"TRANSITIONS_DIR={trans_dir}")
+    if discord_token:
+        lines.append(f"DISCORD_TOKEN={discord_token}")
     try:
         env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         print("\n" + THEME.success(f"Wrote {env_path.resolve()}"))
@@ -336,6 +379,8 @@ def main():
         },
         "_meta": {"generated_by": f"setup_wizard v{CLIPPY_VERSION}"},
     }
+    if discord_section:
+        cfg["discord"] = discord_section
     try:
         import yaml  # type: ignore
         yaml_text = yaml.safe_dump(cfg, sort_keys=False)
@@ -361,12 +406,17 @@ def main():
     else:
         print(THEME.warn("  static.mp4 not found in transitions/. If you don't have one, set CLIPPY_USE_INTERNAL=1 or set --transitions-dir."))
     print("\n" + THEME.header("All set! Next steps:"))
-    if default_broadcaster:
-        print(THEME.text("  1) Run a compile using your saved defaults:"))
-        print(THEME.path("     python .\\main.py -y"))
+    if source_choice == "discord":
+        print(THEME.text("  1) Run a compile using Discord as the source:"))
+        print(THEME.path("     python .\\main.py --discord -y"))
+        print(THEME.text("     (Override channel via --discord-channel-id if not set in clippy.yaml)"))
     else:
-        print(THEME.text("  1) Run a compile by providing a broadcaster:"))
-        print(THEME.path("     python .\\main.py --broadcaster <name> -y"))
+        if default_broadcaster:
+            print(THEME.text("  1) Run a compile using your saved defaults:"))
+            print(THEME.path("     python .\\main.py -y"))
+        else:
+            print(THEME.text("  1) Run a compile by providing a broadcaster:"))
+            print(THEME.path("     python .\\main.py --broadcaster <name> -y"))
     print(THEME.text("  2) Check output/ for your compiled videos and manifest.json"))
 
 
