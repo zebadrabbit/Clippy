@@ -25,14 +25,8 @@ sequencing:
   transition_cooldown: 1
 
 audio:
-  # If true, silence audio for ALL non-clip assets (static/intro/outro/transitions)
-  silence_nonclip_asset_audio: false
   # If true, silence static.mp4 even when the global flag is false
   silence_static: false
-  # If true, silence transition files even when the global flag is false
-  silence_transitions: false
-  # If true, silence intros/outros even when the global flag is false
-  silence_intro_outro: false
   # Normalize loudness for non-clip assets (EBU R128)
   audio_normalize_transitions: true
 

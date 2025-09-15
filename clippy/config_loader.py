@@ -29,10 +29,7 @@ DEFAULTS: Dict[str, Any] = {
 
     # Audio policy for non-clip assets
     "audio_normalize_transitions": True,
-    "silence_nonclip_asset_audio": False,
     "silence_static": False,
-    "silence_transitions": False,
-    "silence_intro_outro": False,
 
     # Encoding
     "bitrate": "12M",
@@ -59,8 +56,8 @@ DEFAULTS: Dict[str, Any] = {
     # Assets & overlay
     "fontfile": "assets/fonts/Roboto-Medium.ttf",
     "static": "static.mp4",
-    "intro": ["intro.mp4", "intro_2.mp4"],
-    "outro": ["outro.mp4", "outro_2.mp4"],
+    "intro": ["intro.mp4"],
+    "outro": ["outro.mp4"],
     "transitions": [
         "transition_01.mp4",
         "transition_02.mp4",
@@ -179,10 +176,7 @@ def load_merged_config(defaults: dict[str, Any] | None = None, env: dict[str, st
     merged["transitions_weights"] = _coerce_dict_float(seq.get("transitions_weights"), merged.get("transitions_weights", {}))
     merged["transition_cooldown"] = _coerce_int(seq.get("transition_cooldown"), merged.get("transition_cooldown", 0))
 
-    merged["silence_nonclip_asset_audio"] = _coerce_bool(aud.get("silence_nonclip_asset_audio"), merged.get("silence_nonclip_asset_audio", False))
     merged["silence_static"] = _coerce_bool(aud.get("silence_static"), merged.get("silence_static", False))
-    merged["silence_transitions"] = _coerce_bool(aud.get("silence_transitions"), merged.get("silence_transitions", False))
-    merged["silence_intro_outro"] = _coerce_bool(aud.get("silence_intro_outro"), merged.get("silence_intro_outro", False))
     merged["audio_normalize_transitions"] = _coerce_bool(aud.get("audio_normalize_transitions"), merged.get("audio_normalize_transitions", True))
 
     merged["bitrate"] = _coerce_str(enc.get("bitrate"), merged.get("bitrate"))

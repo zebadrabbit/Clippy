@@ -48,6 +48,9 @@ Thumbs.db
 *.jpg
 *.jpeg
 *.gif
+!static.mp4
+/transitions/assets/
+
 
 # Configuration files (keep example files tracked)
 clippy.yaml

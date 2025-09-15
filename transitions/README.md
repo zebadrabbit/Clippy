@@ -12,7 +12,7 @@ The pipeline references these by relative path from the cache directory.
 
 Normalization & audio policy:
 - On first use, assets are normalized into `cache/_trans` as H.264 + AAC 48 kHz stereo for stable concatenation.
-- Audio is ON by default for intro/static/transitions/outro. You can silence specific groups in `clippy.yaml` under `audio`.
+- Audio is ON by default for all assets. You may silence only `static.mp4` via `audio.silence_static` in `clippy.yaml`.
 - If an asset lacks audio, clean stereo audio is synthesized to avoid concat errors.
 
 Resolution order for transitions directory:

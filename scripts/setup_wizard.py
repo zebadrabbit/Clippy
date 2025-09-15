@@ -77,11 +77,8 @@ try:
         no_random_transitions as DEFAULT_NO_RANDOM,
         cache as DEFAULT_CACHE,
         output as DEFAULT_OUTPUT,
-        max_concurrency as DEFAULT_CONC,
-        silence_nonclip_asset_audio as DEFAULT_SILENCE_NONCLIP,
-        silence_transitions as DEFAULT_SILENCE_TRANS,
-        silence_static as DEFAULT_SILENCE_STATIC,
-        silence_intro_outro as DEFAULT_SILENCE_INTRO_OUTRO,
+    max_concurrency as DEFAULT_CONC,
+    silence_static as DEFAULT_SILENCE_STATIC,
     )
     try:
         from clippy.config_loader import load_merged_config  # type: ignore
@@ -108,10 +105,7 @@ except Exception:
     DEFAULT_CACHE = "./cache"
     DEFAULT_OUTPUT = "./output"
     DEFAULT_CONC = 4
-    DEFAULT_SILENCE_NONCLIP = False
-    DEFAULT_SILENCE_TRANS = False
     DEFAULT_SILENCE_STATIC = False
-    DEFAULT_SILENCE_INTRO_OUTRO = False
 
 PS1_HEADER = """"""  # no longer used; keeping symbol to avoid NameError if referenced
 
@@ -217,7 +211,7 @@ def _transitions_explain():
     print(THEME.text("  - static.mp4 is placed between every segment to provide a clean cut buffer."))
     print(THEME.text("  - You can optionally insert random transitions (video effects) between some clips."))
     print(THEME.text("  - Probability controls how often a transition (beyond static) appears."))
-    print(THEME.text("  - You can silence audio on transitions/intro/outro if you prefer no music there."))
+    # Removed silencing transitions/intro/outro; only silence_static is supported
 
 
 def _find_static_candidates() -> list[Path]:
@@ -278,7 +272,6 @@ def main():
     trans_prob = DEFAULT_TRANS_PROB
     if use_random:
         trans_prob = _prompt_float("Probability to insert a transition (0.0 - 1.0)", DEFAULT_TRANS_PROB, 0.0, 1.0)
-    silence_nonclip = _prompt_yes_no("Silence audio on non-clip assets by default? (static/intro/outro/transitions)", default_yes=DEFAULT_SILENCE_NONCLIP)
     silence_static = _prompt_yes_no("Silence static.mp4 audio?", default_yes=DEFAULT_SILENCE_STATIC)
 
     # Step 5: Paths & concurrency
@@ -325,7 +318,6 @@ def main():
             "transition_cooldown": 1,
         },
         "audio": {
-            "silence_nonclip_asset_audio": silence_nonclip,
             "silence_static": silence_static,
             "audio_normalize_transitions": True,
         },

@@ -149,11 +149,9 @@ def check_dirs_and_assets(ffmpeg_path: str | None) -> None:
             print(f"{status_tag('INFO')} transition weights: {paint(str(_weights), 'gray')}")
         if _cooldown:
             print(f"{status_tag('INFO')} transition cooldown: {_cooldown}")
-        _sil_master = getattr(_cfg, 'silence_nonclip_asset_audio', True)
-        _sil_tr = getattr(_cfg, 'silence_transitions', True)
-        _sil_st = getattr(_cfg, 'silence_static', True)
-        _sil_io = getattr(_cfg, 'silence_intro_outro', True)
-        print(f"{status_tag('INFO')} audio silence: master={_sil_master}, transitions={_sil_tr}, static={_sil_st}, intro/outro={_sil_io}")
+        _sil_st = getattr(_cfg, 'silence_static', False)
+        _aud_norm = getattr(_cfg, 'audio_normalize_transitions', True)
+        print(f"{status_tag('INFO')} audio: normalize_transitions={_aud_norm}, silence_static={_sil_st}")
     except Exception:
         pass
     # font

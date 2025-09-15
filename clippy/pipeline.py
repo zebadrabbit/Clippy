@@ -603,38 +603,12 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
         except Exception:
             _cfg_outro = []
         try:
-            from clippy.config import silence_nonclip_asset_audio as _silence_nonclip  # type: ignore
-        except Exception:
-            _silence_nonclip = True
-        try:
-            from clippy.config import silence_transitions as _silence_transitions  # type: ignore
-        except Exception:
-            _silence_transitions = True
-        try:
             from clippy.config import silence_static as _silence_static  # type: ignore
         except Exception:
-            _silence_static = True
-        try:
-            from clippy.config import silence_intro_outro as _silence_intro_outro  # type: ignore
-        except Exception:
-            _silence_intro_outro = True
+            _silence_static = False
 
         # Determine whether to force silence via config
-        force_silent_audio = False
-        if (
-            (_silence_nonclip and (
-                (name == _cfg_static) or
-                (isinstance(_cfg_transitions, (list, tuple)) and name in _cfg_transitions) or
-                (isinstance(_cfg_intro, (list, tuple)) and name in _cfg_intro) or
-                (isinstance(_cfg_outro, (list, tuple)) and name in _cfg_outro)
-            )) or
-            (not _silence_nonclip and (
-                (name == _cfg_static and _silence_static) or
-                (isinstance(_cfg_transitions, (list, tuple)) and name in _cfg_transitions and _silence_transitions) or
-                ((isinstance(_cfg_intro, (list, tuple)) and name in _cfg_intro) or (isinstance(_cfg_outro, (list, tuple)) and name in _cfg_outro)) and _silence_intro_outro
-            ))
-        ):
-            force_silent_audio = True
+        force_silent_audio = bool(name == _cfg_static and _silence_static)
 
         # Probe for audio stream presence; if no audio and not forcing silence, we'll synthesize clean audio
         has_audio = True
@@ -792,21 +766,9 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
     except Exception:
         _trans_cooldown = 0
     try:
-        from clippy.config import silence_nonclip_asset_audio as _silence_nonclip  # type: ignore
-    except Exception:
-        _silence_nonclip = True
-    try:
-        from clippy.config import silence_transitions as _silence_transitions  # type: ignore
-    except Exception:
-        _silence_transitions = True
-    try:
         from clippy.config import silence_static as _silence_static  # type: ignore
     except Exception:
         _silence_static = True
-    try:
-        from clippy.config import silence_intro_outro as _silence_intro_outro  # type: ignore
-    except Exception:
-        _silence_intro_outro = True
 
     def _append_trans_file(name: str) -> bool:
         if not name:
