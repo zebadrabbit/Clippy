@@ -120,6 +120,35 @@ def fetch_clips(
     return clips[:max_clips]
 
 
+def fetch_clips_by_ids(
+    clip_ids: _t.Iterable[str],
+    client_id: str,
+    token: str,
+) -> _t.List[dict]:
+    """Fetch clip objects from Helix by explicit clip IDs.
+
+    Twitch Helix allows up to 100 ids per request using repeated id= query params.
+    """
+    ids = [c for c in clip_ids if c]
+    out: _t.List[dict] = []
+    if not ids:
+        return out
+    for i in range(0, len(ids), 100):
+        chunk = ids[i:i+100]
+        params = [("id", c) for c in chunk]
+        try:
+            resp = requests.get(CLIPS_URL, params=params, headers=_headers(client_id, token), timeout=30)
+            if resp.status_code != 200:
+                log(f"Error fetching clips by ids: {resp.status_code} {resp.text[:120]}", 5)
+                continue
+            data = resp.json().get("data", [])
+            if data:
+                out.extend(data)
+        except Exception as e:
+            log(f"Helix by-ids failed: {e}", 5)
+    return out
+
+
 def fetch_creator_avatars(clips: _t.Iterable[dict], client_id: str, token: str) -> dict:
     """Batch fetch profile_image_url for creator_ids in the clip list."""
     ids = {c.get("creator_id") for c in clips if c.get("creator_id")}

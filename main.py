@@ -48,7 +48,9 @@ from clippy.twitch_ingest import (
     fetch_clips,
     build_clip_rows,
     fetch_creator_avatars,
+    fetch_clips_by_ids,
 )
+from clippy.discord_ingest import fetch_recent_clip_ids, load_discord_token
 
 # Import processing helpers from existing main module
 from clippy.pipeline import create_compilations_from, stage_one, stage_two  # DB removed
@@ -354,23 +356,54 @@ def main():  # noqa: C901
             raise SystemExit("Confirmation required but no TTY available. Re-run with -y/--yes.")
     cid, secret = load_credentials(args.client_id, args.client_secret)
     token = get_app_access_token(cid, secret)
-    user = resolve_user(args.broadcaster, cid, token)
-    if not user:
-        raise SystemExit("Broadcaster not found")
-    broadcaster_id = user["id"]
-    log("Resolved broadcaster id: " + str(broadcaster_id), 2)
 
     prep_work()
 
-    log("Fetching clips from Helix", 1)
-    clips = fetch_clips(
-        broadcaster_id=broadcaster_id,
-        client_id=cid,
-        token=token,
-        started_at=window[0],
-        ended_at=window[1],
-        max_clips=args.max_clips,
-    )
+    if getattr(args, "discord", False):
+        # Discord mode: read clip IDs from a channel and resolve via Helix
+        from clippy.config import DEFAULTS as _CFG_DEFAULTS  # type: ignore
+        try:
+            import clippy.config as _cfg
+            _discord_channel_id = getattr(_cfg, "discord_channel_id", None)
+            _discord_limit = getattr(_cfg, "discord_message_limit", 200)
+        except Exception:
+            _discord_channel_id = None
+            _discord_limit = 200
+        ch_id = args.discord_channel_id or _discord_channel_id
+        if not ch_id:
+            raise SystemExit("Discord mode requires --discord-channel-id or clippy.yaml discord.channel_id")
+        d_token = load_discord_token(args.discord_token if hasattr(args, 'discord_token') else None)
+        import asyncio as _asyncio
+        log("Reading Discord channel for clip links", 1)
+        clip_ids = _asyncio.run(fetch_recent_clip_ids(d_token, int(ch_id), limit=int(args.discord_limit or _discord_limit)))
+        # Dedupe and limit to max_clips
+        clip_ids = list(dict.fromkeys(clip_ids))[: args.max_clips]
+        if not clip_ids:
+            raise SystemExit("No clip links found in the specified Discord channel")
+        log("Fetching clips by IDs from Helix", 1)
+        clips = fetch_clips_by_ids(clip_ids, cid, token)
+        # Broadcaster for naming: use the first clip's broadcaster_name/login if present, else fallback
+        try:
+            b_name = clips[0].get("broadcaster_name") or clips[0].get("broadcaster_login") or args.broadcaster or "clips"
+            args.broadcaster = b_name
+        except Exception:
+            if not getattr(args, "broadcaster", None):
+                args.broadcaster = "clips"
+    else:
+        user = resolve_user(args.broadcaster, cid, token)
+        if not user:
+            raise SystemExit("Broadcaster not found")
+        broadcaster_id = user["id"]
+        log("Resolved broadcaster id: " + str(broadcaster_id), 2)
+        log("Fetching clips from Helix", 1)
+        clips = fetch_clips(
+            broadcaster_id=broadcaster_id,
+            client_id=cid,
+            token=token,
+            started_at=window[0],
+            ended_at=window[1],
+            max_clips=args.max_clips,
+        )
     log("Fetched " + str(len(clips)) + " raw clips", 2)
 
     # Filter by min views (reactionThreshold proxy)

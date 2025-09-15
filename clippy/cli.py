@@ -83,6 +83,13 @@ def parse_args() -> argparse.Namespace:
     g_nvenc.add_argument("--temporal-aq", type=str, help="NVENC temporal AQ enable (0/1)")
     g_nvenc.add_argument("--aq-strength", type=str, help="NVENC AQ strength 0-15")
 
+    # Discord mode
+    g_discord = p.add_argument_group("Discord integration")
+    g_discord.add_argument("--discord", action="store_true", help="Enable Discord mode: read clip links from a channel instead of Helix search")
+    g_discord.add_argument("--discord-channel-id", type=int, help="Discord channel ID to read from (else clippy.yaml discord.channel_id)")
+    g_discord.add_argument("--discord-token", type=str, help="Discord bot token (else DISCORD_TOKEN env or .env)")
+    g_discord.add_argument("--discord-limit", type=int, default=200, help="Number of recent messages to scan for clip links")
+
     # Misc
     g_misc = p.add_argument_group("Misc")
     g_misc.add_argument("-y", "--yes", action="store_true", help="Auto-confirm the settings prompt")

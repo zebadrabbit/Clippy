@@ -77,6 +77,13 @@ assets:
   # outro: [outro.mp4, outro_2.mp4]
   # transitions: [transition_01.mp4, transition_02.mp4, transition_03.mp4]
 
+discord:
+  # Optional: used when running with --discord
+  # Discord channel ID to read clip links from
+  channel_id: 000000000000000000
+  # How many recent messages to scan for clip links
+  message_limit: 200
+
 # Notes:
 # - Use TRANSITIONS_DIR env var to point to a custom transitions folder.
 # - Set CLIPPY_USE_INTERNAL=1 to prefer packaged internal transitions/static when available.

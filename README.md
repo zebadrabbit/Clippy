@@ -53,6 +53,12 @@ Confirm settings (default prompt) or skip with `-y`:
 python main.py --broadcaster somechannel -y
 ```
 
+- Discord integration (optional):
+  - Add DISCORD_TOKEN to .env and set discord.channel_id in clippy.yaml (or pass --discord-channel-id)
+  - python .\main.py --discord --discord-channel-id 123456789012345678 -y
+  - The tool will read recent messages in the channel, extract Twitch clip links, resolve them via Helix, and build compilations
+```
+
 Auto-expand lookback to gather more clips:
 ```powershell
 python main.py --broadcaster somechannel --auto-expand --expand-step-days 14 --max-lookback-days 180
