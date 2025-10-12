@@ -19,6 +19,7 @@ Defaults:
 The output video is encoded to match pipeline settings (H.264 NVENC if available, yuv420p, AAC audio, target FPS/res/bitrate),
 with -movflags +faststart when supported.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,19 +36,20 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from clippy.config import (
+    aq_strength,
+    audio_bitrate,
+    bitrate,
+    cq,
     ffmpeg,
     fps,
-    resolution,
-    bitrate,
-    audio_bitrate,
-    cq,
     gop,
+    nvenc_preset,
     rc_lookahead,
+    resolution,
     spatial_aq,
     temporal_aq,
-    aq_strength,
-    nvenc_preset,
 )
+
 # container flags may not be present in older configs
 try:
     from clippy.config import container_flags  # type: ignore
@@ -58,13 +60,15 @@ try:
 except Exception:
     audio_normalize_transitions = True
 
-from clippy.utils import resolve_transitions_dir, log
+from clippy.utils import log, resolve_transitions_dir
 
 
 def _run(cmd: str) -> Tuple[int, str]:
     try:
         proc = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out = (proc.stdout or b"").decode(errors="ignore") + (proc.stderr or b"").decode(errors="ignore")
+        out = (proc.stdout or b"").decode(errors="ignore") + (proc.stderr or b"").decode(
+            errors="ignore"
+        )
         return proc.returncode or 0, out
     except Exception as e:
         return 1, str(e)
@@ -148,7 +152,7 @@ def pick_output_name(tdir: str, kind: str, override: Optional[str]) -> str:
 
 def build_ffmpeg_cmd(src: str, dst: str, use_nvenc: bool, normalize_audio: bool) -> str:
     vcodec = "h264_nvenc" if use_nvenc else "libx264"
-    vrc = "-rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate}".format(cq=cq, bitrate=bitrate)
+    vrc = f"-rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate}"
     # libx264 doesn't support -rc vbr/-cq; map approximately to CRF
     if not use_nvenc:
         try:
@@ -160,12 +164,12 @@ def build_ffmpeg_cmd(src: str, dst: str, use_nvenc: bool, normalize_audio: bool)
     _af = " -af loudnorm=I=-16:TP=-1.5:LRA=11" if normalize_audio else ""
     cmd = (
         f'"{ffmpeg}" -y -i "{src}" '
-        f'-r {fps} -s {resolution} -sws_flags lanczos '
-        f'-c:v {vcodec} {vrc} '
-        f'-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} '
-        f'-spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} '
-        f'-pix_fmt yuv420p{_af} -c:a aac -b:a {audio_bitrate} '
-        f'{container_flags} -preset {nvenc_preset} '
+        f"-r {fps} -s {resolution} -sws_flags lanczos "
+        f"-c:v {vcodec} {vrc} "
+        f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} "
+        f"-spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
+        f"-pix_fmt yuv420p{_af} -c:a aac -b:a {audio_bitrate} "
+        f"{container_flags} -preset {nvenc_preset} "
         f'"{dst}"'
     )
     if not use_nvenc:
@@ -179,7 +183,9 @@ def build_ffmpeg_cmd(src: str, dst: str, use_nvenc: bool, normalize_audio: bool)
     return cmd
 
 
-def import_one(src: str, tdir: str, kind: str, name: Optional[str], overwrite: bool, normalize_audio: bool) -> Optional[str]:
+def import_one(
+    src: str, tdir: str, kind: str, name: Optional[str], overwrite: bool, normalize_audio: bool
+) -> Optional[str]:
     if not os.path.exists(src):
         log("Input not found: " + src, 5)
         return None
@@ -250,11 +256,20 @@ def import_one(src: str, tdir: str, kind: str, name: Optional[str], overwrite: b
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Normalize and import media to transitions directory")
     ap.add_argument("inputs", nargs="+", help="Input video file(s)")
-    ap.add_argument("--type", dest="kind", choices=["intro", "transition", "outro", "static"], help="Asset type (default inferred from filename)")
+    ap.add_argument(
+        "--type",
+        dest="kind",
+        choices=["intro", "transition", "outro", "static"],
+        help="Asset type (default inferred from filename)",
+    )
     ap.add_argument("--name", help="Output file name (mp4). If omitted, a smart name is chosen.")
     ap.add_argument("--transitions-dir", dest="tdir", help="Override transitions directory path")
     ap.add_argument("--overwrite", action="store_true", help="Overwrite existing output if present")
-    ap.add_argument("--no-audio-normalize", action="store_true", help="Disable loudness normalization on import (default enabled)")
+    ap.add_argument(
+        "--no-audio-normalize",
+        action="store_true",
+        help="Disable loudness normalization on import (default enabled)",
+    )
     return ap.parse_args()
 
 
@@ -270,13 +285,16 @@ def main() -> int:
         paths = []
         if any(ch in raw for ch in ("*", "?")):
             import glob
+
             paths = glob.glob(raw)
         else:
             paths = [raw]
         for src in paths:
             kind = args.kind or infer_type_from_name(src)
             # Default behavior follows config.audio_normalize_transitions unless overridden via CLI flag
-            normalize_audio = audio_normalize_transitions and (not getattr(args, 'no_audio_normalize', False))
+            normalize_audio = audio_normalize_transitions and (
+                not getattr(args, "no_audio_normalize", False)
+            )
             out = import_one(src, tdir, kind, args.name, args.overwrite, normalize_audio)
             if out:
                 results.append(out)

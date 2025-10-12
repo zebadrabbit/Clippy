@@ -9,11 +9,11 @@ Requirements:
 
 We use discord.py with a minimal Client and read channel history on_ready.
 """
+
 from __future__ import annotations
 
 import os
 import re
-import asyncio
 from typing import List, Tuple
 
 import discord
@@ -38,7 +38,9 @@ def extract_clip_ids_from_text(text: str) -> List[str]:
     return out
 
 
-async def fetch_recent_clip_ids(token: str, channel_id: int, limit: int = 200) -> Tuple[List[str], str]:
+async def fetch_recent_clip_ids(
+    token: str, channel_id: int, limit: int = 200
+) -> Tuple[List[str], str]:
     """Fetch recent messages from a channel and extract Twitch clip IDs.
 
     Returns a tuple of (ids, channel_display_name) where channel_display_name is
@@ -82,7 +84,9 @@ async def fetch_recent_clip_ids(token: str, channel_id: int, limit: int = 200) -
                 raise RuntimeError("Channel does not support history() (must be TextChannel)")
             try:
                 async for message in channel.history(limit=self._limit):
-                    self.ids.extend(extract_clip_ids_from_text(getattr(message, "content", "") or ""))
+                    self.ids.extend(
+                        extract_clip_ids_from_text(getattr(message, "content", "") or "")
+                    )
                     for att in getattr(message, "attachments", []) or []:
                         if getattr(att, "url", None):
                             self.ids.extend(extract_clip_ids_from_text(att.url))
@@ -112,7 +116,7 @@ def load_discord_token(arg_token: str | None = None) -> str:
     path = ".env"
     if os.path.isfile(path):
         try:
-            with open(path, "r", encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 for line in fh:
                     line = line.strip()
                     if not line or line.startswith("#"):
@@ -124,4 +128,6 @@ def load_discord_token(arg_token: str | None = None) -> str:
                         return v.strip().strip('"').strip("'")
         except Exception:
             pass
-    raise SystemExit("Missing Discord token: set DISCORD_TOKEN in env or .env, or provide --discord-token")
+    raise SystemExit(
+        "Missing Discord token: set DISCORD_TOKEN in env or .env, or provide --discord-token"
+    )

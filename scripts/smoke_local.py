@@ -13,12 +13,13 @@ Usage (PowerShell):
 
 This exercises Windows path quoting and shell invocation in ffmpeg calls.
 """
+
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import sys
-import argparse
 from pathlib import Path
 
 # Ensure project root is on sys.path when running from scripts/
@@ -30,18 +31,25 @@ if str(_ROOT) not in sys.path:
 
 def main():
     ap = argparse.ArgumentParser(description="Local pipeline smoke test (no Twitch)")
-    ap.add_argument("--overlay", action="store_true", help="Enable overlay stage (generates avatar.png)")
-    ap.add_argument("-y", "--yes", action="store_true", help="Suppress confirmations (unused, kept for consistency)")
+    ap.add_argument(
+        "--overlay", action="store_true", help="Enable overlay stage (generates avatar.png)"
+    )
+    ap.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Suppress confirmations (unused, kept for consistency)",
+    )
     args = ap.parse_args()
 
     # Prefer debug logging of actual ffmpeg commands
     os.environ["CLIPPY_DEBUG"] = os.environ.get("CLIPPY_DEBUG", "1")
 
     # Import after env tweaks
-    from clippy.config import cache, output
     from clippy import config as _cfg
+    from clippy.config import cache
+    from clippy.pipeline import process_clip, stage_two, write_concat_file
     from clippy.utils import log, resolve_transitions_dir
-    from clippy.pipeline import process_clip, write_concat_file, stage_two
 
     # Ensure required transitions/static.mp4 exists
     tdir = resolve_transitions_dir()
@@ -67,6 +75,7 @@ def main():
     if args.overlay:
         try:
             from PIL import Image, ImageDraw
+
             avatar = Image.new("RGBA", (128, 128), (0, 0, 0, 0))
             d = ImageDraw.Draw(avatar)
             d.ellipse((16, 16, 112, 112), fill=(255, 255, 255, 255))

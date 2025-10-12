@@ -1,22 +1,24 @@
 from __future__ import annotations
 
 import os
-import sys
 
 try:
     from yachalk import chalk  # type: ignore
 except Exception:  # pragma: no cover
+
     class _Plain:
         def __getattr__(self, name):
             return lambda s: s
+
     chalk = _Plain()  # type: ignore
 
 
 def enable_windows_vt() -> None:
-    if os.name != 'nt':
+    if os.name != "nt":
         return
     try:  # pragma: no cover
         import ctypes
+
         kernel32 = ctypes.windll.kernel32
         handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
         mode = ctypes.c_uint32()

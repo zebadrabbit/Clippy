@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Optional
 
 from clippy.theme import THEME, enable_windows_vt  # type: ignore
-
 
 _VT_ENABLED = False
 
@@ -25,7 +23,7 @@ def show_banner(force: bool = False):
       - CLIPPY_NO_BANNER=1 to disable
       - Skips if stdout is not a TTY unless force=True
     """
-    if os.environ.get('CLIPPY_NO_BANNER', '').strip() in ('1', 'true', 'yes'):
+    if os.environ.get("CLIPPY_NO_BANNER", "").strip() in ("1", "true", "yes"):
         return
     if not force and not sys.stdout.isatty():
         return
@@ -37,7 +35,7 @@ def show_banner(force: bool = False):
         r"_/ ___\|  | |  \____ \\____ <   |  |    \____ <   |  |",
         r"\  \___|  |_|  |  |_> >  |_> >___  |    |  |_> >___  |",
         r" \___  >____/__|   __/|   __// ____| /\ |   __// ____|",
-        r"     \/        |__|   |__|   \/      \/ |__|   \/     ",        
+        r"     \/        |__|   |__|   \/      \/ |__|   \/     ",
     ]
 
     # Colorize

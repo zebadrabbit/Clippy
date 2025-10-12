@@ -1,4 +1,21 @@
 # Changelog
+## 2025-10-12 — v0.3.6
+
+- Wizard — Configure intros/outros
+  - The setup wizard now prompts for `assets.intro` and `assets.outro` filenames (relative to your transitions directory).
+  - Press Enter to keep existing values; enter `-` or `none` to clear the list. Values are merged into `clippy.yaml`.
+  - Files: `scripts/setup_wizard.py`, `clippy/config_loader.py` (already supports `assets.intro/outro`).
+
+- Docs — README updates
+  - Document how to configure intros/outros via the wizard, YAML, and per-run CLI overrides.
+  - Clarify transitions folder usage and overrides.
+  - Files: `README.md`.
+
+- Tooling — Pre-commit baseline green
+  - Black + Ruff hooks added and passing; minor lint fixes (unused/ambiguous vars) in `main.py` and `clippy/pipeline.py`.
+  - Files: `.pre-commit-config.yaml`, `pyproject.toml`, `main.py`, `clippy/pipeline.py`.
+
+All notable changes to this project are documented here. Dates are in YYYY-MM-DD and entries are grouped by date (newest first).
 ## 2025-09-14 — v0.3.5
 
 - Feature — Discord mode UX and summaries

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 from typing import Any, Dict
 
@@ -20,17 +19,14 @@ DEFAULTS: Dict[str, Any] = {
     "amountOfClips": 12,
     "amountOfCompilations": 2,
     "reactionThreshold": 1,
-
     # Sequencing
     "transition_probability": 0.35,
     "no_random_transitions": False,
     "transitions_weights": {},
     "transition_cooldown": 1,
-
     # Audio policy for non-clip assets
     "audio_normalize_transitions": True,
     "silence_static": False,
-
     # Encoding
     "bitrate": "12M",
     "audio_bitrate": "192k",
@@ -43,7 +39,6 @@ DEFAULTS: Dict[str, Any] = {
     "aq_strength": "8",
     "spatial_aq": "1",
     "temporal_aq": "1",
-
     # Paths & behavior
     "cache": "./cache",
     "output": "./output",
@@ -52,7 +47,6 @@ DEFAULTS: Dict[str, Any] = {
     "rebuild": False,
     "enable_overlay": True,
     "transitions_rebuild": False,
-
     # Assets & overlay
     "fontfile": "assets/fonts/Roboto-Medium.ttf",
     "static": "static.mp4",
@@ -66,12 +60,10 @@ DEFAULTS: Dict[str, Any] = {
         "transition_07.mp4",
         "transition_08.mp4",
     ],
-
     # Container & yt-dlp
     "container_ext": "mp4",
     "container_flags": "-movflags +faststart",
     "yt_format": "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]",
-
     # Discord (optional)
     "discord_channel_id": None,
     "discord_message_limit": 200,
@@ -98,8 +90,10 @@ def _coerce_bool(v: Any, default: bool) -> bool:
         return v
     if isinstance(v, str):
         s = v.strip().lower()
-        if s in ("1", "true", "yes", "y", "on"): return True
-        if s in ("0", "false", "no", "n", "off"): return False
+        if s in ("1", "true", "yes", "y", "on"):
+            return True
+        if s in ("0", "false", "no", "n", "off"):
+            return False
     return default
 
 
@@ -145,7 +139,11 @@ def _coerce_dict_float(v: Any, default: dict[str, float]) -> dict[str, float]:
     return default
 
 
-def load_merged_config(defaults: dict[str, Any] | None = None, env: dict[str, str] | None = None, file_path: str | None = None) -> dict[str, Any]:
+def load_merged_config(
+    defaults: dict[str, Any] | None = None,
+    env: dict[str, str] | None = None,
+    file_path: str | None = None,
+) -> dict[str, Any]:
     """Merge config from YAML (if exists) and environment onto defaults.
 
     - defaults: dict of baseline values (from config.py constants)
@@ -164,7 +162,7 @@ def load_merged_config(defaults: dict[str, Any] | None = None, env: dict[str, st
     seq = data.get("sequencing", {}) if isinstance(data, dict) else {}
     aud = data.get("audio", {}) if isinstance(data, dict) else {}
     enc = data.get("encoding", {}) if isinstance(data, dict) else {}
-    nv  = enc.get("nvenc", {}) if isinstance(enc, dict) else {}
+    nv = enc.get("nvenc", {}) if isinstance(enc, dict) else {}
     paths = data.get("paths", {}) if isinstance(data, dict) else {}
     beh = data.get("behavior", {}) if isinstance(data, dict) else {}
     assets = data.get("assets", {}) if isinstance(data, dict) else {}
@@ -172,25 +170,45 @@ def load_merged_config(defaults: dict[str, Any] | None = None, env: dict[str, st
     discord = data.get("discord", {}) if isinstance(data, dict) else {}
 
     # Map fields to existing names
-    merged["amountOfClips"] = _coerce_int(sel.get("clips_per_compilation"), merged.get("amountOfClips"))
-    merged["amountOfCompilations"] = _coerce_int(sel.get("compilations"), merged.get("amountOfCompilations"))
+    merged["amountOfClips"] = _coerce_int(
+        sel.get("clips_per_compilation"), merged.get("amountOfClips")
+    )
+    merged["amountOfCompilations"] = _coerce_int(
+        sel.get("compilations"), merged.get("amountOfCompilations")
+    )
     merged["reactionThreshold"] = _coerce_int(sel.get("min_views"), merged.get("reactionThreshold"))
 
-    merged["transition_probability"] = float(_coerce_float(seq.get("transition_probability"), merged.get("transition_probability", 0.35)))
-    merged["no_random_transitions"] = _coerce_bool(seq.get("no_random_transitions"), merged.get("no_random_transitions", False))
-    merged["transitions_weights"] = _coerce_dict_float(seq.get("transitions_weights"), merged.get("transitions_weights", {}))
-    merged["transition_cooldown"] = _coerce_int(seq.get("transition_cooldown"), merged.get("transition_cooldown", 0))
+    merged["transition_probability"] = float(
+        _coerce_float(seq.get("transition_probability"), merged.get("transition_probability", 0.35))
+    )
+    merged["no_random_transitions"] = _coerce_bool(
+        seq.get("no_random_transitions"), merged.get("no_random_transitions", False)
+    )
+    merged["transitions_weights"] = _coerce_dict_float(
+        seq.get("transitions_weights"), merged.get("transitions_weights", {})
+    )
+    merged["transition_cooldown"] = _coerce_int(
+        seq.get("transition_cooldown"), merged.get("transition_cooldown", 0)
+    )
 
-    merged["silence_static"] = _coerce_bool(aud.get("silence_static"), merged.get("silence_static", False))
-    merged["audio_normalize_transitions"] = _coerce_bool(aud.get("audio_normalize_transitions"), merged.get("audio_normalize_transitions", True))
+    merged["silence_static"] = _coerce_bool(
+        aud.get("silence_static"), merged.get("silence_static", False)
+    )
+    merged["audio_normalize_transitions"] = _coerce_bool(
+        aud.get("audio_normalize_transitions"), merged.get("audio_normalize_transitions", True)
+    )
 
     merged["bitrate"] = _coerce_str(enc.get("bitrate"), merged.get("bitrate"))
     merged["audio_bitrate"] = _coerce_str(enc.get("audio_bitrate"), merged.get("audio_bitrate"))
     merged["fps"] = _coerce_str(enc.get("fps"), merged.get("fps"))
     merged["resolution"] = _coerce_str(enc.get("resolution"), merged.get("resolution"))
     merged["yt_format"] = _coerce_str(enc.get("yt_format"), merged.get("yt_format"))
-    merged["container_ext"] = _coerce_str(enc.get("container_ext"), merged.get("container_ext", "mp4"))
-    merged["container_flags"] = _coerce_str(enc.get("container_flags"), merged.get("container_flags", "-movflags +faststart"))
+    merged["container_ext"] = _coerce_str(
+        enc.get("container_ext"), merged.get("container_ext", "mp4")
+    )
+    merged["container_flags"] = _coerce_str(
+        enc.get("container_flags"), merged.get("container_flags", "-movflags +faststart")
+    )
 
     merged["nvenc_preset"] = _coerce_str(nv.get("preset"), merged.get("nvenc_preset"))
     merged["cq"] = _coerce_str(nv.get("cq"), merged.get("cq"))
@@ -203,27 +221,44 @@ def load_merged_config(defaults: dict[str, Any] | None = None, env: dict[str, st
     merged["cache"] = _coerce_str(paths.get("cache"), merged.get("cache"))
     merged["output"] = _coerce_str(paths.get("output"), merged.get("output"))
 
-    merged["max_concurrency"] = _coerce_int(beh.get("max_concurrency"), merged.get("max_concurrency", 4))
-    merged["skip_bad_clip"] = _coerce_bool(beh.get("skip_bad_clip"), merged.get("skip_bad_clip", True))
+    merged["max_concurrency"] = _coerce_int(
+        beh.get("max_concurrency"), merged.get("max_concurrency", 4)
+    )
+    merged["skip_bad_clip"] = _coerce_bool(
+        beh.get("skip_bad_clip"), merged.get("skip_bad_clip", True)
+    )
     merged["rebuild"] = _coerce_bool(beh.get("rebuild"), merged.get("rebuild", False))
-    merged["enable_overlay"] = _coerce_bool(beh.get("enable_overlay"), merged.get("enable_overlay", True))
-    merged["transitions_rebuild"] = _coerce_bool(beh.get("transitions_rebuild"), merged.get("transitions_rebuild", False))
+    merged["enable_overlay"] = _coerce_bool(
+        beh.get("enable_overlay"), merged.get("enable_overlay", True)
+    )
+    merged["transitions_rebuild"] = _coerce_bool(
+        beh.get("transitions_rebuild"), merged.get("transitions_rebuild", False)
+    )
 
     merged["static"] = _coerce_str(assets.get("static"), merged.get("static"))
     merged["intro"] = _coerce_list_str(assets.get("intro"), merged.get("intro", []))
     merged["outro"] = _coerce_list_str(assets.get("outro"), merged.get("outro", []))
-    merged["transitions"] = _coerce_list_str(assets.get("transitions"), merged.get("transitions", []))
+    merged["transitions"] = _coerce_list_str(
+        assets.get("transitions"), merged.get("transitions", [])
+    )
 
     # Identity
-    merged["default_broadcaster"] = _coerce_str(identity.get("broadcaster"), merged.get("default_broadcaster", ""))
+    merged["default_broadcaster"] = _coerce_str(
+        identity.get("broadcaster"), merged.get("default_broadcaster", "")
+    )
 
     # Discord
     try:
         ch_val = discord.get("channel_id") if isinstance(discord, dict) else None
-        merged["discord_channel_id"] = int(ch_val) if ch_val is not None else merged.get("discord_channel_id")
+        merged["discord_channel_id"] = (
+            int(ch_val) if ch_val is not None else merged.get("discord_channel_id")
+        )
     except Exception:
         pass
-    merged["discord_message_limit"] = _coerce_int(discord.get("message_limit") if isinstance(discord, dict) else None, merged.get("discord_message_limit", 200))
+    merged["discord_message_limit"] = _coerce_int(
+        discord.get("message_limit") if isinstance(discord, dict) else None,
+        merged.get("discord_message_limit", 200),
+    )
 
     # Environment overrides (non-secret convenience)
     if env.get("TRANSITIONS_DIR"):

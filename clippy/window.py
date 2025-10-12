@@ -20,7 +20,9 @@ def _parse_simple_date(s: str) -> datetime:
     raise ValueError(f"Invalid date format: {s}. Use MM/DD/YYYY.")
 
 
-def resolve_date_window(start_str: Optional[str], end_str: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+def resolve_date_window(
+    start_str: Optional[str], end_str: Optional[str]
+) -> Tuple[Optional[str], Optional[str]]:
     """Convert simple date inputs to RFC3339 (ISO8601) strings for Helix.
 
     Start becomes 00:00:00Z; end becomes 23:59:59Z of that date.
@@ -31,7 +33,11 @@ def resolve_date_window(start_str: Optional[str], end_str: Optional[str]) -> Tup
         # default window: last 3 days up to now (inclusive)
         now = datetime.now(timezone.utc).date()
         start_date = now - timedelta(days=3)
-        start_iso = datetime(start_date.year, start_date.month, start_date.day, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+        start_iso = (
+            datetime(start_date.year, start_date.month, start_date.day, tzinfo=timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
         end_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         return start_iso, end_iso
     start_iso = end_iso = None
@@ -49,11 +55,17 @@ def resolve_date_window(start_str: Optional[str], end_str: Optional[str]) -> Tup
     return start_iso, end_iso
 
 
-def summarize(cfg, resolved_window: Tuple[Optional[str], Optional[str]], resolution: Optional[str], container_ext: str, bitrate: Optional[str]):
+def summarize(
+    cfg,
+    resolved_window: Tuple[Optional[str], Optional[str]],
+    resolution: Optional[str],
+    container_ext: str,
+    bitrate: Optional[str],
+):
     start_iso, end_iso = resolved_window
     log("Broadcaster: " + str(cfg.broadcaster), 1)
     if start_iso or end_iso:
-        log("Time Window: " + (start_iso or 'ANY') + " -> " + (end_iso or 'NOW'), 1)
+        log("Time Window: " + (start_iso or "ANY") + " -> " + (end_iso or "NOW"), 1)
     else:
         log("Time Window: ANY", 1)
     log("Max Clips Fetch: " + str(cfg.max_clips), 1)
@@ -61,7 +73,12 @@ def summarize(cfg, resolved_window: Tuple[Optional[str], Optional[str]], resolut
         _tot = int(getattr(cfg, "amountOfCompilations")) * int(getattr(cfg, "amountOfClips"))
     except Exception:
         _tot = None
-    msg = "Compilations: " + str(cfg.amountOfCompilations) + " | Clips each: " + str(cfg.amountOfClips)
+    msg = (
+        "Compilations: "
+        + str(cfg.amountOfCompilations)
+        + " | Clips each: "
+        + str(cfg.amountOfClips)
+    )
     if _tot is not None:
         msg += " (" + str(_tot) + " total)"
     log(msg, 1)

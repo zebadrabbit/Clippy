@@ -1,0 +1,43 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.8.0
+    hooks:
+      - id: black
+        name: black (python formatter)
+        language_version: python3.12
+        args: ["--line-length=100"]
+        exclude: |
+          (?x)^(
+            bin/|
+            cache/|
+            output/|
+            assets/|
+            transitions/|
+            docs/
+          )
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        name: ruff (lint)
+        args: ["--fix"]
+        exclude: |
+          (?x)^(\
+            bin/|\
+            cache/|\
+            output/|\
+            assets/|\
+            transitions/|\
+            docs/\
+          )
+      - id: ruff-format
+        name: ruff (format)
+        exclude: |
+          (?x)^(\
+            bin/|\
+            cache/|\
+            output/|\
+            assets/|\
+            transitions/|\
+            docs/\
+          )

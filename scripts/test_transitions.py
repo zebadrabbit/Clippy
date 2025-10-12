@@ -3,15 +3,30 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+import sys
 from typing import List, Tuple
 
-import sys
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from clippy.config import ffmpeg, ffprobe, cache, fps, resolution, bitrate, audio_bitrate, cq, gop, rc_lookahead, spatial_aq, temporal_aq, aq_strength, nvenc_preset
+from clippy.config import (
+    aq_strength,
+    audio_bitrate,
+    bitrate,
+    cache,
+    cq,
+    ffmpeg,
+    ffprobe,
+    fps,
+    gop,
+    nvenc_preset,
+    rc_lookahead,
+    resolution,
+    spatial_aq,
+    temporal_aq,
+)
 from clippy.utils import log, resolve_transitions_dir
 
 
@@ -25,13 +40,26 @@ def run(cmd: List[str]) -> Tuple[int, bytes, bytes]:
 
 
 def probe_has_audio(path: str) -> bool:
-    rc, _out, _err = run([ffprobe, "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0", path])
+    rc, _out, _err = run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=codec_type",
+            "-of",
+            "csv=p=0",
+            path,
+        ]
+    )
     return rc == 0 and (_out.strip() != b"")
 
 
 def decode_check(path: str) -> Tuple[bool, str]:
     rc, _out, _err = run([ffmpeg, "-v", "error", "-xerror", "-i", path, "-f", "null", "-"])
-    ok = (rc == 0)
+    ok = rc == 0
     return ok, _err.decode("utf-8", errors="ignore")
 
 
@@ -44,25 +72,132 @@ def normalize_asset(src: str, dst: str, loudnorm: bool = True):
     af = ["-af", "loudnorm=I=-16:TP=-1.5:LRA=11"] if loudnorm else []
     if probe_has_audio(src):
         cmd = [
-            ffmpeg, "-y", "-i", src,
-            "-r", str(fps), "-s", str(resolution), "-sws_flags", "lanczos",
-            "-c:v", "h264_nvenc", "-rc", "vbr", "-cq", str(cq), "-b:v", "0", "-maxrate", str(bitrate), "-bufsize", str(bitrate),
-            "-profile:v", "high", "-level", "4.2", "-g", str(gop), "-bf", "3", "-rc-lookahead", str(rc_lookahead),
-            "-spatial_aq", str(spatial_aq), "-aq-strength", str(aq_strength), "-temporal-aq", str(temporal_aq),
-            "-pix_fmt", "yuv420p", *af, "-c:a", "aac", "-b:a", str(audio_bitrate), "-ar", "48000", "-ac", "2",
-            "-movflags", "+faststart", "-preset", str(nvenc_preset), "-loglevel", "error", "-stats", dst,
+            ffmpeg,
+            "-y",
+            "-i",
+            src,
+            "-r",
+            str(fps),
+            "-s",
+            str(resolution),
+            "-sws_flags",
+            "lanczos",
+            "-c:v",
+            "h264_nvenc",
+            "-rc",
+            "vbr",
+            "-cq",
+            str(cq),
+            "-b:v",
+            "0",
+            "-maxrate",
+            str(bitrate),
+            "-bufsize",
+            str(bitrate),
+            "-profile:v",
+            "high",
+            "-level",
+            "4.2",
+            "-g",
+            str(gop),
+            "-bf",
+            "3",
+            "-rc-lookahead",
+            str(rc_lookahead),
+            "-spatial_aq",
+            str(spatial_aq),
+            "-aq-strength",
+            str(aq_strength),
+            "-temporal-aq",
+            str(temporal_aq),
+            "-pix_fmt",
+            "yuv420p",
+            *af,
+            "-c:a",
+            "aac",
+            "-b:a",
+            str(audio_bitrate),
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-movflags",
+            "+faststart",
+            "-preset",
+            str(nvenc_preset),
+            "-loglevel",
+            "error",
+            "-stats",
+            dst,
         ]
     else:
         # synthesize clean stereo audio when missing
         cmd = [
-            ffmpeg, "-y", "-i", src, "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
-            "-map", "0:v", "-map", "1:a",
-            "-r", str(fps), "-s", str(resolution), "-sws_flags", "lanczos",
-            "-c:v", "h264_nvenc", "-rc", "vbr", "-cq", str(cq), "-b:v", "0", "-maxrate", str(bitrate), "-bufsize", str(bitrate),
-            "-profile:v", "high", "-level", "4.2", "-g", str(gop), "-bf", "3", "-rc-lookahead", str(rc_lookahead),
-            "-spatial_aq", str(spatial_aq), "-aq-strength", str(aq_strength), "-temporal-aq", str(temporal_aq),
-            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", str(audio_bitrate), "-ar", "48000", "-ac", "2", "-shortest",
-            "-movflags", "+faststart", "-preset", str(nvenc_preset), "-loglevel", "error", "-stats", dst,
+            ffmpeg,
+            "-y",
+            "-i",
+            src,
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=channel_layout=stereo:sample_rate=48000",
+            "-map",
+            "0:v",
+            "-map",
+            "1:a",
+            "-r",
+            str(fps),
+            "-s",
+            str(resolution),
+            "-sws_flags",
+            "lanczos",
+            "-c:v",
+            "h264_nvenc",
+            "-rc",
+            "vbr",
+            "-cq",
+            str(cq),
+            "-b:v",
+            "0",
+            "-maxrate",
+            str(bitrate),
+            "-bufsize",
+            str(bitrate),
+            "-profile:v",
+            "high",
+            "-level",
+            "4.2",
+            "-g",
+            str(gop),
+            "-bf",
+            "3",
+            "-rc-lookahead",
+            str(rc_lookahead),
+            "-spatial_aq",
+            str(spatial_aq),
+            "-aq-strength",
+            str(aq_strength),
+            "-temporal-aq",
+            str(temporal_aq),
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            str(audio_bitrate),
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-shortest",
+            "-movflags",
+            "+faststart",
+            "-preset",
+            str(nvenc_preset),
+            "-loglevel",
+            "error",
+            "-stats",
+            dst,
         ]
     rc, _out, _err = run(cmd)
     return rc == 0, _err.decode("utf-8", errors="ignore")
@@ -73,8 +208,10 @@ def build_concat_and_check(norm_dir: str, names: List[str]) -> Tuple[bool, str]:
     concat_path = os.path.join(cache, "trans_test_concat")
     static_name = "static.mp4"
     lines: List[str] = []
+
     def _add(n: str):
         lines.append(f"file _trans/{n}")
+
     # simple ordering: intros -> static -> others -> static -> outros
     intros = [n for n in names if n.lower().startswith("intro")]
     outros = [n for n in names if n.lower().startswith("outro")]
@@ -92,17 +229,44 @@ def build_concat_and_check(norm_dir: str, names: List[str]) -> Tuple[bool, str]:
         _add(n)
     with open(concat_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
-    rc, _out, _err = run([ffmpeg, "-v", "error", "-f", "concat", "-safe", "0", "-i", concat_path, "-map", "0:a", "-f", "null", "-"])
-    ok = (rc == 0 and _err.decode("utf-8", errors="ignore").strip() == "")
+    rc, _out, _err = run(
+        [
+            ffmpeg,
+            "-v",
+            "error",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            concat_path,
+            "-map",
+            "0:a",
+            "-f",
+            "null",
+            "-",
+        ]
+    )
+    ok = rc == 0 and _err.decode("utf-8", errors="ignore").strip() == ""
     return ok, _err.decode("utf-8", errors="ignore")
 
 
 def main():
     ap = argparse.ArgumentParser(description="Probe/validate all transition files")
-    ap.add_argument("--normalize", action="store_true", help="Create normalized copies in cache/_trans")
-    ap.add_argument("--rebuild", action="store_true", help="Force re-normalize even if outputs exist")
-    ap.add_argument("--no-audnorm", action="store_true", help="Disable loudness normalization when normalizing")
-    ap.add_argument("--concat-audio-check", action="store_true", help="Build a concat list and run audio-only decode check across all normalized assets")
+    ap.add_argument(
+        "--normalize", action="store_true", help="Create normalized copies in cache/_trans"
+    )
+    ap.add_argument(
+        "--rebuild", action="store_true", help="Force re-normalize even if outputs exist"
+    )
+    ap.add_argument(
+        "--no-audnorm", action="store_true", help="Disable loudness normalization when normalizing"
+    )
+    ap.add_argument(
+        "--concat-audio-check",
+        action="store_true",
+        help="Build a concat list and run audio-only decode check across all normalized assets",
+    )
     args = ap.parse_args()
 
     tdir = resolve_transitions_dir()

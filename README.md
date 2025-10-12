@@ -111,6 +111,20 @@ Sections include: Required, Window & selection, Output & formatting, Transitions
 - Sequence: random(optional intro) → static → clip → static → random_chance(transition → static) … → random(optional outro)
 - All non-clip assets are normalized to `cache/_trans` on first use to ensure uniform codecs and audio (48 kHz stereo). You can force a rebuild with `--rebuild-transitions`.
 
+### Intro/Outro configuration
+- Where they live: filenames are relative to your transitions folder (default `transitions/`, or whatever you set with `--transitions-dir` or the TRANSITIONS_DIR env var).
+- Configure via the wizard: re-run `python .\\scripts\\setup_wizard.py` and enter comma-separated lists when prompted (e.g., `intro.mp4` or `introA.mp4, introB.mp4`). Press Enter to keep existing values, or enter `-`/`none` to clear the list.
+- Configure via YAML: edit `clippy.yaml` under the `assets` section:
+
+  assets:
+    static: static.mp4
+    intro:
+      - intro.mp4
+    outro:
+      - outro.mp4
+
+- Override per-run: use `--intro` or `--outro` to force a single file for that run, and `--transition` to force the transition choice when selected. Random transitions still obey `--transition-prob` and `--no-random-transitions`.
+
 ### Internal data and ENV
 
 - `static.mp4` is REQUIRED. Place it under `transitions/` or point TRANSITIONS_DIR to a folder that contains it.

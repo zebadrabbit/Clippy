@@ -24,9 +24,9 @@ if ROOT not in sys.path:
 
 BASE_DIR = ROOT
 
-from clippy.config import youtubeDl, ffmpeg, cache, output, fontfile  # noqa: E402
+from clippy.config import cache, ffmpeg, fontfile, output, youtubeDl  # noqa: E402
+from clippy.theme import enable_windows_vt, paint, status_tag  # type: ignore  # noqa: E402
 from clippy.utils import resolve_transitions_dir  # noqa: E402
-from clippy.theme import enable_windows_vt, status_tag, THEME, paint  # type: ignore  # noqa: E402
 
 
 def _resolve_exe(name_or_path: str) -> str | None:
@@ -48,7 +48,9 @@ def _run(cmd: list[str] | str) -> tuple[int, str]:
             proc = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         else:
             proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out = (proc.stdout or b"").decode(errors="ignore") + (proc.stderr or b"").decode(errors="ignore")
+        out = (proc.stdout or b"").decode(errors="ignore") + (proc.stderr or b"").decode(
+            errors="ignore"
+        )
         return proc.returncode or 0, out
     except Exception as e:
         return 1, str(e)
@@ -91,7 +93,9 @@ def check_ffmpeg_features(ffmpeg_path: str) -> None:
     if code == 0 and ("h264_nvenc" in enc):
         print(f"{status_tag('OK')} NVENC encoder available: h264_nvenc")
     else:
-        print(f"{status_tag('WARN')} NVENC encoder (h264_nvenc) not found; CPU libx264 will be used if configured")
+        print(
+            f"{status_tag('WARN')} NVENC encoder (h264_nvenc) not found; CPU libx264 will be used if configured"
+        )
 
 
 def check_python_packages() -> None:
@@ -112,7 +116,9 @@ def check_python_packages() -> None:
         __import__("discord")
         print(f"{status_tag('OK')} Python package: discord.py (optional)")
     except Exception:
-        print(f"{status_tag('INFO')} Python package: discord.py not installed (Discord mode optional)")
+        print(
+            f"{status_tag('INFO')} Python package: discord.py not installed (Discord mode optional)"
+        )
 
 
 def check_dirs_and_assets(ffmpeg_path: str | None) -> None:
@@ -121,7 +127,9 @@ def check_dirs_and_assets(ffmpeg_path: str | None) -> None:
         if os.path.isdir(d):
             print(f"{status_tag('OK')} {label} dir present: {paint(os.path.abspath(d), 'gray')}")
         else:
-            print(f"{status_tag('WARN')} {label} dir missing (will be created on run): {paint(os.path.abspath(d), 'gray')}")
+            print(
+                f"{status_tag('WARN')} {label} dir missing (will be created on run): {paint(os.path.abspath(d), 'gray')}"
+            )
     # transitions folder and static.mp4 (use resolver)
     tdir = os.path.abspath(resolve_transitions_dir())
     if os.path.isdir(tdir):
@@ -136,31 +144,41 @@ def check_dirs_and_assets(ffmpeg_path: str | None) -> None:
     # counts for intros/outros/transitions and probability
     try:
         import clippy.config as _cfg
+
         def _count(names: list[str]) -> int:
             c = 0
-            for n in (names or []):
+            for n in names or []:
                 if os.path.exists(os.path.join(tdir, n)):
                     c += 1
             return c
-        _intro_cnt = _count(getattr(_cfg, 'intro', []))
-        _outro_cnt = _count(getattr(_cfg, 'outro', []))
-        _trans_cnt = _count(getattr(_cfg, 'transitions', []))
-        _prob = getattr(_cfg, 'transition_probability', 0.35)
-        _norand = getattr(_cfg, 'no_random_transitions', False)
-        _weights = getattr(_cfg, 'transitions_weights', {})
-        _cooldown = getattr(_cfg, 'transition_cooldown', 0)
-        print(f"{status_tag('INFO')} transitions: intro={_intro_cnt}, transitions={_trans_cnt}, outro={_outro_cnt}, prob={_prob}{' (disabled)' if _norand else ''}")
+
+        _intro_cnt = _count(getattr(_cfg, "intro", []))
+        _outro_cnt = _count(getattr(_cfg, "outro", []))
+        _trans_cnt = _count(getattr(_cfg, "transitions", []))
+        _prob = getattr(_cfg, "transition_probability", 0.35)
+        _norand = getattr(_cfg, "no_random_transitions", False)
+        _weights = getattr(_cfg, "transitions_weights", {})
+        _cooldown = getattr(_cfg, "transition_cooldown", 0)
+        print(
+            f"{status_tag('INFO')} transitions: intro={_intro_cnt}, transitions={_trans_cnt}, outro={_outro_cnt}, prob={_prob}{' (disabled)' if _norand else ''}"
+        )
         if _weights:
             print(f"{status_tag('INFO')} transition weights: {paint(str(_weights), 'gray')}")
         if _cooldown:
             print(f"{status_tag('INFO')} transition cooldown: {_cooldown}")
-        _sil_st = getattr(_cfg, 'silence_static', False)
-        _aud_norm = getattr(_cfg, 'audio_normalize_transitions', True)
-        print(f"{status_tag('INFO')} audio: normalize_transitions={_aud_norm}, silence_static={_sil_st}")
+        _sil_st = getattr(_cfg, "silence_static", False)
+        _aud_norm = getattr(_cfg, "audio_normalize_transitions", True)
+        print(
+            f"{status_tag('INFO')} audio: normalize_transitions={_aud_norm}, silence_static={_sil_st}"
+        )
     except Exception:
         pass
     # font
-    font_abs = os.path.abspath(os.path.join(BASE_DIR, fontfile)) if not os.path.isabs(fontfile) else fontfile
+    font_abs = (
+        os.path.abspath(os.path.join(BASE_DIR, fontfile))
+        if not os.path.isabs(fontfile)
+        else fontfile
+    )
     if os.path.exists(font_abs):
         print(f"{status_tag('OK')} font present: {paint(font_abs, 'gray')}")
     else:
@@ -170,12 +188,12 @@ def check_dirs_and_assets(ffmpeg_path: str | None) -> None:
 def _parse_env_file(path: str) -> dict[str, str]:
     data: dict[str, str] = {}
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             for raw in f:
                 line = raw.strip()
-                if not line or line.startswith('#') or '=' not in line:
+                if not line or line.startswith("#") or "=" not in line:
                     continue
-                k, v = line.split('=', 1)
+                k, v = line.split("=", 1)
                 k = k.strip()
                 v = v.strip().strip('"').strip("'")
                 if k:
@@ -218,7 +236,9 @@ def check_twitch_creds() -> None:
                     missing.append("TWITCH_CLIENT_ID")
                 if not sec:
                     missing.append("TWITCH_CLIENT_SECRET")
-                print(f"{status_tag('WARN')} .env present but missing: {', '.join(missing)} ({paint(p, 'gray')})")
+                print(
+                    f"{status_tag('WARN')} .env present but missing: {', '.join(missing)} ({paint(p, 'gray')})"
+                )
 
     if env_ok:
         print(f"{status_tag('OK')} Twitch credentials present in environment")
@@ -229,7 +249,12 @@ def check_twitch_creds() -> None:
             print(f"{status_tag('INFO')} .env not found and environment variables not set.")
         else:
             print(f"{status_tag('INFO')} Twitch credentials not found in environment.")
-        print(paint("       Create at https://dev.twitch.tv/console/apps and set TWITCH_CLIENT_ID/SECRET", 'gray'))
+        print(
+            paint(
+                "       Create at https://dev.twitch.tv/console/apps and set TWITCH_CLIENT_ID/SECRET",
+                "gray",
+            )
+        )
 
 
 def main():
@@ -245,5 +270,5 @@ def main():
     sys.exit(0 if ok else 1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

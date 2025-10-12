@@ -5,14 +5,18 @@ Validate that a concat file follows the sequencing:
 Usage:
   python scripts/check_sequencing.py --comp d:\\Clippy\\cache\\comp0 --transitions-dir d:\\Clippy\\transitions
 """
+
 from __future__ import annotations
-import argparse, os, re, sys
+
+import argparse
+import re
+import sys
 
 CLIP_RE = re.compile(r"^file\s+(?P<id>[^/\\]+)/(?P=id)\.mp4\s*$")
 
 
 def parse_lines(path: str) -> list[str]:
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return [ln.strip() for ln in f if ln.strip()]
 
 
@@ -56,7 +60,11 @@ def main():
 
     def _is_static(line: str) -> bool:
         p = _norm_path(line)
-        return p.endswith("/" + args.static) or p.endswith("\\" + args.static) or p.endswith(args.static)
+        return (
+            p.endswith("/" + args.static)
+            or p.endswith("\\" + args.static)
+            or p.endswith(args.static)
+        )
 
     def _is_clip(line: str) -> bool:
         """Clips are of form '<id>/<id>.mp4' and not under transitions dirs.
@@ -108,7 +116,7 @@ def main():
         # optional transition + static between clips
         if idx < n and is_trans(lines[idx]) and not _is_static(lines[idx]):
             # If there are no more clips ahead, treat this as an outro handled after the loop
-            if not any(_is_clip(ln) for ln in lines[idx + 1:]):
+            if not any(_is_clip(ln) for ln in lines[idx + 1 :]):
                 break
             idx += 1
             if idx >= n or not _is_static(lines[idx]):

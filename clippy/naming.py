@@ -4,12 +4,12 @@ import os
 import re
 import shutil
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional, Tuple
 
 
 def sanitize_filename(s: str) -> str:
-    return re.sub(r'[^A-Za-z0-9._-]+', '_', s)[:80]
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", s)[:80]
 
 
 def ensure_unique_names(base_names: List[str], out_dir: str, overwrite: bool) -> List[str]:
@@ -45,31 +45,42 @@ def ensure_unique_names(base_names: List[str], out_dir: str, overwrite: bool) ->
     return result
 
 
-def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str]], compilation_count: int, keep_cache: bool, final_names: Optional[List[str]] = None, overwrite_output: bool = False, purge_cache: bool = False) -> List[str]:
+def finalize_outputs(
+    broadcaster: str,
+    window: Tuple[Optional[str], Optional[str]],
+    compilation_count: int,
+    keep_cache: bool,
+    final_names: Optional[List[str]] = None,
+    overwrite_output: bool = False,
+    purge_cache: bool = False,
+) -> List[str]:
     """Move compiled files from cache to output with improved naming then optionally clean cache."""
     # Import late to avoid circulars
     from clippy.config import cache, output
     from clippy.utils import log  # local import to avoid circular
+
     log("Finalizing outputs", 1)
     try:
-        b_name = sanitize_filename(broadcaster.lower()) or 'broadcaster'
+        b_name = sanitize_filename(broadcaster.lower()) or "broadcaster"
         start_iso, end_iso = window
+
         # derive date segment
         def _date_part(iso_str: Optional[str]) -> Optional[str]:
             if not iso_str:
                 return None
-            return iso_str.split('T', 1)[0]
+            return iso_str.split("T", 1)[0]
+
         if start_iso or end_iso:
-            s_part = _date_part(start_iso) or 'unknown'
+            s_part = _date_part(start_iso) or "unknown"
             e_part = _date_part(end_iso) or s_part
             date_range = f"{s_part}_to_{e_part}"
         else:
-            date_range = datetime.utcnow().strftime('%Y-%m-%d')
+            date_range = datetime.utcnow().strftime("%Y-%m-%d")
         # Determine container extension used by ffmpeg for cache outputs
         try:
             from clippy.config import container_ext as _ext_cfg
         except Exception:
-            _ext_cfg = 'mp4'
+            _ext_cfg = "mp4"
         # Use provided final names (preferred), else derive from broadcaster/date
         if final_names is None:
             final_names = []
@@ -85,7 +96,7 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
         # Move cache outputs to output dir with final names using their index
         for i in range(compilation_count):
             # cache file pattern produced by ffmpegBuildSegments
-            date_str = time.strftime('%d_%m_%y')
+            date_str = time.strftime("%d_%m_%y")
             cache_name = f"complete_{date_str}_{i}.{_ext_cfg}"
             src = os.path.join(cache, cache_name)
             if not os.path.exists(src):
@@ -129,7 +140,11 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
             log("Moved " + str(moved) + " file(s) to output", 2)
         if missing_indices:
             try:
-                log("WARN Missing compiled output(s) in cache for index(es): " + ", ".join(str(i) for i in missing_indices), 2)
+                log(
+                    "WARN Missing compiled output(s) in cache for index(es): "
+                    + ", ".join(str(i) for i in missing_indices),
+                    2,
+                )
             except Exception:
                 pass
     except Exception as e:  # pragma: no cover
@@ -137,10 +152,10 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
         return []
 
     if keep_cache and not purge_cache:
-        log('Cache retained (--keep-cache set)', 0)
+        log("Cache retained (--keep-cache set)", 0)
         return final_names
     # clean cache except leave directory itself
-    log('Cleaning cache', 1)
+    log("Cleaning cache", 1)
     try:
         preserve_set = set()
         if not purge_cache:
@@ -160,7 +175,7 @@ def finalize_outputs(broadcaster: str, window: Tuple[Optional[str], Optional[str
                     os.remove(path)
             except OSError:
                 pass
-        log('Cache cleaned', 2)
+        log("Cache cleaned", 2)
     except Exception as e:  # pragma: no cover
         log("Cache cleanup failed: " + str(e), 5)
     return final_names

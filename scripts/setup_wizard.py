@@ -15,10 +15,13 @@ if str(_ROOT) not in sys.path:
 try:  # pragma: no cover
     from yachalk import chalk  # type: ignore
 except Exception:  # pragma: no cover
+
     class _Plain:
         def __getattr__(self, name):
             return lambda s: s
+
     chalk = _Plain()  # type: ignore
+
 
 # --- BBS-style theme (cool cyan/blue/gray) ----------------------------------
 class _Theme:
@@ -40,14 +43,17 @@ class _Theme:
         self.choice_default = lambda s: chalk.cyan_bright(s)
         self.choice_other = lambda s: chalk.gray(s)
 
+
 THEME = _Theme()
+
 
 # Enable Windows VT so ANSI colors render in default console
 def _enable_windows_vt():
-    if os.name != 'nt':
+    if os.name != "nt":
         return
     try:  # pragma: no cover
         import ctypes
+
         kernel32 = ctypes.windll.kernel32
         handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
         mode = ctypes.c_uint32()
@@ -56,6 +62,7 @@ def _enable_windows_vt():
             kernel32.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
     except Exception:
         pass
+
 
 # Try to import project version and defaults
 try:
@@ -67,27 +74,53 @@ try:
     # Import defaults for suggestions
     from clippy.config import (
         amountOfClips as DEFAULT_CLIPS,
-        amountOfCompilations as DEFAULT_COMPS,
-        reactionThreshold as DEFAULT_MIN_VIEWS,
-        bitrate as DEFAULT_BITRATE,
-        resolution as DEFAULT_RES,
-        fps as DEFAULT_FPS,
-        audio_bitrate as DEFAULT_AUDIO_BR,
-        transition_probability as DEFAULT_TRANS_PROB,
-        no_random_transitions as DEFAULT_NO_RANDOM,
-        cache as DEFAULT_CACHE,
-        output as DEFAULT_OUTPUT,
-    max_concurrency as DEFAULT_CONC,
-    silence_static as DEFAULT_SILENCE_STATIC,
     )
+    from clippy.config import (
+        amountOfCompilations as DEFAULT_COMPS,
+    )
+    from clippy.config import (
+        audio_bitrate as DEFAULT_AUDIO_BR,
+    )
+    from clippy.config import (
+        bitrate as DEFAULT_BITRATE,
+    )
+    from clippy.config import (
+        cache as DEFAULT_CACHE,
+    )
+    from clippy.config import (
+        fps as DEFAULT_FPS,
+    )
+    from clippy.config import (
+        max_concurrency as DEFAULT_CONC,
+    )
+    from clippy.config import (
+        no_random_transitions as DEFAULT_NO_RANDOM,
+    )
+    from clippy.config import (
+        output as DEFAULT_OUTPUT,
+    )
+    from clippy.config import (
+        reactionThreshold as DEFAULT_MIN_VIEWS,
+    )
+    from clippy.config import (
+        resolution as DEFAULT_RES,
+    )
+    from clippy.config import (
+        silence_static as DEFAULT_SILENCE_STATIC,
+    )
+    from clippy.config import (
+        transition_probability as DEFAULT_TRANS_PROB,
+    )
+
     try:
         from clippy.config_loader import load_merged_config  # type: ignore
+
         _existing_cfg = load_merged_config() or {}
         # Prefer flattened key produced by loader; fallback to nested identity if present
         DEFAULT_BROADCASTER = (
-            _existing_cfg.get('default_broadcaster') or
-            (_existing_cfg.get('identity') or {}).get('broadcaster') or
-            None
+            _existing_cfg.get("default_broadcaster")
+            or (_existing_cfg.get("identity") or {}).get("broadcaster")
+            or None
         )
     except Exception:
         DEFAULT_BROADCASTER = None
@@ -117,7 +150,9 @@ def _print_header():
     ver = THEME.text(f"(v{CLIPPY_VERSION})") if CLIPPY_VERSION else ""
     print(THEME.bar(bar))
     print(f"{title}  {ver}")
-    print(THEME.text("This will help you get set up with Twitch credentials and sensible defaults."))
+    print(
+        THEME.text("This will help you get set up with Twitch credentials and sensible defaults.")
+    )
     print(THEME.text("You can re-run this anytime; it writes a .env and helper script."))
     print(THEME.bar(bar) + "\n")
 
@@ -151,9 +186,13 @@ def _prompt_str(label: str, default: Optional[str] = None, secret: bool = False)
         print(THEME.error("Please enter a value."))
 
 
-def _prompt_int(label: str, default: int, min_v: Optional[int] = None, max_v: Optional[int] = None) -> int:
+def _prompt_int(
+    label: str, default: int, min_v: Optional[int] = None, max_v: Optional[int] = None
+) -> int:
     while True:
-        prompt = THEME.label(label) + THEME.sep(" [") + THEME.default(str(default)) + THEME.sep("]: ")
+        prompt = (
+            THEME.label(label) + THEME.sep(" [") + THEME.default(str(default)) + THEME.sep("]: ")
+        )
         s = input(prompt).strip()
         if not s:
             return int(default)
@@ -170,9 +209,13 @@ def _prompt_int(label: str, default: int, min_v: Optional[int] = None, max_v: Op
             print(THEME.error("Please enter a whole number."))
 
 
-def _prompt_float(label: str, default: float, min_v: Optional[float] = None, max_v: Optional[float] = None) -> float:
+def _prompt_float(
+    label: str, default: float, min_v: Optional[float] = None, max_v: Optional[float] = None
+) -> float:
     while True:
-        prompt = THEME.label(label) + THEME.sep(" [") + THEME.default(str(default)) + THEME.sep("]: ")
+        prompt = (
+            THEME.label(label) + THEME.sep(" [") + THEME.default(str(default)) + THEME.sep("]: ")
+        )
         s = input(prompt).strip()
         if not s:
             return float(default)
@@ -192,9 +235,21 @@ def _prompt_float(label: str, default: float, min_v: Optional[float] = None, max
 def _prompt_yes_no(label: str, default_yes: bool = True) -> bool:
     # Render BBS-style choice with highlighted default
     if default_yes:
-        d_colored = THEME.sep("[") + THEME.choice_default("Y") + THEME.sep("/") + THEME.choice_other("n") + THEME.sep("]")
+        d_colored = (
+            THEME.sep("[")
+            + THEME.choice_default("Y")
+            + THEME.sep("/")
+            + THEME.choice_other("n")
+            + THEME.sep("]")
+        )
     else:
-        d_colored = THEME.sep("[") + THEME.choice_other("y") + THEME.sep("/") + THEME.choice_default("N") + THEME.sep("]")
+        d_colored = (
+            THEME.sep("[")
+            + THEME.choice_other("y")
+            + THEME.sep("/")
+            + THEME.choice_default("N")
+            + THEME.sep("]")
+        )
     while True:
         prompt = THEME.label(label) + THEME.sep(" ") + d_colored + THEME.sep(": ")
         s = input(prompt).strip().lower()
@@ -205,6 +260,30 @@ def _prompt_yes_no(label: str, default_yes: bool = True) -> bool:
         if s in ("n", "no"):
             return False
         print(THEME.error("Please answer y or n."))
+
+
+def _prompt_list_csv(label: str, default: Optional[list[str]] = None) -> tuple[bool, list[str]]:
+    """Prompt for a comma/semicolon-separated list of filenames.
+
+    Returns (changed, value). If the user presses Enter, returns (False, default or []).
+    To explicitly clear the list, enter '-' or 'none'.
+    """
+    default_list = list(default or [])
+    shown = ", ".join(default_list) if default_list else "(none)"
+    while True:
+        prompt = THEME.label(label) + THEME.sep(" [") + THEME.default(shown) + THEME.sep("]: ")
+        s = input(prompt).strip()
+        if not s:
+            return False, default_list
+        low = s.strip().lower()
+        if low in ("-", "none", "[]"):
+            return True, []
+        # split by comma or semicolon
+        parts = [p.strip() for p in s.replace(";", ",").split(",")]
+        items = [p for p in parts if p]
+        if items:
+            return True, items
+        print(THEME.error("Please enter one or more names separated by commas, or '-' to clear."))
 
 
 def _quality_menu() -> tuple[str, str]:
@@ -222,8 +301,14 @@ def _quality_menu() -> tuple[str, str]:
 
 def _transitions_explain():
     print("\n" + THEME.section("Transitions & sequencing:"))
-    print(THEME.text("  - static.mp4 is placed between every segment to provide a clean cut buffer."))
-    print(THEME.text("  - You can optionally insert random transitions (video effects) between some clips."))
+    print(
+        THEME.text("  - static.mp4 is placed between every segment to provide a clean cut buffer.")
+    )
+    print(
+        THEME.text(
+            "  - You can optionally insert random transitions (video effects) between some clips."
+        )
+    )
     print(THEME.text("  - Probability controls how often a transition (beyond static) appears."))
     # Removed silencing transitions/intro/outro; only silence_static is supported
 
@@ -244,14 +329,24 @@ def main():
     print(THEME.header("Step 0: Choose your clip source"))
     print(THEME.text("  You can fetch clips directly from Twitch (by broadcaster)"))
     print(THEME.text("  or read links from a specific Discord channel."))
-    print(THEME.text("  Note: Even in Discord mode, Twitch API credentials are required to resolve clip details."))
+    print(
+        THEME.text(
+            "  Note: Even in Discord mode, Twitch API credentials are required to resolve clip details."
+        )
+    )
     print("")
     print(THEME.section("Sources:"))
     print(THEME.text("  1) Twitch (Helix) — fetch recent clips for a broadcaster"))
     print(THEME.text("  2) Discord channel — users paste clip links; we'll read and resolve them"))
+
     def _prompt_source() -> str:
         while True:
-            s = input(THEME.label("Select source") + THEME.sep(" [") + THEME.choice_default("1") + THEME.sep("/2]: ")).strip()
+            s = input(
+                THEME.label("Select source")
+                + THEME.sep(" [")
+                + THEME.choice_default("1")
+                + THEME.sep("/2]: ")
+            ).strip()
             if not s:
                 return "twitch"
             if s in ("1", "t", "T", "twitch"):
@@ -259,12 +354,19 @@ def main():
             if s in ("2", "d", "D", "discord"):
                 return "discord"
             print(THEME.error("Please enter 1 or 2."))
+
     source_choice = _prompt_source()
 
     # Step 1: Twitch credentials (required for either source)
     print(THEME.header("Step 1: Twitch Client ID & Secret"))
-    print(THEME.text("  Get credentials: https://dev.twitch.tv/console/apps (create an application)"))
-    print(THEME.text("  Client Credentials flow is used; redirect URL is not required for clip fetching."))
+    print(
+        THEME.text("  Get credentials: https://dev.twitch.tv/console/apps (create an application)")
+    )
+    print(
+        THEME.text(
+            "  Client Credentials flow is used; redirect URL is not required for clip fetching."
+        )
+    )
     env_path = Path(".env")
     existing = {}
     if env_path.is_file():
@@ -287,22 +389,38 @@ def main():
     discord_token = ""
     if source_choice == "discord":
         print("\n" + THEME.header("Step 2: Discord setup"))
-        print(THEME.text("  1) Enable Developer Mode in Discord: User Settings -> Advanced -> Developer Mode"))
+        print(
+            THEME.text(
+                "  1) Enable Developer Mode in Discord: User Settings -> Advanced -> Developer Mode"
+            )
+        )
         print(THEME.text("  2) Right-click the target channel -> Copy Channel ID"))
-        print(THEME.text("  3) Create a bot at https://discord.com/developers/applications and copy the Bot Token (Bot tab)"))
+        print(
+            THEME.text(
+                "  3) Create a bot at https://discord.com/developers/applications and copy the Bot Token (Bot tab)"
+            )
+        )
         print(THEME.text("  4) Ensure the 'Message Content Intent' is enabled for your bot"))
         print(THEME.text("  5) Invite the bot to your server with permissions to read the channel"))
         # Defaults: from clippy.yaml (via load_merged_config) and .env
         try:
-            ch_def = _existing_cfg.get('discord_channel_id') if isinstance(_existing_cfg, dict) else None
-            lim_def = int(_existing_cfg.get('discord_message_limit', 200)) if isinstance(_existing_cfg, dict) else 200
+            ch_def = (
+                _existing_cfg.get("discord_channel_id") if isinstance(_existing_cfg, dict) else None
+            )
+            lim_def = (
+                int(_existing_cfg.get("discord_message_limit", 200))
+                if isinstance(_existing_cfg, dict)
+                else 200
+            )
         except Exception:
             ch_def = None
             lim_def = 200
         tok_def = existing.get("DISCORD_TOKEN") or os.getenv("DISCORD_TOKEN", "")
         ch = _prompt_str("Discord channel ID (numeric)", str(ch_def) if ch_def else None)
         lim = _prompt_int("Discord message scan limit", lim_def, 1)
-        discord_token = _prompt_str("Discord bot token (stored in .env)", tok_def or None, secret=True)
+        discord_token = _prompt_str(
+            "Discord bot token (stored in .env)", tok_def or None, secret=True
+        )
         try:
             discord_section = {"channel_id": int(ch), "message_limit": int(lim)}
         except Exception:
@@ -314,15 +432,18 @@ def main():
                 return _mask_default(s)
             except Exception:
                 return s
+
         try:
             # Only attempt if a token string is present
             if discord_token:
                 try:
-                    import discord  # type: ignore
                     import asyncio  # type: ignore
+
+                    import discord  # type: ignore
                 except Exception:
                     print(THEME.warn("  Skipping token validation: discord.py not installed"))
                 else:
+
                     async def _login_once(tok: str) -> tuple[bool, str]:
                         try:
                             intents = discord.Intents.none()
@@ -341,18 +462,33 @@ def main():
                             return True, "Discord token login OK"
                         except Exception as e:
                             return False, f"Validation error: {e}"
+
                     try:
-                        ok, msg = asyncio.run(asyncio.wait_for(_login_once(discord_token), timeout=6.0))
+                        ok, msg = asyncio.run(
+                            asyncio.wait_for(_login_once(discord_token), timeout=6.0)
+                        )
                         if ok:
                             print(THEME.success("  ✔ Discord token validated (login OK)"))
-                            print(THEME.text("    Ensure 'Message Content Intent' is enabled for your bot in the Developer Portal."))
+                            print(
+                                THEME.text(
+                                    "    Ensure 'Message Content Intent' is enabled for your bot in the Developer Portal."
+                                )
+                            )
                         else:
                             print(THEME.warn("  ⚠ Discord token check: " + msg))
-                            print(THEME.text("    Tip: Copy the token from the Bot tab (not Application ID/Public Key)."))
+                            print(
+                                THEME.text(
+                                    "    Tip: Copy the token from the Bot tab (not Application ID/Public Key)."
+                                )
+                            )
                     except Exception as e:
                         print(THEME.warn(f"  ⚠ Token validation skipped (timeout or error): {e}"))
             else:
-                print(THEME.warn("  No Discord token provided; you'll need DISCORD_TOKEN in .env for --discord mode."))
+                print(
+                    THEME.warn(
+                        "  No Discord token provided; you'll need DISCORD_TOKEN in .env for --discord mode."
+                    )
+                )
         except Exception:
             # Non-fatal; continue wizard
             pass
@@ -362,11 +498,15 @@ def main():
     _shown = str(DEFAULT_BROADCASTER) if (DEFAULT_BROADCASTER not in (None, "")) else "(none)"
     print(THEME.text("  Current default broadcaster:") + " " + THEME.path(_shown))
     print(THEME.text("  Even in Discord mode, we use a broadcaster name for naming and defaults."))
-    print(THEME.text("  Set a default to skip typing --broadcaster each run (leave blank to keep)."))
+    print(
+        THEME.text("  Set a default to skip typing --broadcaster each run (leave blank to keep).")
+    )
     min_views = _prompt_int("Minimum views to include a clip", DEFAULT_MIN_VIEWS, 0)
     clips_per_comp = _prompt_int("Clips per compilation", DEFAULT_CLIPS, 1)
     num_compilations = _prompt_int("Number of compilations per run", DEFAULT_COMPS, 1)
-    default_broadcaster = _prompt_str("Default broadcaster (Twitch username)", DEFAULT_BROADCASTER or "")
+    default_broadcaster = _prompt_str(
+        "Default broadcaster (Twitch username)", DEFAULT_BROADCASTER or ""
+    )
 
     # Step 4: Quality and format
     print("\n" + THEME.header("Step 4: Output quality & format"))
@@ -375,13 +515,39 @@ def main():
     fps = _prompt_str("Framerate (e.g., 60)", DEFAULT_FPS)
     audio_br = _prompt_str("Audio bitrate (e.g., 192k)", DEFAULT_AUDIO_BR)
 
-    # Step 5: Transitions
+    # Step 5: Transitions & intros/outros
     _transitions_explain()
     use_random = not _prompt_yes_no("Disable random transitions?", default_yes=DEFAULT_NO_RANDOM)
     trans_prob = DEFAULT_TRANS_PROB
     if use_random:
-        trans_prob = _prompt_float("Probability to insert a transition (0.0 - 1.0)", DEFAULT_TRANS_PROB, 0.0, 1.0)
+        trans_prob = _prompt_float(
+            "Probability to insert a transition (0.0 - 1.0)", DEFAULT_TRANS_PROB, 0.0, 1.0
+        )
     silence_static = _prompt_yes_no("Silence static.mp4 audio?", default_yes=DEFAULT_SILENCE_STATIC)
+
+    # Intro/Outro configuration
+    try:
+        _existing_intro = (
+            _existing_cfg.get("intro") if isinstance(_existing_cfg, dict) else None
+        ) or []
+    except Exception:
+        _existing_intro = []
+    try:
+        _existing_outro = (
+            _existing_cfg.get("outro") if isinstance(_existing_cfg, dict) else None
+        ) or []
+    except Exception:
+        _existing_outro = []
+    print("")
+    print(THEME.section("Intro/Outro assets (in transitions/)"))
+    print(
+        THEME.text(
+            "  Enter filenames relative to your transitions folder. Press Enter to keep current values."
+        )
+    )
+    print(THEME.text("  Enter '-' or 'none' to clear the list."))
+    intro_changed, intro_list = _prompt_list_csv("Intro file(s)", _existing_intro)
+    outro_changed, outro_list = _prompt_list_csv("Outro file(s)", _existing_outro)
 
     # Step 6: Paths & concurrency
     print("\n" + THEME.header("Step 6: Paths & concurrency"))
@@ -391,7 +557,11 @@ def main():
 
     # Step 7: Transitions location
     print("\n" + THEME.header("Step 7: Transitions directory"))
-    print(THEME.text("  The tool requires transitions/static.mp4. Place one in transitions/ or set a custom directory."))
+    print(
+        THEME.text(
+            "  The tool requires transitions/static.mp4. Place one in transitions/ or set a custom directory."
+        )
+    )
     trans_dir = _prompt_str("Custom transitions directory (blank to skip)", "")
 
     # Write .env (merge with existing to avoid dropping values like DISCORD_TOKEN)
@@ -445,13 +615,25 @@ def main():
             "audio_bitrate": audio_br,
             "fps": fps,
             "resolution": resolution,
-            "nvenc": {"preset": "slow", "cq": "19", "gop": "120", "rc_lookahead": "20", "aq_strength": "8", "spatial_aq": "1", "temporal_aq": "1"},
+            "nvenc": {
+                "preset": "slow",
+                "cq": "19",
+                "gop": "120",
+                "rc_lookahead": "20",
+                "aq_strength": "8",
+                "spatial_aq": "1",
+                "temporal_aq": "1",
+            },
         },
         "paths": {"cache": cache_dir, "output": output_dir},
-        "behavior": {"max_concurrency": conc, "skip_bad_clip": True, "rebuild": False, "enable_overlay": True},
+        "behavior": {
+            "max_concurrency": conc,
+            "skip_bad_clip": True,
+            "rebuild": False,
+            "enable_overlay": True,
+        },
         "assets": {
             "static": "static.mp4",
-            # leave lists to file defaults; user can edit later if desired
         },
         "_meta": {"generated_by": f"setup_wizard v{CLIPPY_VERSION}"},
     }
@@ -459,6 +641,7 @@ def main():
     existing_yaml = {}
     try:
         import yaml  # type: ignore
+
         yaml_path = Path("clippy.yaml")
         if yaml_path.is_file():
             existing_yaml = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
@@ -475,6 +658,20 @@ def main():
                 cfg["discord"] = existing_yaml.get("discord")
         except Exception:
             pass
+    # Merge/preserve assets.intro/outro
+    try:
+        prior_assets = existing_yaml.get("assets") if isinstance(existing_yaml, dict) else {}
+    except Exception:
+        prior_assets = {}
+    # Apply intro/outro based on user choice; else preserve prior if present
+    if intro_changed:
+        cfg["assets"]["intro"] = intro_list
+    elif isinstance(prior_assets, dict) and prior_assets.get("intro") is not None:
+        cfg["assets"]["intro"] = prior_assets.get("intro")
+    if outro_changed:
+        cfg["assets"]["outro"] = outro_list
+    elif isinstance(prior_assets, dict) and prior_assets.get("outro") is not None:
+        cfg["assets"]["outro"] = prior_assets.get("outro")
     try:
         yaml_text = yaml.safe_dump(cfg, sort_keys=False)
         yaml_path = Path("clippy.yaml")
@@ -497,12 +694,18 @@ def main():
     if statics:
         print(THEME.text("  Found static.mp4 here: ") + THEME.path(f"{statics[0]}"))
     else:
-        print(THEME.warn("  static.mp4 not found in transitions/. Place one there or set --transitions-dir to a folder that contains it."))
+        print(
+            THEME.warn(
+                "  static.mp4 not found in transitions/. Place one there or set --transitions-dir to a folder that contains it."
+            )
+        )
     print("\n" + THEME.header("All set! Next steps:"))
     if source_choice == "discord":
         print(THEME.text("  1) Run a compile using Discord as the source:"))
         print(THEME.path("     python .\\main.py --discord -y"))
-        print(THEME.text("     (Override channel via --discord-channel-id if not set in clippy.yaml)"))
+        print(
+            THEME.text("     (Override channel via --discord-channel-id if not set in clippy.yaml)")
+        )
     else:
         if default_broadcaster:
             print(THEME.text("  1) Run a compile using your saved defaults:"))

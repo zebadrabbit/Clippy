@@ -26,8 +26,10 @@ from __future__ import annotations
 import os
 import time
 import typing as _t
+
 import requests
-from clippy.utils import log, fix_ascii
+
+from clippy.utils import fix_ascii, log
 
 HelixHeaders = _t.Dict[str, str]
 
@@ -58,7 +60,9 @@ def _headers(client_id: str, token: str) -> HelixHeaders:
 
 def resolve_user(login: str, client_id: str, token: str) -> dict | None:
     """Resolve a user by login name; returns first match or None."""
-    resp = requests.get(USERS_URL, params={"login": login}, headers=_headers(client_id, token), timeout=15)
+    resp = requests.get(
+        USERS_URL, params={"login": login}, headers=_headers(client_id, token), timeout=15
+    )
     if resp.status_code != 200:
         log(f"Resolve user failed: {login} {resp.status_code}", 5)
         return None
@@ -97,15 +101,21 @@ def fetch_clips(
             _first = params.get("first")
             log(
                 "Helix params: "
-                + "started_at=" + str(_sa)
-                + " ended_at=" + str(_ea)
-                + " first=" + str(_first)
-                + " after=" + str(_af),
+                + "started_at="
+                + str(_sa)
+                + " ended_at="
+                + str(_ea)
+                + " first="
+                + str(_first)
+                + " after="
+                + str(_af),
                 2,
             )
         except Exception:
             pass
-        resp = requests.get(CLIPS_URL, params=params, headers=_headers(client_id, token), timeout=30)
+        resp = requests.get(
+            CLIPS_URL, params=params, headers=_headers(client_id, token), timeout=30
+        )
         if resp.status_code != 200:
             log(f"Error fetching clips: {resp.status_code} {resp.text[:120]}", 5)
             break
@@ -134,10 +144,12 @@ def fetch_clips_by_ids(
     if not ids:
         return out
     for i in range(0, len(ids), 100):
-        chunk = ids[i:i+100]
+        chunk = ids[i : i + 100]
         params = [("id", c) for c in chunk]
         try:
-            resp = requests.get(CLIPS_URL, params=params, headers=_headers(client_id, token), timeout=30)
+            resp = requests.get(
+                CLIPS_URL, params=params, headers=_headers(client_id, token), timeout=30
+            )
             if resp.status_code != 200:
                 log(f"Error fetching clips by ids: {resp.status_code} {resp.text[:120]}", 5)
                 continue
@@ -157,9 +169,11 @@ def fetch_creator_avatars(clips: _t.Iterable[dict], client_id: str, token: str) 
     avatar_map: dict[str, str] = {}
     id_list = list(ids)
     for i in range(0, len(id_list), 100):  # Helix limit
-        chunk = id_list[i:i+100]
+        chunk = id_list[i : i + 100]
         params = [("id", cid) for cid in chunk]
-        resp = requests.get(USERS_URL, params=params, headers=_headers(client_id, token), timeout=15)
+        resp = requests.get(
+            USERS_URL, params=params, headers=_headers(client_id, token), timeout=15
+        )
         if resp.status_code != 200:
             log(f"Avatar batch failed {resp.status_code}", 5)
             continue
@@ -168,7 +182,9 @@ def fetch_creator_avatars(clips: _t.Iterable[dict], client_id: str, token: str) 
     return avatar_map
 
 
-def build_clip_rows(clips: _t.Iterable[dict], avatar_map: dict | None = None) -> list[tuple[str, float, str, str, int, str]]:
+def build_clip_rows(
+    clips: _t.Iterable[dict], avatar_map: dict | None = None
+) -> list[tuple[str, float, str, str, int, str]]:
     """Convert raw Helix clip dicts to pipeline tuple rows.
 
     Tuple: (id, epoch_ts, author, avatar_url, view_count, url)
@@ -183,14 +199,16 @@ def build_clip_rows(clips: _t.Iterable[dict], avatar_map: dict | None = None) ->
                 avatar_url = avatar_map[creator_id]
             else:
                 avatar_url = c.get("thumbnail_url", "")  # fallback
-            rows.append((
-                c.get("id", "unknown"),
-                ts,
-                fix_ascii(c.get("creator_name", "unknown")),
-                avatar_url,
-                int(c.get("view_count", 0)),
-                c.get("url", ""),
-            ))
+            rows.append(
+                (
+                    c.get("id", "unknown"),
+                    ts,
+                    fix_ascii(c.get("creator_name", "unknown")),
+                    avatar_url,
+                    int(c.get("view_count", 0)),
+                    c.get("url", ""),
+                )
+            )
         except Exception as e:  # pragma: no cover
             log(f"Row build error: {e}", 5)
     return rows
@@ -200,6 +218,7 @@ def _iso_to_epoch(iso_str: str) -> float:
     # Twitch returns ISO8601 with timezone Z e.g. 2024-07-10T12:34:56Z
     try:
         from datetime import datetime
+
         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
         return dt.timestamp()
     except Exception:
@@ -212,7 +231,7 @@ def _load_dotenv(path: str = ".env") -> dict:
     if not os.path.isfile(path):
         return data
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
                 if not line or line.startswith("#"):
@@ -230,7 +249,11 @@ def load_credentials(arg_client_id: str | None, arg_client_secret: str | None) -
     # Precedence: CLI args > real environment > .env file
     env_file = _load_dotenv()
     cid = arg_client_id or os.getenv("TWITCH_CLIENT_ID") or env_file.get("TWITCH_CLIENT_ID")
-    secret = arg_client_secret or os.getenv("TWITCH_CLIENT_SECRET") or env_file.get("TWITCH_CLIENT_SECRET")
+    secret = (
+        arg_client_secret
+        or os.getenv("TWITCH_CLIENT_SECRET")
+        or env_file.get("TWITCH_CLIENT_SECRET")
+    )
     if not cid or not secret:
         raise SystemExit(
             "Missing Twitch credentials: set TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET, provide --client-id/--client-secret, or add them to .env"
