@@ -612,6 +612,34 @@ def main():  # noqa: C901
     comps = create_compilations_from(rows)
     log("Stage 1 (processing clips)", 1)
     stage_one(comps)
+    # Verify concat lists were written for each expected compilation index.
+    # If any concat file is missing, log and drop that compilation to avoid surprise.
+    try:
+        missing = []
+        present = []
+        import os as _os
+
+        for i in range(len(comps)):
+            concat_path = _os.path.join(cache, f"comp{i}")
+            if not _os.path.exists(concat_path):
+                missing.append(i)
+            else:
+                present.append(i)
+        if missing:
+            try:
+                log(
+                    f"WARN: Missing concat lists for indices: {', '.join(str(m) for m in missing)}; these compilations will be skipped",
+                    2,
+                )
+            except Exception:
+                pass
+            # Filter out missing comps in order
+            comps = [c for idx, c in enumerate(comps) if idx in present]
+            if not comps:
+                raise SystemExit("No compilations available after concat list generation")
+    except Exception:
+        # Non-fatal: continue and let stage_two handle any missing files
+        pass
     log("Stage 2 (concatenate)", 1)
     # Build the final filenames for display during compilation
     b_name = _sanitize_filename(args.broadcaster.lower()) or "broadcaster"
