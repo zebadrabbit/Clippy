@@ -1,6 +1,6 @@
 from yachalk import chalk
 
-from clippy.config import *  # noqa: F401,F403
+import clippy.config as _cfg_mod
 
 try:
     from clippy.theme import THEME, enable_windows_vt  # type: ignore
@@ -18,19 +18,12 @@ import re
 
 
 def _cfg_get(name: str, default=None):
-    """Best-effort getter for config values without relying on star-import globals.
+    """Best-effort getter for config values.
 
-    Tries module-level global first (set by main at runtime), then config module attribute.
+    Reads directly from the imported clippy.config module.
     """
     try:
-        if name in globals():
-            return globals()[name]
-    except Exception:
-        pass
-    try:
-        import clippy.config as _cfg  # type: ignore
-
-        return getattr(_cfg, name)
+        return getattr(_cfg_mod, name, default)
     except Exception:
         return default
 

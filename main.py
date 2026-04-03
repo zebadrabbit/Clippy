@@ -40,7 +40,28 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import clippy.utils as utils_mod
-from clippy.config import *  # noqa: F401,F403
+from clippy.config import (
+    amountOfClips,
+    amountOfCompilations,
+    reactionThreshold,
+    bitrate,
+    resolution,
+    container_ext,
+    container_flags,
+    fps,
+    audio_bitrate,
+    cache,
+    output,
+    enable_overlay,
+    rebuild,
+    cq,
+    nvenc_preset,
+    gop,
+    rc_lookahead,
+    spatial_aq,
+    temporal_aq,
+    aq_strength,
+)
 from clippy.twitch_ingest import (
     build_clip_rows,
     fetch_clips,

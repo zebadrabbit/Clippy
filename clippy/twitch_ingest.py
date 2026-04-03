@@ -29,6 +29,7 @@ import typing as _t
 
 import requests
 
+from clippy.models import ClipRow
 from clippy.utils import fix_ascii, log
 
 HelixHeaders = _t.Dict[str, str]
@@ -184,12 +185,12 @@ def fetch_creator_avatars(clips: _t.Iterable[dict], client_id: str, token: str) 
 
 def build_clip_rows(
     clips: _t.Iterable[dict], avatar_map: dict | None = None
-) -> list[tuple[str, float, str, str, int, str]]:
-    """Convert raw Helix clip dicts to pipeline tuple rows.
+) -> list[ClipRow]:
+    """Convert raw Helix clip dicts to pipeline ClipRow instances.
 
-    Tuple: (id, epoch_ts, author, avatar_url, view_count, url)
+    Each ClipRow holds: id, created_ts, author, avatar_url, view_count, url.
     """
-    rows: list[tuple[str, float, str, str, int, str]] = []
+    rows: list[ClipRow] = []
     for c in clips:
         try:
             ts = _iso_to_epoch(c.get("created_at", ""))
@@ -200,13 +201,13 @@ def build_clip_rows(
             else:
                 avatar_url = c.get("thumbnail_url", "")  # fallback
             rows.append(
-                (
-                    c.get("id", "unknown"),
-                    ts,
-                    fix_ascii(c.get("creator_name", "unknown")),
-                    avatar_url,
-                    int(c.get("view_count", 0)),
-                    c.get("url", ""),
+                ClipRow(
+                    id=c.get("id", "unknown"),
+                    created_ts=ts,
+                    author=fix_ascii(c.get("creator_name", "unknown")),
+                    avatar_url=avatar_url,
+                    view_count=int(c.get("view_count", 0)),
+                    url=c.get("url", ""),
                 )
             )
         except Exception as e:  # pragma: no cover

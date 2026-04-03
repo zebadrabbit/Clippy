@@ -24,7 +24,7 @@ import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from subprocess import Popen
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from yachalk import chalk
 
@@ -40,42 +40,36 @@ except Exception:  # pragma: no cover
 import requests
 from PIL import Image
 
-from clippy.config import *  # noqa: F401,F403
-
-# Hint static analyzers about the specific names we rely on from config
-try:  # pragma: no cover - purely for type checkers
-    from clippy.config import (
-        amountOfClips,
-        amountOfCompilations,
-        aq_strength,
-        audio_bitrate,
-        bitrate,
-        cache,
-        cq,
-        enable_overlay,
-        ffmpeg,
-        ffmpegApplyOverlay,
-        ffmpegBuildSegments,
-        ffmpegCreateThumbnail,
-        ffmpegNormalizeVideos,
-        ffprobe,
-        fps,
-        gop,
-        nvenc_preset,
-        rc_lookahead,
-        reactionThreshold,
-        rebuild,
-        resolution,
-        spatial_aq,
-        temporal_aq,
-        youtubeDl,
-        youtubeDlOptions,
-    )
-except Exception:
-    pass
+from clippy.config import (
+    amountOfClips,
+    amountOfCompilations,
+    reactionThreshold,
+    bitrate,
+    resolution,
+    fps,
+    audio_bitrate,
+    cache,
+    enable_overlay,
+    rebuild,
+    cq,
+    nvenc_preset,
+    gop,
+    rc_lookahead,
+    spatial_aq,
+    temporal_aq,
+    aq_strength,
+    ffmpeg,
+    ffprobe,
+    youtubeDl,
+    youtubeDlOptions,
+    ffmpegNormalizeVideos,
+    ffmpegApplyOverlay,
+    ffmpegBuildSegments,
+    ffmpegCreateThumbnail,
+)
 from clippy.utils import find_transition_file, log, replace_vars, resolve_transitions_dir
 
-ClipRow = Tuple[str, float, str, str, int, str]  # (id, created_ts, author, avatar_url, views, url)
+from clippy.models import ClipRow
 
 
 SHUTDOWN_EVENT = threading.Event()
@@ -408,13 +402,13 @@ def ensure_dir(path: str):
 
 
 def download_avatar(clip: ClipRow, quiet: bool = False) -> int:
-    clip_dir = os.path.join(cache, str(clip[0]))
+    clip_dir = os.path.join(cache, clip.id)
     ensure_dir(clip_dir)
     png_path = os.path.join(clip_dir, "avatar.png")
     webp_path = os.path.join(clip_dir, "avatar.webp")
     if os.path.isfile(png_path):
         return 2
-    url = clip[3] or "https://static-cdn.jtvnw.net/jtv_user_pictures/x.png"
+    url = clip.avatar_url or "https://static-cdn.jtvnw.net/jtv_user_pictures/x.png"
     if not quiet:
         log(f"Avatar: {url}", 1)
     resp = requests.get(url)
@@ -436,12 +430,12 @@ def download_avatar(clip: ClipRow, quiet: bool = False) -> int:
 
 
 def download_clip(clip: ClipRow, quiet: bool = False) -> int:
-    clip_dir = os.path.join(cache, str(clip[0]))
+    clip_dir = os.path.join(cache, clip.id)
     ensure_dir(clip_dir)
-    final_path = os.path.join(clip_dir, f"{clip[0]}.mp4")
+    final_path = os.path.join(clip_dir, f"{clip.id}.mp4")
     if os.path.isfile(final_path) and not rebuild:
         return 2
-    cmd = youtubeDl + " " + replace_vars(youtubeDlOptions, clip) + " " + clip[5]
+    cmd = youtubeDl + " " + replace_vars(youtubeDlOptions, clip) + " " + clip.url
     if SHUTDOWN_EVENT.is_set():
         return 1
     rc, err = run_proc_cancellable(cmd, prefer_shell=False)
@@ -476,7 +470,7 @@ def _retry(fn, attempts: int = 3, backoff: float = 1.5):
 
 
 def create_thumbnail(clip: ClipRow) -> int:
-    clip_dir = os.path.join(cache, str(clip[0]))
+    clip_dir = os.path.join(cache, clip.id)
     preview = os.path.join(clip_dir, "preview.png")
     if os.path.isfile(preview) and not rebuild:
         return 2
@@ -505,8 +499,8 @@ def process_clip(
     on_norm_progress: Optional[callable] = None,
     on_overlay_progress: Optional[callable] = None,
 ) -> int:
-    clip_dir = os.path.join(cache, str(clip[0]))
-    final_path = os.path.join(clip_dir, f"{clip[0]}.mp4")
+    clip_dir = os.path.join(cache, clip.id)
+    final_path = os.path.join(clip_dir, f"{clip.id}.mp4")
     if os.path.isfile(final_path) and not rebuild:
         return 2
     if not quiet:
@@ -525,7 +519,7 @@ def process_clip(
         if " -nostats" not in _norm_cmd:
             _norm_cmd += " -nostats"
     # probe duration for progress percentage
-    _in_norm = os.path.join(os.path.join(cache, str(clip[0])), "clip.mp4")
+    _in_norm = os.path.join(os.path.join(cache, clip.id), "clip.mp4")
     _dur = _ffprobe_duration(_in_norm)
 
     def _norm_cb(info: dict):
@@ -606,7 +600,7 @@ def process_clip(
 
 def create_compilations_from(clips: List[ClipRow]) -> List[List[ClipRow]]:
     # filter by view threshold (reactions reused as views)
-    eligible = [c for c in clips if c[4] >= reactionThreshold]
+    eligible = [c for c in clips if c.view_count >= reactionThreshold]
     random.shuffle(eligible)
     compilations: List[List[ClipRow]] = []
     while eligible and len(compilations) < amountOfCompilations:
@@ -870,7 +864,7 @@ def prepare_clips_concurrent(compilation, max_workers):
 
     # Prepare all clips concurrently but keep output ordering
     def _prep(clip: ClipRow, pos: int) -> tuple[ClipRow, bool]:
-        clip_folder = os.path.join(cache, str(clip[0]))
+        clip_folder = os.path.join(cache, clip.id)
         ensure_dir(clip_folder)
         _update_line(pos, "Avatar downloading")
         if SHUTDOWN_EVENT.is_set():
@@ -1026,7 +1020,7 @@ def build_concat_list(compilation, results, transitions_abs, assets_out_dir, rel
         if not ok:
             if _skip_bad:
                 try:
-                    log("WARN Skipping failed clip: " + str(clip[0]), 2)
+                    log("WARN Skipping failed clip: " + clip.id, 2)
                 except Exception:
                     pass
                 continue
@@ -1037,7 +1031,7 @@ def build_concat_list(compilation, results, transitions_abs, assets_out_dir, rel
                     pass
                 break
         # successful clip
-        lines.append(f"file {clip[0]}/{clip[0]}.mp4")
+        lines.append(f"file {clip.id}/{clip.id}.mp4")
         _append_trans_file(_static_name)
         if not _no_rand and isinstance(_transitions_list, (list, tuple)) and _transitions_list:
             try:
