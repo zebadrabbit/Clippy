@@ -34,6 +34,7 @@ using configuration from config.py and runtime CLI overrides.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -98,9 +99,11 @@ from clippy.runtime import ensure_transitions_static_present, ensure_twitch_cred
 from clippy.window import resolve_date_window
 from clippy.window import summarize as _summarize
 
+logger = logging.getLogger(__name__)
+
 try:
     from clippy.theme import THEME, enable_windows_vt  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     THEME = None  # type: ignore
 
     def enable_windows_vt():  # type: ignore
@@ -126,7 +129,7 @@ def apply_cli_overrides(args):
         _cfg.amountOfClips = amountOfClips
         _cfg.amountOfCompilations = amountOfCompilations
         _cfg.reactionThreshold = reactionThreshold
-    except Exception:
+    except (ImportError, AttributeError):
         pass
     try:
         import clippy.pipeline as _pl
@@ -134,7 +137,7 @@ def apply_cli_overrides(args):
         _pl.amountOfClips = amountOfClips
         _pl.amountOfCompilations = amountOfCompilations
         _pl.reactionThreshold = reactionThreshold
-    except Exception:
+    except (ImportError, AttributeError):
         pass
 
     # If running in Discord mode and no broadcaster provided, prefill from config default for nicer summaries
@@ -145,7 +148,7 @@ def apply_cli_overrides(args):
             _def_b_prefill = getattr(_cfg, "default_broadcaster", "")
             if _def_b_prefill:
                 args.broadcaster = _def_b_prefill
-    except Exception:
+    except (ImportError, AttributeError):
         pass
 
     # Apply runtime overrides for quality/bitrate/resolution/container
@@ -184,14 +187,14 @@ def apply_cli_overrides(args):
             import clippy.config as _cfg
 
             _cfg.intro = [args.intro] if args.intro else []
-        except Exception:
+        except (ImportError, AttributeError):
             pass
     if args.outro is not None:
         try:
             import clippy.config as _cfg
 
             _cfg.outro = [args.outro] if args.outro else []
-        except Exception:
+        except (ImportError, AttributeError):
             pass
     if args.transition is not None:
         try:
@@ -199,35 +202,35 @@ def apply_cli_overrides(args):
 
             if args.transition:
                 _cfg.transitions = [args.transition]
-        except Exception:
+        except (ImportError, AttributeError):
             pass
     if args.transition_prob is not None:
         try:
             import clippy.config as _cfg
 
             _cfg.transition_probability = max(0.0, min(1.0, float(args.transition_prob)))
-        except Exception:
+        except (ImportError, AttributeError, ValueError):
             pass
     if args.no_random_transitions:
         try:
             import clippy.config as _cfg
 
             _cfg.no_random_transitions = True
-        except Exception:
+        except (ImportError, AttributeError):
             pass
     if args.skip_bad_clip:
         try:
             import clippy.config as _cfg
 
             _cfg.skip_bad_clip = True
-        except Exception:
+        except (ImportError, AttributeError):
             pass
     if args.max_concurrency is not None:
         try:
             import clippy.config as _cfg
 
             _cfg.max_concurrency = max(1, int(args.max_concurrency))
-        except Exception:
+        except (ImportError, AttributeError, ValueError):
             pass
     if args.transitions_dir:
         # Make resolver see the override
@@ -236,7 +239,7 @@ def apply_cli_overrides(args):
             from clippy.utils import log as _log
 
             _log("Transitions directory override: " + os.path.abspath(args.transitions_dir), 1)
-        except Exception:
+        except ImportError:
             pass
 
     if args.no_overlay:
@@ -270,7 +273,7 @@ def apply_cli_overrides(args):
         # no direct single-file intro/outro/transition globals; pipeline reads from config lists at runtime
         pipeline_mod.enable_overlay = enable_overlay
         pipeline_mod.rebuild = rebuild
-    except Exception:
+    except AttributeError:
         pass
     try:
         utils_mod.bitrate = chosen_bitrate
@@ -278,7 +281,7 @@ def apply_cli_overrides(args):
         utils_mod.fps = fps
         utils_mod.audio_bitrate = audio_bitrate
         utils_mod.cache = cache
-    except Exception:
+    except AttributeError:
         pass
     # yt-dlp format override via config string
     if args.yt_format:
@@ -289,7 +292,7 @@ def apply_cli_overrides(args):
             # Rebuild youtubeDlOptions string if present
             if hasattr(_cfg, "youtubeDlOptions"):
                 _cfg.youtubeDlOptions = _cfg.youtubeDlOptions.replace("{yt_format}", _cfg.yt_format)
-        except Exception:
+        except (ImportError, AttributeError):
             pass
     # Fail fast if required transition is missing
     ensure_transitions_static_present(getattr(args, "transitions_dir", None))
@@ -302,7 +305,7 @@ def apply_cli_overrides(args):
             _cfg.transitions_rebuild = True
         if getattr(args, "no_audio_normalize_transitions", False):
             _cfg.audio_normalize_transitions = False
-    except Exception:
+    except (ImportError, AttributeError):
         pass
 
 
@@ -312,11 +315,11 @@ def display_confirmation(args, window):
         # Concise BBS-style panel
         try:
             enable_windows_vt()
-        except Exception:
+        except Exception:  # cosmetic; non-fatal
             pass
         try:
             from yachalk import chalk as _chalk
-        except Exception:
+        except ImportError:
 
             class _Plain:
                 def __getattr__(self, name):
@@ -346,7 +349,7 @@ def display_confirmation(args, window):
             _transitions_list = getattr(_cfg, "transitions", [])
             _tprob = getattr(_cfg, "transition_probability", 0.35)
             _norand = getattr(_cfg, "no_random_transitions", False)
-        except Exception:
+        except (ImportError, AttributeError):
             _intro_list = []
             _outro_list = []
             _transitions_list = []
@@ -354,7 +357,7 @@ def display_confirmation(args, window):
             _norand = False
         try:
             _total = int(args.amountOfCompilations) * int(args.amountOfClips)
-        except Exception:
+        except (ValueError, TypeError):
             _total = None
         # Panel rendering
         print(bar)
@@ -404,7 +407,7 @@ def ingest_clips(args, cid, token, window):
                 fetch_recent_clip_ids,
                 load_discord_token,
             )
-        except Exception as _imp_err:
+        except ImportError as _imp_err:
             log("Discord mode requires the optional dependency 'discord.py'", 5)
             log("Install it with: pip install discord.py", 1)
             raise SystemExit(_imp_err)
@@ -413,7 +416,7 @@ def ingest_clips(args, cid, token, window):
 
             _discord_channel_id = getattr(_cfg, "discord_channel_id", None)
             _discord_limit = getattr(_cfg, "discord_message_limit", 200)
-        except Exception:
+        except (ImportError, AttributeError):
             _discord_channel_id = None
             _discord_limit = 200
         ch_id = args.discord_channel_id or _discord_channel_id
@@ -433,7 +436,7 @@ def ingest_clips(args, cid, token, window):
         try:
             if _channel_disp:
                 log("Discord channel: " + str(_channel_disp), 2)
-        except Exception:
+        except Exception:  # logging; non-fatal
             pass
         # Dedupe and limit to max_clips
         clip_ids = list(dict.fromkeys(clip_ids))[: args.max_clips]
@@ -441,7 +444,7 @@ def ingest_clips(args, cid, token, window):
             raise SystemExit("No clip links found in the specified Discord channel")
         try:
             log("Found " + str(len(clip_ids)) + " clip links", 2)
-        except Exception:
+        except Exception:  # logging; non-fatal
             pass
         log("Fetching clips by IDs from Helix", 1)
         clips = fetch_clips_by_ids(clip_ids, cid, token)
@@ -454,7 +457,7 @@ def ingest_clips(args, cid, token, window):
                 or "clips"
             )
             args.broadcaster = b_name
-        except Exception:
+        except (IndexError, KeyError):
             if not getattr(args, "broadcaster", None):
                 args.broadcaster = "clips"
     else:
@@ -496,7 +499,7 @@ def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
                     return None
                 try:
                     return datetime.fromisoformat(s.replace("Z", "+00:00"))
-                except Exception:
+                except (ValueError, TypeError):
                     return None
 
             step_days = max(1, int(getattr(args, "expand_step_days", 7)))
@@ -566,7 +569,7 @@ def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
                     current_start.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
                     window[1],
                 )
-            except Exception:
+            except Exception:  # non-fatal window update
                 pass
             log(
                 "After expand: "
@@ -576,7 +579,7 @@ def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
                 + ")",
                 2,
             )
-        except Exception as e:
+        except Exception as e:  # auto-expand is best-effort
             log("Auto-expand failed: " + str(e), 5)
 
     return filtered, window
@@ -605,7 +608,7 @@ def run_pipeline(comps, args, window):
                     f"WARN: Missing concat lists for indices: {', '.join(str(m) for m in missing)}; these compilations will be skipped",
                     2,
                 )
-            except Exception:
+            except Exception:  # logging; non-fatal
                 pass
             # Filter out missing comps in order
             comps = [c for idx, c in enumerate(comps) if idx in present]
@@ -632,7 +635,7 @@ def run_pipeline(comps, args, window):
         date_range = datetime.utcnow().strftime("%Y-%m-%d")
     try:
         from clippy.config import container_ext as _ext
-    except Exception:
+    except ImportError:
         _ext = "mp4"
     base_names = []
     for i in range(len(comps)):
@@ -651,7 +654,7 @@ def run_pipeline(comps, args, window):
             from clippy.pipeline import request_shutdown
 
             request_shutdown()
-        except Exception:
+        except Exception:  # best-effort shutdown
             pass
         _was_interrupted = True
     if _was_interrupted:
@@ -683,10 +686,10 @@ def run_pipeline(comps, args, window):
             _json.dump(manifest, f, indent=2)
         try:
             _disp_path = _m_path.replace("\\", "/")
-        except Exception:
+        except (TypeError, AttributeError):
             _disp_path = _m_path
         log("Wrote manifest: " + _disp_path, 1)
-    except Exception as e:
+    except (OSError, TypeError, ValueError) as e:
         log("WARN Failed to write manifest: " + str(e), 2)
     log("Done", 2)
 
@@ -707,13 +710,13 @@ def main():  # noqa: C901
     if not any(a in ("-h", "--help", "--version") for a in _argv):
         try:
             show_banner()
-        except Exception:
+        except Exception:  # cosmetic; non-fatal
             pass
         try:
             from yachalk import chalk as _chalk
 
             print(str(_chalk.gray(f"Version {CLIPPY_VERSION}")))
-        except Exception:
+        except Exception:  # cosmetic; non-fatal
             print(f"Version {CLIPPY_VERSION}")
     args = parse_args()
     # Seed randomness if provided early
@@ -722,7 +725,7 @@ def main():  # noqa: C901
             import random as _rnd
 
             _rnd.seed(int(args.seed))
-        except Exception:
+        except (ValueError, TypeError):
             pass
 
     apply_cli_overrides(args)
@@ -743,7 +746,7 @@ def main():  # noqa: C901
     if not getattr(args, "discord", False):
         try:
             _def_b = globals().get("default_broadcaster", "")
-        except Exception:
+        except Exception:  # defensive fallback
             _def_b = ""
         if not getattr(args, "broadcaster", None):
             if _def_b:
@@ -785,11 +788,11 @@ if __name__ == "__main__":  # pragma: no cover
             from clippy.pipeline import request_shutdown
 
             request_shutdown()
-        except Exception:
+        except Exception:  # best-effort shutdown
             pass
         try:
             from clippy.utils import log as _log
 
             _log("Interrupted by user. Exiting.")
-        except Exception:
+        except ImportError:
             print("Interrupted by user. Exiting.")

@@ -4,7 +4,7 @@ import os
 
 try:
     from yachalk import chalk  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
 
     class _Plain:
         def __getattr__(self, name):
@@ -25,7 +25,7 @@ def enable_windows_vt() -> None:
         if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
             ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
             kernel32.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
-    except Exception:
+    except Exception:  # ctypes/Windows API; not all platforms support VT
         pass
 
 
@@ -65,11 +65,11 @@ def paint(text: str, *styles: str) -> str:
     for st in styles:
         try:
             s = getattr(s, st)
-        except Exception:
+        except AttributeError:
             pass
     try:
         return str(s(text))
-    except Exception:
+    except Exception:  # chalk callable may fail on unusual input
         return text
 
 

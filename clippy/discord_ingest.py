@@ -66,7 +66,7 @@ async def fetch_recent_clip_ids(
             if channel is None:
                 try:
                     channel = await self.fetch_channel(self._channel_id)
-                except Exception as e:
+                except Exception as e:  # wrap any discord/network error
                     await self.close()
                     raise RuntimeError(f"Failed to fetch channel: {e}")
             # Build a friendly display name for logs
@@ -77,7 +77,7 @@ async def fetch_recent_clip_ids(
                     self.channel_display = f"{guild} / #{name}"
                 else:
                     self.channel_display = f"#{name}"
-            except Exception:
+            except AttributeError:
                 self.channel_display = f"channel:{self._channel_id}"
             if not hasattr(channel, "history"):
                 await self.close()
@@ -126,7 +126,7 @@ def load_discord_token(arg_token: str | None = None) -> str:
                     k, v = line.split("=", 1)
                     if k.strip() == "DISCORD_TOKEN":
                         return v.strip().strip('"').strip("'")
-        except Exception:
+        except OSError:
             pass
     raise SystemExit(
         "Missing Discord token: set DISCORD_TOKEN in env or .env, or provide --discord-token"

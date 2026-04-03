@@ -130,7 +130,7 @@ class QualityScreen(Screen):
             self.query_one("#fps-select", Select).value = enc.fps
             self.query_one("#audio-bitrate-input", Input).value = enc.audio_bitrate
             self.query_one("#container-select", Select).value = enc.container_ext
-        except Exception:
+        except Exception:  # Textual widget query; UI may not be fully composed
             pass
 
     def _build_params(self) -> EncoderParams:
@@ -161,7 +161,7 @@ class QualityScreen(Screen):
                 warnings_widget.update("[bold yellow]" + "\n".join(warnings) + "[/]")
             else:
                 warnings_widget.update("")
-        except Exception:
+        except Exception:  # preview is best-effort; don't block the UI
             pass
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

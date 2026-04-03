@@ -14,6 +14,7 @@ Relies on globals defined in `config.py` and helpers from `utils.py`.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import random
 import shlex
@@ -30,7 +31,7 @@ from yachalk import chalk
 
 try:
     from clippy.theme import THEME, enable_windows_vt  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     THEME = None  # type: ignore
 
     def enable_windows_vt():  # type: ignore
@@ -71,6 +72,8 @@ from clippy.utils import find_transition_file, log, replace_vars, resolve_transi
 
 from clippy.models import ClipRow
 
+logger = logging.getLogger(__name__)
+
 
 SHUTDOWN_EVENT = threading.Event()
 _ACTIVE_PROCS: set[Popen] = set()
@@ -98,7 +101,7 @@ def _is_interrupted(err: Optional[bytes | str]) -> bool:
             or ("terminated" in s_low)
             or ("signal" in s_low and "term" in s_low)
         )
-    except Exception:
+    except Exception:  # broad catch: error-detection utility
         return SHUTDOWN_EVENT.is_set()
 
 
@@ -122,7 +125,7 @@ def terminate_all_processes(timeout: float = 2.0):
         try:
             if p.poll() is None:
                 p.terminate()
-        except Exception:
+        except OSError:
             pass
     # brief wait
     t0 = time.time()
@@ -132,7 +135,7 @@ def terminate_all_processes(timeout: float = 2.0):
                 time.sleep(0.05)
             if p.poll() is None:
                 p.kill()
-        except Exception:
+        except OSError:
             pass
         finally:
             _unregister_proc(p)
@@ -142,11 +145,11 @@ def request_shutdown():
     """Signal threads to stop work and terminate child processes."""
     try:
         SHUTDOWN_EVENT.set()
-    except Exception:
+    except Exception:  # broad catch: shutdown safety
         pass
     try:
         terminate_all_processes()
-    except Exception:
+    except Exception:  # broad catch: shutdown safety
         pass
 
 
@@ -169,7 +172,7 @@ def run_proc(cmd: str, prefer_shell: bool = False):
             except FileNotFoundError:
                 try:
                     log("Executable not found (Windows): " + cmd, 5)
-                except Exception:
+                except Exception:  # broad catch: log safety
                     pass
                 raise
         else:
@@ -182,7 +185,7 @@ def run_proc(cmd: str, prefer_shell: bool = False):
                 try:
                     log("Executable not found: " + str(tokens[0]), 5)
                     log(cmd, 5)
-                except Exception:
+                except Exception:  # broad catch: log safety
                     pass
                 raise
     else:
@@ -194,7 +197,7 @@ def run_proc(cmd: str, prefer_shell: bool = False):
             try:
                 log("Executable not found: " + str(tokens[0]), 5)
                 log(cmd, 5)
-            except Exception:
+            except Exception:  # broad catch: log safety
                 pass
             raise
 
@@ -240,7 +243,7 @@ def run_proc_cancellable(
             else:
                 log("Executable not found: " + str(args[0]), 5)
                 log((cmd if isinstance(cmd, str) else str(cmd)), 5)
-        except Exception:
+        except Exception:  # broad catch: log safety
             pass
         raise
     # Progress/err reader (reads stderr for -progress pipe:2 lines)
@@ -281,12 +284,12 @@ def run_proc_cancellable(
                         if info:
                             progress_cb(info)
                         continue
-                    except Exception:
+                    except (ValueError, TypeError):
                         # fall through and buffer
                         pass
                 # buffer any non-progress diagnostics
                 _err_lines.append(line_str)
-        except Exception:
+        except Exception:  # broad catch: thread reader safety
             pass
 
     _t = threading.Thread(target=_reader, daemon=True)
@@ -307,7 +310,7 @@ def run_proc_cancellable(
                             time.sleep(0.05)
                         if proc.poll() is None:
                             proc.kill()
-                except Exception:
+                except OSError:
                     pass
                 return 1, b"interrupted"
             rc = proc.poll()
@@ -318,11 +321,11 @@ def run_proc_cancellable(
                     _reader_stop.set()
                     try:
                         proc.stdout.close()
-                    except Exception:
+                    except OSError:
                         pass
                     try:
                         proc.stderr.close()
-                    except Exception:
+                    except OSError:
                         pass
                     # capture buffered diagnostics
                     stderr_data = (
@@ -330,7 +333,7 @@ def run_proc_cancellable(
                         if _err_lines
                         else None
                     )
-                except Exception:
+                except Exception:  # broad catch: cleanup encoding
                     stderr_data = None
                 return rc, stderr_data
             # still running
@@ -339,7 +342,7 @@ def run_proc_cancellable(
         _reader_stop.set()
         try:
             _t.join(timeout=0.2)
-        except Exception:
+        except Exception:  # broad catch: thread cleanup
             pass
         _unregister_proc(proc)
 
@@ -364,7 +367,7 @@ def _ffprobe_duration(path: str) -> Optional[float]:
         )
         val = out.strip()
         return float(val) if val else None
-    except Exception:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError, ValueError):
         return None
 
 
@@ -392,7 +395,7 @@ def _sum_concat_duration(index: int) -> Optional[float]:
                 if isinstance(dur, (int, float)) and dur > 0:
                     total += float(dur)
         return total if total > 0 else None
-    except Exception:
+    except (OSError, ValueError):
         return None
 
 
@@ -464,7 +467,7 @@ def _retry(fn, attempts: int = 3, backoff: float = 1.5):
         last = rc
         try:
             time.sleep(backoff * (i + 1))
-        except Exception:
+        except Exception:  # broad catch: sleep may be interrupted
             pass
     return last if last is not None else 1
 
@@ -487,7 +490,7 @@ def create_thumbnail(clip: ClipRow) -> int:
         with Image.open(preview) as img:
             img.thumbnail((128, 128))
             img.save(preview, "PNG")
-    except Exception as e:
+    except (OSError, ValueError) as e:
         log(f"Thumbnail resize error: {e}", 5)
         return 1
     return 0
@@ -526,14 +529,14 @@ def process_clip(
         if on_norm_progress and "out_time" in info and _dur:
             try:
                 on_norm_progress(info["out_time"], _dur)
-            except Exception:
+            except Exception:  # broad catch: callback safety
                 pass
 
     # Debug: show the full command when CLIPPY_DEBUG is set
     try:
         if os.getenv("CLIPPY_DEBUG", "").strip().lower() in ("1", "true", "yes", "on"):
             log("ffmpeg normalize cmd: " + _norm_cmd, 1)
-    except Exception:
+    except Exception:  # broad catch: debug logging safety
         pass
     rc, err = run_proc_cancellable(
         _norm_cmd, prefer_shell=True, progress_cb=_norm_cb if on_norm_progress else None
@@ -567,13 +570,13 @@ def process_clip(
             if on_overlay_progress and "out_time" in info and _dur:
                 try:
                     on_overlay_progress(info["out_time"], _dur)
-                except Exception:
+                except Exception:  # broad catch: callback safety
                     pass
 
         try:
             if os.getenv("CLIPPY_DEBUG", "").strip().lower() in ("1", "true", "yes", "on"):
                 log("ffmpeg overlay cmd: " + _ovl_cmd, 1)
-        except Exception:
+        except Exception:  # broad catch: debug logging safety
             pass
         rc, err = run_proc_cancellable(
             _ovl_cmd, prefer_shell=True, progress_cb=_ovl_cb if on_overlay_progress else None
@@ -589,7 +592,7 @@ def process_clip(
         # If overlay disabled, use normalized as final
         try:
             os.replace(os.path.join(clip_dir, "normalized.mp4"), final_path)
-        except Exception:
+        except OSError:
             pass
     try:
         os.remove(os.path.join(clip_dir, "normalized.mp4"))
@@ -619,7 +622,7 @@ def transcode_asset(name, transitions_abs, assets_out_dir, rel_assets_dir, asset
     if not os.path.exists(src):
         try:
             log("WARN Missing transition file; skipping: " + name, 2)
-        except Exception:
+        except Exception:  # broad catch: log safety
             pass
         return None
     dst = os.path.join(assets_out_dir, name)
@@ -627,31 +630,31 @@ def transcode_asset(name, transitions_abs, assets_out_dir, rel_assets_dir, asset
     # Behavior knobs
     try:
         from clippy.config import transitions_rebuild as _rebuild_trans  # type: ignore
-    except Exception:
+    except ImportError:
         _rebuild_trans = False
     try:
         from clippy.config import audio_normalize_transitions as _aud_norm  # type: ignore
-    except Exception:
+    except ImportError:
         _aud_norm = True
     try:
         from clippy.config import transitions as _cfg_transitions  # type: ignore
-    except Exception:
+    except ImportError:
         _cfg_transitions = []
     try:
         from clippy.config import static as _cfg_static  # type: ignore
-    except Exception:
+    except ImportError:
         _cfg_static = "static.mp4"
     try:
         from clippy.config import intro as _cfg_intro  # type: ignore
-    except Exception:
+    except ImportError:
         _cfg_intro = []
     try:
         from clippy.config import outro as _cfg_outro  # type: ignore
-    except Exception:
+    except ImportError:
         _cfg_outro = []
     try:
         from clippy.config import silence_static as _silence_static  # type: ignore
-    except Exception:
+    except ImportError:
         _silence_static = False
 
     # Determine whether to force silence via config
@@ -663,7 +666,7 @@ def transcode_asset(name, transitions_abs, assets_out_dir, rel_assets_dir, asset
         probe_cmd = f'{ffprobe} -v error -select_streams a:0 -show_entries stream=codec_type -of csv=p=0 "{src}"'
         rc_probe, _ = run_proc_cancellable(probe_cmd, prefer_shell=True)
         has_audio = rc_probe == 0
-    except Exception:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         has_audio = True
 
     # Determine desired build characteristics for this asset
@@ -674,7 +677,7 @@ def transcode_asset(name, transitions_abs, assets_out_dir, rel_assets_dir, asset
     if os.path.exists(dst) and not _rebuild_trans:
         try:
             entry = asset_manifest.get(name) if isinstance(asset_manifest, dict) else None
-        except Exception:
+        except (AttributeError, KeyError, TypeError):
             entry = None
         if entry and isinstance(entry, dict):
             if (
@@ -738,7 +741,7 @@ def transcode_asset(name, transitions_abs, assets_out_dir, rel_assets_dir, asset
             else:
                 log("WARN Failed to normalize transition asset: " + name, 2)
                 log(_etxt, 2)
-        except Exception:
+        except Exception:  # broad catch: log safety
             pass
         if SHUTDOWN_EVENT.is_set():
             return None
@@ -778,16 +781,16 @@ def transcode_asset(name, transitions_abs, assets_out_dir, rel_assets_dir, asset
                         asset_manifest[name] = {"silent": True, "aud_norm": False}
                         with open(manifest_path, "w", encoding="utf-8") as _mf2:
                             json.dump(asset_manifest, _mf2, indent=2)
-                    except Exception:
-                        pass
+                    except (OSError, TypeError, ValueError) as e:
+                        logger.debug("Failed to write asset manifest: %s", e)
                     return f"{rel_assets_dir}/{name}"
     # Successful build, record in manifest
     try:
         asset_manifest[name] = {"silent": desired_silent, "aud_norm": desired_audnorm}
         with open(manifest_path, "w", encoding="utf-8") as _mf3:
             json.dump(asset_manifest, _mf3, indent=2)
-    except Exception:
-        pass
+    except (OSError, TypeError, ValueError) as e:
+        logger.debug("Failed to write asset manifest: %s", e)
     return f"{rel_assets_dir}/{name}"
 
 
@@ -805,7 +808,7 @@ def prepare_clips_concurrent(compilation, max_workers):
             if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
                 ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
                 kernel32.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
-    except Exception:
+    except Exception:  # broad catch: Windows VT mode is optional
         pass
 
     # Progress board: print N lines and update in-place
@@ -824,13 +827,13 @@ def prepare_clips_concurrent(compilation, max_workers):
                 return THEME.section(label) if THEME else str(chalk.blue(label))
             if "queued" in low:
                 return THEME.bar(label) if THEME else str(chalk.gray(label))
-        except Exception:
+        except Exception:  # broad catch: theme rendering safety
             pass
         return label
 
     try:
         enable_windows_vt()
-    except Exception:
+    except Exception:  # broad catch: VT setup is optional
         pass
     hdr = None
     try:
@@ -839,7 +842,7 @@ def prepare_clips_concurrent(compilation, max_workers):
             if THEME
             else str(chalk.blue_bright(f"Preparing {total} clip(s)..."))
         )
-    except Exception:
+    except Exception:  # broad catch: theme rendering safety
         hdr = str(chalk.blue_bright(f"Preparing {total} clip(s)..."))
     print(hdr)
     for i in range(1, total + 1):
@@ -854,7 +857,7 @@ def prepare_clips_concurrent(compilation, max_workers):
             sys.stdout.write("\r\x1b[2K")
             try:
                 clip_label = THEME.section("Clip") if THEME else "Clip"
-            except Exception:
+            except Exception:  # broad catch: theme rendering safety
                 clip_label = "Clip"
             sys.stdout.write(f"{clip_label} {pos}: {_status_text(text)}\n")
             # Move back down to bottom
@@ -887,7 +890,7 @@ def prepare_clips_concurrent(compilation, max_workers):
                 if h > 0:
                     return f"{h:02d}:{m:02d}:{s:02d}"
                 return f"{m:02d}:{s:02d}"
-            except Exception:
+            except (ValueError, TypeError):
                 return "--:--"
 
         def _norm_progress(done: float, total: float):
@@ -920,7 +923,7 @@ def prepare_clips_concurrent(compilation, max_workers):
             idx = futs[fut]
             try:
                 results[idx] = fut.result()
-            except Exception:
+            except Exception:  # broad catch: thread worker safety
                 results[idx] = (compilation[idx], False)
     return results
 
@@ -932,43 +935,43 @@ def build_concat_list(compilation, results, transitions_abs, assets_out_dir, rel
     # Pull lists and config values
     try:
         from clippy.config import intro as _intro_list  # type: ignore
-    except Exception:
+    except ImportError:
         _intro_list = []
     try:
         from clippy.config import outro as _outro_list  # type: ignore
-    except Exception:
+    except ImportError:
         _outro_list = []
     try:
         from clippy.config import transitions as _transitions_list  # type: ignore
-    except Exception:
+    except ImportError:
         _transitions_list = []
     try:
         from clippy.config import static as _static_name  # type: ignore
-    except Exception:
+    except ImportError:
         _static_name = "static.mp4"
     try:
         from clippy.config import transition_probability as _trans_prob  # type: ignore
-    except Exception:
+    except ImportError:
         _trans_prob = 0.35
     try:
         from clippy.config import transitions_weights as _trans_weights  # type: ignore
-    except Exception:
+    except ImportError:
         _trans_weights = {}
     try:
         from clippy.config import transition_cooldown as _trans_cooldown  # type: ignore
-    except Exception:
+    except ImportError:
         _trans_cooldown = 0
     try:
         from clippy.config import silence_static as _silence_static  # type: ignore
-    except Exception:
+    except ImportError:
         _silence_static = True
     try:
         from clippy.config import skip_bad_clip as _skip_bad  # type: ignore
-    except Exception:
+    except ImportError:
         _skip_bad = True
     try:
         from clippy.config import no_random_transitions as _no_rand  # type: ignore
-    except Exception:
+    except ImportError:
         _no_rand = False
 
     def _append_trans_file(name: str) -> bool:
@@ -982,7 +985,7 @@ def build_concat_list(compilation, results, transitions_abs, assets_out_dir, rel
         # If normalization fails or file missing, skip to avoid bad AAC streams
         try:
             log("WARN Skipping transition (normalization failed): " + str(name), 2)
-        except Exception:
+        except Exception:  # broad catch: log safety
             pass
         return False
 
@@ -1013,7 +1016,7 @@ def build_concat_list(compilation, results, transitions_abs, assets_out_dir, rel
             # Python's random.choices available from 3.6+
             choice = random.choices(pool, weights=weights, k=1)[0]
             return choice
-        except Exception:
+        except (ValueError, IndexError):
             return random.choice(pool)
 
     for clip, ok in results:
@@ -1021,13 +1024,13 @@ def build_concat_list(compilation, results, transitions_abs, assets_out_dir, rel
             if _skip_bad:
                 try:
                     log("WARN Skipping failed clip: " + clip.id, 2)
-                except Exception:
+                except Exception:  # broad catch: log safety
                     pass
                 continue
             else:
                 try:
                     log("Clip failed and skip disabled; aborting", 5)
-                except Exception:
+                except Exception:  # broad catch: log safety
                     pass
                 break
         # successful clip
@@ -1040,8 +1043,8 @@ def build_concat_list(compilation, results, transitions_abs, assets_out_dir, rel
                     if _t_choice and _append_trans_file(_t_choice):
                         _recent_transitions.append(_t_choice)
                         _append_trans_file(_static_name)
-            except Exception:
-                pass
+            except (ValueError, TypeError) as e:
+                logger.debug("Failed to insert random transition: %s", e)
     # Outro (single random choice, if any). The preceding step already placed a static.
     if isinstance(_outro_list, (list, tuple)) and _outro_list:
         _out_choice = random.choice(list(_outro_list))
@@ -1062,7 +1065,7 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
     assets_out_dir = os.path.join(cache_abs, "_trans")
     try:
         os.makedirs(assets_out_dir, exist_ok=True)
-    except Exception:
+    except OSError:
         pass
     rel_assets_dir = os.path.relpath(assets_out_dir, start=cache_abs).replace("\\", "/")
     # Manifest to record how each asset was built (silent vs. normalized) to avoid stale reuse
@@ -1070,12 +1073,12 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
     try:
         with open(manifest_path, encoding="utf-8") as _mf:
             asset_manifest = json.load(_mf) or {}
-    except Exception:
+    except (json.JSONDecodeError, OSError):
         asset_manifest = {}
     # Load max concurrency config
     try:
         from clippy.config import max_concurrency as _max_workers  # type: ignore
-    except Exception:
+    except ImportError:
         _max_workers = 4
     # Process clips concurrently
     results = prepare_clips_concurrent(compilation, _max_workers)
@@ -1127,7 +1130,7 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
                 if h > 0:
                     return f"{h:02d}:{m:02d}:{s:02d}"
                 return f"{m:02d}:{s:02d}"
-            except Exception:
+            except (ValueError, TypeError):
                 return "--:--"
 
         # Render a single progress line that updates in-place
@@ -1140,7 +1143,7 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
                 try:
                     act = THEME.section("Concatenating") if THEME else chalk.cyan("Concatenating")
                     name = THEME.path(out_name) if THEME else chalk.white(out_name)
-                except Exception:
+                except Exception:  # broad catch: theme rendering safety
                     act = chalk.cyan("Concatenating")
                     name = chalk.white(out_name)
                 sys.stdout.write(
@@ -1150,7 +1153,7 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
                 try:
                     act = THEME.section("Concatenating") if THEME else chalk.cyan("Concatenating")
                     name = THEME.path(out_name) if THEME else chalk.white(out_name)
-                except Exception:
+                except Exception:  # broad catch: theme rendering safety
                     act = chalk.cyan("Concatenating")
                     name = chalk.white(out_name)
                 sys.stdout.write(f"\r{act} {name}: {_fmt_time(done)}   ")
@@ -1160,14 +1163,14 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
         try:
             if os.getenv("CLIPPY_DEBUG", "").strip().lower() in ("1", "true", "yes", "on"):
                 log("ffmpeg concat cmd: " + cmd, 1)
-        except Exception:
+        except Exception:  # broad catch: debug logging safety
             pass
         rc, err = run_proc_cancellable(cmd, prefer_shell=True, progress_cb=_concat_progress)
         # Ensure we end the progress line cleanly
         try:
             sys.stdout.write("\r\n")
             sys.stdout.flush()
-        except Exception:
+        except OSError:
             pass
         if rc != 0:
             try:
@@ -1181,7 +1184,7 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
                     )
                     log("Concat failed for index " + str(idx), 5)
                     log(_etxt, 5)
-            except Exception:
+            except Exception:  # broad catch: log safety
                 pass
 
 

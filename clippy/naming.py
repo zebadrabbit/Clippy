@@ -23,7 +23,7 @@ def ensure_unique_names(base_names: List[str], out_dir: str, overwrite: bool) ->
     try:
         for fname in os.listdir(out_dir):
             used.add(fname.lower())
-    except Exception:
+    except OSError:
         pass
     result: list[str] = []
     for name in base_names:
@@ -79,7 +79,7 @@ def finalize_outputs(
         # Determine container extension used by ffmpeg for cache outputs
         try:
             from clippy.config import container_ext as _ext_cfg
-        except Exception:
+        except ImportError:
             _ext_cfg = "mp4"
         # Use provided final names (preferred), else derive from broadcaster/date
         if final_names is None:
@@ -111,7 +111,7 @@ def finalize_outputs(
                 if overwrite_output and os.path.exists(dest):
                     try:
                         os.remove(dest)
-                    except Exception:
+                    except OSError:
                         pass
                 # If still exists and overwrite is False, auto-suffix here as a last resort
                 if (not overwrite_output) and os.path.exists(dest):
@@ -134,7 +134,7 @@ def finalize_outputs(
         if moved_files:
             try:
                 log("Moved " + str(moved) + " file(s) to output: " + ", ".join(moved_files), 2)
-            except Exception:
+            except Exception:  # fallback for log formatting
                 log("Moved " + str(moved) + " file(s) to output", 2)
         else:
             log("Moved " + str(moved) + " file(s) to output", 2)
@@ -145,9 +145,9 @@ def finalize_outputs(
                     + ", ".join(str(i) for i in missing_indices),
                     2,
                 )
-            except Exception:
+            except Exception:  # fallback for log formatting
                 pass
-    except Exception as e:  # pragma: no cover
+    except Exception as e:  # pragma: no cover — broad safety net for finalize
         log("Finalize failed: " + str(e), 5)
         return []
 
@@ -161,7 +161,7 @@ def finalize_outputs(
         if not purge_cache:
             try:
                 from clippy.config import cache_preserve_dirs as _preserve
-            except Exception:
+            except ImportError:
                 _preserve = []
             preserve_set = {d.strip().lower() for d in _preserve if isinstance(d, str)}
         for entry in os.listdir(cache):
@@ -176,6 +176,6 @@ def finalize_outputs(
             except OSError:
                 pass
         log("Cache cleaned", 2)
-    except Exception as e:  # pragma: no cover
+    except OSError as e:  # pragma: no cover
         log("Cache cleanup failed: " + str(e), 5)
     return final_names

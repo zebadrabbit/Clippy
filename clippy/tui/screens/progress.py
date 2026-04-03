@@ -103,7 +103,7 @@ class ProgressScreen(Screen):
             if enc:
                 log_widget.write(f"  --preset {enc.name}" if enc.name else "")
 
-        except Exception as e:
+        except Exception as e:  # surface any pipeline error in the UI
             log_widget.write(f"[bold red]Error: {e}[/]")
 
     # Callback methods (for future pipeline integration)
@@ -120,7 +120,7 @@ class ProgressScreen(Screen):
                     table.update_cell(row_key, "Status", status)
                     table.update_cell(row_key, "Progress", prog_str)
                     return
-        except Exception:
+        except Exception:  # Textual table API; row may not exist yet
             pass
         table.add_row(clip_id[:20], status, prog_str)
 

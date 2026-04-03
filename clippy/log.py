@@ -42,7 +42,7 @@ def _ensure_vt() -> None:
             from clippy.theme import enable_windows_vt
 
             enable_windows_vt()
-        except Exception:
+        except Exception:  # VT setup is cosmetic; must not break logging
             pass
 
 
@@ -53,7 +53,7 @@ def _get_theme():
             from clippy.theme import THEME
 
             _THEME = THEME
-        except Exception:
+        except Exception:  # theme unavailable; degrade gracefully
             _THEME = False  # sentinel: don't retry
     return _THEME if _THEME is not False else None
 
@@ -96,7 +96,7 @@ class ClippyFormatter(logging.Formatter):
 
         try:
             from clippy.utils import _accent_symbols, _style_label_value
-        except Exception:
+        except Exception:  # optional styling helpers
             _accent_symbols = _style_label_value = None  # type: ignore[assignment]
 
         def _style(text: str) -> str:
@@ -105,12 +105,12 @@ class ClippyFormatter(logging.Formatter):
             if _style_label_value is not None:
                 try:
                     return _style_label_value(text)
-                except Exception:
+                except Exception:  # styling is optional; fall through
                     pass
             if theme:
                 try:
                     return theme.text(text)
-                except Exception:
+                except Exception:  # theme styling may fail
                     pass
             return text
 
@@ -118,7 +118,7 @@ class ClippyFormatter(logging.Formatter):
             if _accent_symbols is not None:
                 try:
                     return _accent_symbols(text)
-                except Exception:
+                except Exception:  # accent is cosmetic
                     pass
             return text
 
@@ -136,21 +136,21 @@ class ClippyFormatter(logging.Formatter):
                     if not is_styled:
                         body = chalk.red_bright(body)
                     x = chalk.red_bright("\u2716")
-            except Exception:
+            except Exception:  # chalk/theme may be unavailable
                 x = "\u2716"
             return f"{x} {body}"
 
         if sublevel == 2:
             try:
                 chev = theme.symbol("\u203a") if theme else "\u203a"
-            except Exception:
+            except Exception:  # symbol styling is cosmetic
                 chev = "\u203a"
             return f"{chev} {body}"
 
         if sublevel == 1:
             try:
                 bullet = theme.symbol("\u2022") if theme else "\u2022"
-            except Exception:
+            except Exception:  # symbol styling is cosmetic
                 bullet = "\u2022"
             return f"{bullet} {body}"
 
@@ -178,7 +178,7 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
     if hasattr(sys.stdout, "reconfigure"):
         try:
             sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
+        except Exception:  # reconfigure may not be supported on all streams
             pass
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(ClippyFormatter())

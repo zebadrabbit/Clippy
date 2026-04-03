@@ -4,7 +4,7 @@ import clippy.config as _cfg_mod
 
 try:
     from clippy.theme import THEME, enable_windows_vt  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     THEME = None  # type: ignore
 
     def enable_windows_vt():  # type: ignore
@@ -24,7 +24,7 @@ def _cfg_get(name: str, default=None):
     """
     try:
         return getattr(_cfg_mod, name, default)
-    except Exception:
+    except Exception:  # config can fail in many ways; broad catch intentional
         return default
 
 
@@ -35,7 +35,7 @@ def _accent_symbols(s: str) -> str:
     """
     try:
         sym = THEME.symbol  # may raise if THEME missing
-    except Exception:
+    except (AttributeError, TypeError):
         return s
     try:
         # Arrow token '->' becomes a single accented arrow
@@ -47,7 +47,7 @@ def _accent_symbols(s: str) -> str:
         # Asterisks surrounded by spaces
         s = s.replace(" * ", " " + str(sym("*")) + " ")
         return s
-    except Exception:
+    except (AttributeError, TypeError):
         return s
 
 
@@ -68,7 +68,7 @@ def _looks_like_path(val: str) -> bool:
         ):
             return True
         return False
-    except Exception:
+    except (AttributeError, TypeError):
         return False
 
 
@@ -80,7 +80,7 @@ def _style_label_value(rendered: str) -> str:
     try:
         if THEME is None:
             return chalk.gray(rendered)
-    except Exception:
+    except (AttributeError, TypeError):
         return chalk.gray(rendered)
     try:
         if ": " not in rendered:
@@ -92,28 +92,28 @@ def _style_label_value(rendered: str) -> str:
             label_fn = (
                 getattr(THEME, "label", None) or getattr(THEME, "section", None) or THEME.text
             )
-        except Exception:
+        except (AttributeError, TypeError):
             label_fn = THEME.text
         try:
             value_fn = getattr(THEME, "value", None) or THEME.text
-        except Exception:
+        except (AttributeError, TypeError):
             value_fn = THEME.text
         try:
             path_fn = getattr(THEME, "path", None) or value_fn
-        except Exception:
+        except (AttributeError, TypeError):
             path_fn = value_fn
         # Compose with a themed separator if available
         try:
             sep = str(THEME.symbol(":"))
-        except Exception:
+        except (AttributeError, TypeError):
             sep = ":"
         right = (path_fn if _looks_like_path(value) else value_fn)(value)
         return f"{label_fn(label)} {sep} {right}"
-    except Exception:
+    except (AttributeError, TypeError):
         # best-effort fallback
         try:
             return THEME.text(rendered)
-        except Exception:
+        except (AttributeError, TypeError):
             return rendered
 
 
@@ -162,14 +162,14 @@ def replace_vars(s, m):
         from clippy.config import yt_format
 
         s = s.replace("{yt_format}", yt_format)
-    except Exception:
+    except ImportError:
         pass
     # ffmpeg path into youtubeDl options
     try:
         from clippy.config import ffmpeg as _ff
 
         s = s.replace("{ffmpeg_path}", _ff)
-    except Exception:
+    except ImportError:
         pass
     return s
 
@@ -179,7 +179,7 @@ def resolve_transitions_dir() -> str:
         env_dir = os.getenv("TRANSITIONS_DIR")
         if env_dir:
             return os.path.abspath(env_dir)
-    except Exception:
+    except OSError:
         pass
     roots: list[str] = []
     try:
@@ -188,29 +188,29 @@ def resolve_transitions_dir() -> str:
         cfg_dir = getattr(_cfg, "transitions_dir", None)
         if cfg_dir:
             roots.append(os.path.abspath(str(cfg_dir)))
-    except Exception:
+    except (ImportError, OSError):
         pass
     # Source roots only: repo and CWD
     # Repo and CWD fallbacks
     try:
         repo_dir = os.path.dirname(os.path.abspath(__file__))
         roots += [os.path.join(repo_dir, "..", "transitions")]
-    except Exception:
+    except OSError:
         pass
     try:
         cwd = os.getcwd()
         roots += [os.path.join(cwd, "transitions")]
-    except Exception:
+    except OSError:
         pass
     for r in roots:
         try:
             if r and os.path.isdir(r):
                 return os.path.abspath(r)
-        except Exception:
+        except OSError:
             continue
     try:
         return os.path.abspath("transitions")
-    except Exception:
+    except OSError:
         return os.path.abspath("transitions")
 
 
@@ -239,7 +239,7 @@ def find_transition_file(name: str) -> str | None:
             cfg_dir = getattr(_cfg, "transitions_dir", None)
             if cfg_dir:
                 candidates.append(os.path.abspath(str(cfg_dir)))
-        except Exception:
+        except (ImportError, OSError):
             pass
 
         def _add(base: str):
@@ -248,12 +248,12 @@ def find_transition_file(name: str) -> str | None:
         try:
             repo_dir = os.path.dirname(os.path.abspath(__file__))
             _add(repo_dir)
-        except Exception:
+        except OSError:
             pass
         try:
             cwd = os.getcwd()
             _add(cwd)
-        except Exception:
+        except OSError:
             pass
         # Now test each candidate
         for root in candidates:
@@ -261,10 +261,10 @@ def find_transition_file(name: str) -> str | None:
                 p = os.path.join(root, name)
                 if os.path.exists(p):
                     return os.path.abspath(p)
-            except Exception:
+            except OSError:
                 continue
         return None
-    except Exception:
+    except (OSError, TypeError, ValueError):
         return None
 
 
@@ -274,7 +274,7 @@ def prep_work():
     def _display_path(p: str) -> str:
         try:
             return os.path.abspath(p)
-        except Exception:
+        except OSError:
             return p
 
     def _ensure_dir(path: str, label: str):
@@ -282,7 +282,7 @@ def prep_work():
             if not os.path.exists(path):
                 log(f"creating new {label} directory at " + _display_path(path), 1)
                 os.makedirs(path, exist_ok=True)
-        except Exception as e:
+        except OSError as e:
             log("Failed to create " + str(label) + " dir: " + str(e), 5)
 
     def _ensure_readme(path: str, content: str):
@@ -292,7 +292,7 @@ def prep_work():
                 os.makedirs(path, exist_ok=True)
                 with open(readme_path, "w", encoding="utf-8") as f:
                     f.write(content)
-        except Exception as e:
+        except OSError as e:
             log("Failed to write README in " + str(path) + ": " + str(e), 5)
 
     # cache dir
@@ -339,5 +339,5 @@ def prep_work():
                 "WARN transitions/static.mp4 not found. Place your transition clip in the transitions folder.",
                 1,
             )
-    except Exception as e:
+    except OSError as e:
         log("Static file check error: " + str(e), 5)

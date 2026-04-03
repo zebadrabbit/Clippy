@@ -71,7 +71,7 @@ def summarize(
     log("Max Clips Fetch: " + str(cfg.max_clips), 1)
     try:
         _tot = int(getattr(cfg, "amountOfCompilations")) * int(getattr(cfg, "amountOfClips"))
-    except Exception:
+    except (ValueError, TypeError, AttributeError):
         _tot = None
     msg = (
         "Compilations: "
@@ -88,12 +88,12 @@ def summarize(
         log("Resolution: " + str(resolution or ""), 1)
         log("Format: " + str(container_ext or "mp4"), 1)
         log("Bitrate: " + str(bitrate or ""), 1)
-    except Exception:
+    except Exception:  # log formatting is best-effort
         pass
     try:
         if getattr(cfg, "auto_expand", False):
             log("Auto-expand: enabled", 1)
             log("Expand step: " + str(getattr(cfg, "expand_step_days", 7)) + " days", 1)
             log("Max lookback: " + str(getattr(cfg, "max_lookback_days", 90)) + " days", 1)
-    except Exception:
+    except AttributeError:
         pass

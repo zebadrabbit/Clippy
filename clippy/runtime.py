@@ -21,8 +21,8 @@ def _load_env_if_present():
                 v = v.strip().strip('"').strip("'")
                 if k and k not in os.environ:
                     os.environ[k] = v
-    except Exception:
-        # best-effort; ignore parse errors
+    except OSError:
+        # best-effort; ignore file-read errors
         pass
 
 
@@ -41,7 +41,7 @@ def ensure_twitch_credentials_if_needed():
 
     try:
         from clippy.utils import log  # type: ignore
-    except Exception:
+    except ImportError:
 
         def log(msg, level=0):
             print(msg)
@@ -66,7 +66,7 @@ def ensure_transitions_static_present(transitions_dir: Optional[str] = None):
     """Resolve transitions directory and require static.mp4 to exist; exit with a helpful error if missing."""
     try:
         from clippy.utils import resolve_transitions_dir  # type: ignore
-    except Exception:
+    except ImportError:
 
         def resolve_transitions_dir():
             import os as _os
@@ -80,7 +80,7 @@ def ensure_transitions_static_present(transitions_dir: Optional[str] = None):
     static_path = os.path.join(tdir, "static.mp4")
     try:
         from clippy.utils import log as _log  # type: ignore
-    except Exception:
+    except ImportError:
 
         def _log(msg, level=0):
             print(msg)

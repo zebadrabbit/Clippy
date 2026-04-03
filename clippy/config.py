@@ -24,7 +24,7 @@ try:
     from .config_loader import load_merged_config  # type: ignore
 
     _merged: dict[str, Any] = load_merged_config()
-except Exception:
+except Exception:  # broad fallback: config bootstrap must not crash
     _merged = {
         "yt_format": "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]",
         "bitrate": "12M",
@@ -90,7 +90,7 @@ try:
                 fontfile = _ff  # keep relative; ffmpeg may still resolve
     else:
         fontfile = _ff
-except Exception:
+except OSError:
     fontfile = "assets/fonts/Roboto-Medium.ttf"
 
 # Higher quality NVENC settings to reduce blockiness at transitions

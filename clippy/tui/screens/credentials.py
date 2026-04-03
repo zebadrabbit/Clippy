@@ -77,7 +77,7 @@ class CredentialsScreen(Screen):
                 status.update("[bold green]Credentials valid![/]")
             else:
                 status.update("[bold red]Auth failed — check credentials[/]")
-        except Exception as e:
+        except Exception as e:  # auth can raise requests/runtime/key errors
             status.update(f"[bold red]Error: {e}[/]")
 
     def _save_and_advance(self) -> None:
@@ -88,7 +88,7 @@ class CredentialsScreen(Screen):
         try:
             creds["discord_token"] = self.query_one("#discord-token", Input).value.strip()
             creds["discord_channel_id"] = self.query_one("#discord-channel-id", Input).value.strip()
-        except Exception:
+        except Exception:  # discord widgets absent when source is twitch-only
             pass
         self.app.workflow["credentials"] = creds
         self.app.advance_to("clip_settings")

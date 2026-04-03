@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 try:
     import yaml  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     yaml = None
 
 
@@ -81,7 +81,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
         if not isinstance(data, dict):
             return {}
         return data  # type: ignore
-    except Exception:
+    except (yaml.YAMLError, OSError):
         return {}
 
 
@@ -104,14 +104,14 @@ def _coerce_str(v: Any, default: str) -> str:
 def _coerce_int(v: Any, default: int) -> int:
     try:
         return int(v) if v is not None else default
-    except Exception:
+    except (ValueError, TypeError):
         return default
 
 
 def _coerce_float(v: Any, default: float) -> float:
     try:
         return float(v) if v is not None else default
-    except Exception:
+    except (ValueError, TypeError):
         return default
 
 
@@ -133,7 +133,7 @@ def _coerce_dict_float(v: Any, default: dict[str, float]) -> dict[str, float]:
         for k, val in v.items():
             try:
                 out[str(k)] = float(val)
-            except Exception:
+            except (ValueError, TypeError):
                 pass
         return out if out else default
     return default
@@ -253,7 +253,7 @@ def load_merged_config(
         merged["discord_channel_id"] = (
             int(ch_val) if ch_val is not None else merged.get("discord_channel_id")
         )
-    except Exception:
+    except (ValueError, TypeError):
         pass
     merged["discord_message_limit"] = _coerce_int(
         discord.get("message_limit") if isinstance(discord, dict) else None,

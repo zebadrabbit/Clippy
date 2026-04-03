@@ -112,7 +112,7 @@ def fetch_clips(
                 + str(_af),
                 2,
             )
-        except Exception:
+        except Exception:  # log formatting is best-effort
             pass
         resp = requests.get(
             CLIPS_URL, params=params, headers=_headers(client_id, token), timeout=30
@@ -157,7 +157,7 @@ def fetch_clips_by_ids(
             data = resp.json().get("data", [])
             if data:
                 out.extend(data)
-        except Exception as e:
+        except requests.RequestException as e:
             log(f"Helix by-ids failed: {e}", 5)
     return out
 
@@ -210,7 +210,7 @@ def build_clip_rows(
                     url=c.get("url", ""),
                 )
             )
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  # pragma: no cover — mixed data-parsing errors
             log(f"Row build error: {e}", 5)
     return rows
 
@@ -222,7 +222,7 @@ def _iso_to_epoch(iso_str: str) -> float:
 
         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
         return dt.timestamp()
-    except Exception:
+    except (ValueError, TypeError):
         return time.time()
 
 
@@ -241,7 +241,7 @@ def _load_dotenv(path: str = ".env") -> dict:
                     continue
                 k, v = line.split("=", 1)
                 data[k.strip()] = v.strip().strip('"').strip("'")
-    except Exception as e:  # pragma: no cover
+    except OSError as e:  # pragma: no cover
         log(f".env parse error: {e}", 5)
     return data
 
