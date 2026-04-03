@@ -1186,11 +1186,3 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
                     log(_etxt, 5)
             except Exception:  # broad catch: log safety
                 pass
-
-
-# Backwards compatible aliases
-createCompilations = create_compilations_from  # pragma: no cover
-downloadAvatar = download_avatar  # pragma: no cover
-downloadClip = download_clip  # pragma: no cover
-createThumbnail = create_thumbnail  # pragma: no cover
-processClip = process_clip  # pragma: no cover

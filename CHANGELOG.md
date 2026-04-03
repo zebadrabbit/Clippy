@@ -1,5 +1,62 @@
 # Changelog
 
+## 2026-04-02 — v0.4.0
+
+Major architecture overhaul: robustness, Textual TUI, and ffmpeg preset system.
+
+- Architecture — Typed config dataclasses (`clippy/models.py`)
+  - Replaced 40+ mutable module-level globals with `ClippyConfig` and nested typed dataclasses.
+  - `ClipRow` is now a dataclass with named fields; backwards-compatible `__getitem__` for migration.
+  - `get_config()` / `set_config()` singleton with `to_flat_dict()` bridge for legacy `replace_vars()`.
+
+- Architecture — Stdlib logging (`clippy/log.py`)
+  - Replaced custom 80-line `utils.log()` with Python `logging` module.
+  - `ClippyFormatter` preserves BBS-style theme coloring with Unicode symbols.
+  - Forces UTF-8 stdout on Windows to prevent cp1252 encoding errors.
+
+- Architecture — ffmpeg command builder (`clippy/ffmpeg.py`)
+  - `EncoderParams` dataclass eliminates 9 duplicate NVENC encoding strings.
+  - Structured flag builders: `video_flags()`, `audio_flags()`, `sizing_flags()`.
+  - Command builders for all pipeline operations: normalize, overlay, concat, transcode, thumbnail.
+  - `detect_encoder()` auto-probes for NVENC and falls back to libx264.
+
+- Architecture — Removed wildcard imports
+  - Replaced `from clippy.config import *` with explicit imports in main.py, pipeline.py, utils.py.
+  - Migrated all `clip[N]` positional access to named `clip.id`, `clip.author`, etc.
+
+- Architecture — Monolith breakup
+  - `main()` (628 lines) split into 5 functions: `apply_cli_overrides()`, `display_confirmation()`, `ingest_clips()`, `filter_and_expand()`, `run_pipeline()`.
+  - `write_concat_file()` (460 lines) split into 3 functions: `transcode_asset()`, `prepare_clips_concurrent()`, `build_concat_list()`.
+
+- Robustness — Error handling (~190 locations)
+  - Narrowed ~80 blanket `except Exception` to specific types (ImportError, OSError, ValueError, etc.).
+  - Added `logger.debug()` to ~40 silent swallows for visibility.
+  - Kept ~70 as broad catches with inline comments explaining why.
+
+- Feature — Encoding presets (`clippy/presets.py`)
+  - 5 named presets: youtube_1080p60, discord_friendly, archive_hq, quick_preview, cpu_only.
+  - `--preset` CLI flag and `--list-presets` for discovery.
+  - `EncoderParams.with_overrides()` for customization, `validate()` for warnings.
+
+- Feature — yt-dlp abstraction (`clippy/ytdlp.py`)
+  - `YtDlpConfig` dataclass with `to_command()` builder and 3 presets.
+
+- Feature — Textual TUI (`clippy/tui/`)
+  - 6-step guided workflow: Source > Credentials > Clip Settings > Quality > Transitions > Review.
+  - Live ffmpeg command preview in the Quality screen with preset selector and parameter builder.
+  - Progress dashboard with per-clip status, overall progress bar, and log panel.
+  - BBS-inspired dark theme stylesheet.
+
+- Testing — pytest infrastructure
+  - 63 tests across 6 test modules covering models, config loader, ffmpeg builder, presets, yt-dlp.
+  - pytest configured via pyproject.toml with coverage support.
+
+- Cleanup
+  - Removed camelCase aliases from pipeline.py.
+  - Fixed `datetime.utcnow()` deprecations (use `datetime.now(timezone.utc)`).
+  - Updated pyproject.toml: Python >=3.10, optional deps for discord/tui/dev.
+  - Version bumped to 0.4.0.
+
 ## 2025-10-12 — v0.3.6
 
 - Wizard — Configure intros/outros

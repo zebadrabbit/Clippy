@@ -632,7 +632,7 @@ def run_pipeline(comps, args, window):
         e_part = _date_part(end_iso) or s_part
         date_range = f"{s_part}_to_{e_part}"
     else:
-        date_range = datetime.utcnow().strftime("%Y-%m-%d")
+        date_range = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     try:
         from clippy.config import container_ext as _ext
     except ImportError:
