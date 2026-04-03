@@ -1,0 +1,78 @@
+/* Clippy TUI Stylesheet — BBS-inspired cyan/blue/gray palette */
+
+Screen {
+    background: $surface;
+}
+
+Header {
+    color: $text;
+    background: $primary-background;
+}
+
+Footer {
+    color: $text-muted;
+}
+
+/* Common screen layout */
+.screen-container {
+    padding: 1 2;
+    height: 100%;
+}
+
+.screen-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+.form-group {
+    margin-bottom: 1;
+    height: auto;
+}
+
+.form-label {
+    color: $text;
+    margin-bottom: 0;
+}
+
+.button-bar {
+    dock: bottom;
+    height: 3;
+    align: right middle;
+    padding: 0 2;
+}
+
+.button-bar Button {
+    margin-left: 1;
+}
+
+#next-btn {
+    background: $accent;
+}
+
+/* Preset selector */
+.preset-list {
+    height: 12;
+    border: solid $primary-background;
+    margin-bottom: 1;
+}
+
+/* Command preview */
+.command-preview {
+    height: 8;
+    border: solid $primary-background;
+    padding: 1;
+    background: $surface-darken-1;
+    overflow-y: auto;
+}
+
+/* Progress screen */
+.progress-section {
+    height: auto;
+    margin-bottom: 1;
+}
+
+.log-panel {
+    height: 1fr;
+    border: solid $primary-background;
+}

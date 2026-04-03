@@ -1,0 +1,63 @@
+"""Review screen — summary of all settings before starting."""
+
+from __future__ import annotations
+
+from textual.app import ComposeResult
+from textual.containers import Vertical
+from textual.screen import Screen
+from textual.widgets import Button, DataTable, Static
+
+
+class ReviewScreen(Screen):
+    """Step 6: Review all settings and start processing."""
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="screen-container"):
+            yield Static("Step 6 of 6 — Review & Start", classes="screen-title")
+            yield DataTable(id="review-table")
+            with Vertical(classes="button-bar"):
+                yield Button("← Back", id="back-btn")
+                yield Button("Start Processing", variant="primary", id="start-btn")
+
+    def on_mount(self) -> None:
+        table = self.query_one("#review-table", DataTable)
+        table.add_columns("Setting", "Value")
+
+        wf = self.app.workflow
+
+        # Source
+        table.add_row("Source", wf.get("source", "twitch").title())
+
+        # Clip settings
+        cs = wf.get("clip_settings", {})
+        table.add_row("Broadcaster", cs.get("broadcaster", "—"))
+        table.add_row("Date Range", f"{cs.get('start', 'auto')} → {cs.get('end', 'today')}")
+        table.add_row("Min Views", str(cs.get("min_views", 1)))
+        table.add_row("Clips / Compilation", str(cs.get("clips_per_comp", 12)))
+        table.add_row("Compilations", str(cs.get("compilations", 2)))
+        table.add_row("Auto-expand", "Yes" if cs.get("auto_expand") else "No")
+
+        # Encoder
+        enc = wf.get("encoder_params")
+        if enc:
+            table.add_row("Codec", enc.video_codec)
+            table.add_row("CQ", str(enc.cq))
+            table.add_row("Max Bitrate", enc.max_bitrate)
+            table.add_row("Resolution", enc.resolution)
+            table.add_row("FPS", enc.fps)
+            table.add_row("Preset", enc.preset)
+            table.add_row("Audio Bitrate", enc.audio_bitrate)
+            table.add_row("Container", enc.container_ext)
+
+        # Transitions
+        tr = wf.get("transitions", {})
+        table.add_row("Transitions Dir", tr.get("transitions_dir", "transitions"))
+        table.add_row("Transition Prob", str(tr.get("transition_probability", 0.35)))
+        table.add_row("Audio Normalize", "Yes" if tr.get("audio_normalize_transitions", True) else "No")
+        table.add_row("Overlay", "No" if tr.get("no_overlay", False) else "Yes")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "back-btn":
+            self.app.pop_screen()
+        elif event.button.id == "start-btn":
+            self.app.advance_to("progress")
