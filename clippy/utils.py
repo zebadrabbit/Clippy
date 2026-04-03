@@ -46,9 +46,9 @@ def _accent_symbols(s: str) -> str:
         return s
     try:
         # Arrow token '->' becomes a single accented arrow
-        s = s.replace(" -> ", " " + str(sym("→")) + " ")
+        s = s.replace(" -> ", " " + str(sym("\u2192")) + " ")
         # Existing arrow glyphs
-        s = s.replace("→", str(sym("→")))
+        s = s.replace("\u2192", str(sym("\u2192")))
         # Colons between label and value: ' : '
         s = s.replace(" : ", " " + str(sym(":")) + " ")
         # Asterisks surrounded by spaces
@@ -124,89 +124,8 @@ def _style_label_value(rendered: str) -> str:
             return rendered
 
 
-def log(msg, level=0):
-    """Structured log with colorized levels.
-
-    Levels:
-      0 info, 1 action, 2 stage, 5 error
-    """
-    # Ensure Windows consoles render ANSI colors
-    try:
-        enable_windows_vt()
-    except Exception:
-        pass
-    rendered = str(msg)
-    # If message already contains ANSI codes, treat it as pre-styled and don't recolor
-    is_styled = "\x1b[" in rendered
-    if level == 0:
-        if is_styled:
-            body = rendered
-        else:
-            try:
-                body = _style_label_value(rendered) if THEME else chalk.gray(rendered)
-            except Exception:
-                body = chalk.gray(rendered)
-        body = _accent_symbols(body)
-        out = "  " + body
-    elif level == 1:
-        if is_styled:
-            body = rendered
-        else:
-            try:
-                body = _style_label_value(rendered) if THEME else chalk.gray(rendered)
-            except Exception:
-                body = chalk.gray(rendered)
-        body = _accent_symbols(body)
-        # Use a bullet to avoid Markdown list trigger ("- ")
-        try:
-            bullet = THEME.symbol("•") if THEME else chalk.magenta_bright("•")
-        except Exception:
-            bullet = chalk.magenta_bright("•")
-        out = bullet + " " + body
-    elif level == 2:
-        if is_styled:
-            body = rendered
-        else:
-            try:
-                body = _style_label_value(rendered) if THEME else chalk.gray(rendered)
-            except Exception:
-                body = chalk.gray(rendered)
-        body = _accent_symbols(body)
-        # Use a chevron to avoid Markdown blockquote ("> ")
-        try:
-            chev = THEME.symbol("›") if THEME else chalk.magenta_bright("›")
-        except Exception:
-            chev = chalk.magenta_bright("›")
-        out = chev + " " + body
-    elif level == 5:
-        # Errors: render in bright red, including the leading symbol
-        if is_styled:
-            body = rendered
-        else:
-            try:
-                raw = _style_label_value(rendered) if THEME else rendered
-            except Exception:
-                raw = rendered
-            try:
-                body = THEME.error(raw) if THEME else chalk.red_bright(raw)
-            except Exception:
-                body = chalk.red_bright(raw)
-        try:
-            x = THEME.error("✖") if THEME else chalk.red_bright("✖")
-        except Exception:
-            x = chalk.red_bright("✖")
-        out = x + " " + body
-    else:
-        if is_styled:
-            body = rendered
-        else:
-            try:
-                body = _style_label_value(rendered) if THEME else chalk.gray(rendered)
-            except Exception:
-                body = chalk.gray(rendered)
-        body = _accent_symbols(body)
-        out = body
-    print(out)
+# Delegate log() to the new centralized logging module
+from clippy.log import log  # noqa: E402,F401
 
 
 # sanitize non-ASCII to a safe subset for overlays/filenames
