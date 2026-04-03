@@ -4,12 +4,20 @@ Package configuration facade.
 Loads user settings via config_loader and exposes familiar module-level globals
 used throughout the app (ffmpeg templates, binaries, paths, etc.).
 
+New code should use ``get_config()`` to obtain the typed ``ClippyConfig``
+dataclass instead of relying on module-level globals.  The globals are kept
+for backwards compatibility during the migration period.
+
 This file lives inside the clippy package; path resolution that previously
 assumed repo root is adjusted accordingly.
 """
 
+from __future__ import annotations
+
 import os
-from typing import Any
+from typing import Any, Optional
+
+from clippy.models import ClippyConfig
 
 # Load merged config from YAML/env/defaults
 try:
@@ -132,3 +140,29 @@ youtubeDlOptions = (
 
 # Alias for clarity (kept for legacy references)
 viewThreshold = globals().get("reactionThreshold", 1)
+
+# ---------------------------------------------------------------------------
+# Typed config singleton (preferred for new code)
+# ---------------------------------------------------------------------------
+
+_CONFIG: Optional[ClippyConfig] = None
+
+
+def get_config() -> ClippyConfig:
+    """Return the canonical ClippyConfig singleton.
+
+    Built lazily from the same merged dict that populates the module globals.
+    Call ``set_config()`` to replace it (e.g. after CLI override merging).
+    """
+    global _CONFIG
+    if _CONFIG is None:
+        _CONFIG = ClippyConfig.from_merged_dict(_merged)
+    return _CONFIG
+
+
+def set_config(cfg: ClippyConfig) -> None:
+    """Replace the global config singleton and sync legacy globals."""
+    global _CONFIG
+    _CONFIG = cfg
+    # Keep module-level globals in sync for code that still reads them
+    globals().update(cfg.to_flat_dict())

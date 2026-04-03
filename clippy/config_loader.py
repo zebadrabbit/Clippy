@@ -268,3 +268,19 @@ def load_merged_config(
     # Deprecated: CLIPPY_USE_INTERNAL support removed; prefer explicit TRANSITIONS_DIR
 
     return merged
+
+
+def load_config(
+    defaults: dict[str, Any] | None = None,
+    env: dict[str, str] | None = None,
+    file_path: str | None = None,
+) -> "ClippyConfig":
+    """Load configuration and return a typed ClippyConfig dataclass.
+
+    This is the preferred entry point for new code. Wraps load_merged_config()
+    and produces a structured, typed config object.
+    """
+    from clippy.models import ClippyConfig
+
+    merged = load_merged_config(defaults=defaults, env=env, file_path=file_path)
+    return ClippyConfig.from_merged_dict(merged)
