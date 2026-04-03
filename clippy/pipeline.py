@@ -616,111 +616,108 @@ def create_compilations_from(clips: List[ClipRow]) -> List[List[ClipRow]]:
     return compilations
 
 
-def write_concat_file(index: int, compilation: List[ClipRow]):
-    path = os.path.join(cache, f"comp{index}")
+def transcode_asset(name, transitions_abs, assets_out_dir, rel_assets_dir, asset_manifest, manifest_path):
+    """Transcode a transition/intro/outro asset to a normalized cache copy."""
+    if not name:
+        return None
+    # Resolve asset path across known roots to avoid false missing warnings
+    src = find_transition_file(name) or os.path.join(transitions_abs, name)
+    if not os.path.exists(src):
+        try:
+            log("WARN Missing transition file; skipping: " + name, 2)
+        except Exception:
+            pass
+        return None
+    dst = os.path.join(assets_out_dir, name)
+
+    # Behavior knobs
     try:
-        os.remove(path)
-    except FileNotFoundError:
-        pass
-    lines = []
-    # Resolve transitions directory dynamically and reference it relative to cache for ffmpeg concat
-    cache_abs = os.path.abspath(cache)
-    transitions_abs = os.path.abspath(resolve_transitions_dir())
-    # Compute normalized transitions cache directory for ffmpeg-safe assets
-    # Prepare a normalized transitions cache to ensure consistent codecs (avoid AV1 decode issues)
-    assets_out_dir = os.path.join(cache_abs, "_trans")
-    try:
-        os.makedirs(assets_out_dir, exist_ok=True)
+        from clippy.config import transitions_rebuild as _rebuild_trans  # type: ignore
     except Exception:
-        pass
-    rel_assets_dir = os.path.relpath(assets_out_dir, start=cache_abs).replace("\\", "/")
-    # Manifest to record how each asset was built (silent vs. normalized) to avoid stale reuse
-    manifest_path = os.path.join(assets_out_dir, "_manifest.json")
+        _rebuild_trans = False
     try:
-        with open(manifest_path, encoding="utf-8") as _mf:
-            _asset_manifest = json.load(_mf) or {}
+        from clippy.config import audio_normalize_transitions as _aud_norm  # type: ignore
     except Exception:
-        _asset_manifest = {}
+        _aud_norm = True
+    try:
+        from clippy.config import transitions as _cfg_transitions  # type: ignore
+    except Exception:
+        _cfg_transitions = []
+    try:
+        from clippy.config import static as _cfg_static  # type: ignore
+    except Exception:
+        _cfg_static = "static.mp4"
+    try:
+        from clippy.config import intro as _cfg_intro  # type: ignore
+    except Exception:
+        _cfg_intro = []
+    try:
+        from clippy.config import outro as _cfg_outro  # type: ignore
+    except Exception:
+        _cfg_outro = []
+    try:
+        from clippy.config import silence_static as _silence_static  # type: ignore
+    except Exception:
+        _silence_static = False
 
-    def _ensure_transcoded(name: str) -> Optional[str]:
-        if not name:
-            return None
-        # Resolve asset path across known roots to avoid false missing warnings
-        src = find_transition_file(name) or os.path.join(transitions_abs, name)
-        if not os.path.exists(src):
-            try:
-                log("WARN Missing transition file; skipping: " + name, 2)
-            except Exception:
-                pass
-            return None
-        dst = os.path.join(assets_out_dir, name)
+    # Determine whether to force silence via config
+    force_silent_audio = bool(name == _cfg_static and _silence_static)
 
-        # Behavior knobs
-        try:
-            from clippy.config import transitions_rebuild as _rebuild_trans  # type: ignore
-        except Exception:
-            _rebuild_trans = False
-        try:
-            from clippy.config import audio_normalize_transitions as _aud_norm  # type: ignore
-        except Exception:
-            _aud_norm = True
-        try:
-            from clippy.config import transitions as _cfg_transitions  # type: ignore
-        except Exception:
-            _cfg_transitions = []
-        try:
-            from clippy.config import static as _cfg_static  # type: ignore
-        except Exception:
-            _cfg_static = "static.mp4"
-        try:
-            from clippy.config import intro as _cfg_intro  # type: ignore
-        except Exception:
-            _cfg_intro = []
-        try:
-            from clippy.config import outro as _cfg_outro  # type: ignore
-        except Exception:
-            _cfg_outro = []
-        try:
-            from clippy.config import silence_static as _silence_static  # type: ignore
-        except Exception:
-            _silence_static = False
-
-        # Determine whether to force silence via config
-        force_silent_audio = bool(name == _cfg_static and _silence_static)
-
-        # Probe for audio stream presence; if no audio and not forcing silence, we'll synthesize clean audio
+    # Probe for audio stream presence; if no audio and not forcing silence, we'll synthesize clean audio
+    has_audio = True
+    try:
+        probe_cmd = f'{ffprobe} -v error -select_streams a:0 -show_entries stream=codec_type -of csv=p=0 "{src}"'
+        rc_probe, _ = run_proc_cancellable(probe_cmd, prefer_shell=True)
+        has_audio = rc_probe == 0
+    except Exception:
         has_audio = True
+
+    # Determine desired build characteristics for this asset
+    desired_silent = bool(force_silent_audio)
+    desired_audnorm = (not desired_silent) and bool(_aud_norm)
+
+    # Reuse normalized copy only if manifest matches current desired settings
+    if os.path.exists(dst) and not _rebuild_trans:
         try:
-            probe_cmd = f'{ffprobe} -v error -select_streams a:0 -show_entries stream=codec_type -of csv=p=0 "{src}"'
-            rc_probe, _ = run_proc_cancellable(probe_cmd, prefer_shell=True)
-            has_audio = rc_probe == 0
+            entry = asset_manifest.get(name) if isinstance(asset_manifest, dict) else None
         except Exception:
-            has_audio = True
+            entry = None
+        if entry and isinstance(entry, dict):
+            if (
+                bool(entry.get("silent")) == desired_silent
+                and bool(entry.get("aud_norm")) == desired_audnorm
+            ):
+                return f"{rel_assets_dir}/{name}"
+        else:
+            # If no manifest entry exists and we now desire silent or audnorm explicitly, force rebuild
+            if not desired_silent and not desired_audnorm:
+                return f"{rel_assets_dir}/{name}"
+            # else fall-through to rebuild
 
-        # Determine desired build characteristics for this asset
-        desired_silent = bool(force_silent_audio)
-        desired_audnorm = (not desired_silent) and bool(_aud_norm)
-
-        # Reuse normalized copy only if manifest matches current desired settings
-        if os.path.exists(dst) and not _rebuild_trans:
-            try:
-                entry = _asset_manifest.get(name) if isinstance(_asset_manifest, dict) else None
-            except Exception:
-                entry = None
-            if entry and isinstance(entry, dict):
-                if (
-                    bool(entry.get("silent")) == desired_silent
-                    and bool(entry.get("aud_norm")) == desired_audnorm
-                ):
-                    return f"{rel_assets_dir}/{name}"
-            else:
-                # If no manifest entry exists and we now desire silent or audnorm explicitly, force rebuild
-                if not desired_silent and not desired_audnorm:
-                    return f"{rel_assets_dir}/{name}"
-                # else fall-through to rebuild
-
-        # Build ffmpeg command
-        if force_silent_audio:
+    # Build ffmpeg command
+    if force_silent_audio:
+        cmd = (
+            f'{ffmpeg} -y -i "{src}" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 '
+            f"-map 0:v -map 1:a "
+            f"-r {fps} -s {resolution} -sws_flags lanczos "
+            f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
+            f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
+            f"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 -shortest "
+            f'-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats "{dst}"'
+        )
+    else:
+        _af = " -af loudnorm=I=-16:TP=-1.5:LRA=11" if _aud_norm else ""
+        if has_audio:
+            cmd = (
+                f'{ffmpeg} -y -i "{src}" '
+                f"-r {fps} -s {resolution} -sws_flags lanczos "
+                f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
+                f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
+                f"-pix_fmt yuv420p{_af} -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
+                f'-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats "{dst}"'
+            )
+        else:
+            # Synthesize clean stereo audio if source lacks audio
             cmd = (
                 f'{ffmpeg} -y -i "{src}" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 '
                 f"-map 0:v -map 1:a "
@@ -730,20 +727,44 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
                 f"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 -shortest "
                 f'-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats "{dst}"'
             )
-        else:
-            _af = " -af loudnorm=I=-16:TP=-1.5:LRA=11" if _aud_norm else ""
-            if has_audio:
-                cmd = (
-                    f'{ffmpeg} -y -i "{src}" '
-                    f"-r {fps} -s {resolution} -sws_flags lanczos "
-                    f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
-                    f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
-                    f"-pix_fmt yuv420p{_af} -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
-                    f'-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats "{dst}"'
-                )
+
+    if SHUTDOWN_EVENT.is_set():
+        return None
+    rc, err = run_proc_cancellable(cmd, prefer_shell=True)
+    if rc != 0:
+        # Log stderr for visibility
+        try:
+            _etxt = (
+                err.decode("utf-8", errors="ignore")
+                if isinstance(err, (bytes, bytearray))
+                else str(err)
+            )
+            if _is_interrupted(err):
+                log("Transition build interrupted by user", 2)
             else:
-                # Synthesize clean stereo audio if source lacks audio
-                cmd = (
+                log("WARN Failed to normalize transition asset: " + name, 2)
+                log(_etxt, 2)
+        except Exception:
+            pass
+        if SHUTDOWN_EVENT.is_set():
+            return None
+        # Retry without loudnorm only for intros/outros (non-silent path)
+        if (not force_silent_audio) and _aud_norm:
+            _af2 = ""
+            cmd2 = (
+                f'{ffmpeg} -y -i "{src}" '
+                f"-r {fps} -s {resolution} -sws_flags lanczos "
+                f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
+                f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
+                f"-pix_fmt yuv420p{_af2} -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
+                f'-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats "{dst}"'
+            )
+            if SHUTDOWN_EVENT.is_set():
+                return None
+            rc2, err2 = run_proc_cancellable(cmd2, prefer_shell=True)
+            if rc2 != 0:
+                # Final fallback: synthesize clean silent audio
+                cmd3 = (
                     f'{ffmpeg} -y -i "{src}" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 '
                     f"-map 0:v -map 1:a "
                     f"-r {fps} -s {resolution} -sws_flags lanczos "
@@ -752,131 +773,32 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
                     f"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 -shortest "
                     f'-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats "{dst}"'
                 )
-
-        if SHUTDOWN_EVENT.is_set():
-            return None
-        rc, err = run_proc_cancellable(cmd, prefer_shell=True)
-        if rc != 0:
-            # Log stderr for visibility
-            try:
-                _etxt = (
-                    err.decode("utf-8", errors="ignore")
-                    if isinstance(err, (bytes, bytearray))
-                    else str(err)
-                )
-                if _is_interrupted(err):
-                    log("Transition build interrupted by user", 2)
-                else:
-                    log("WARN Failed to normalize transition asset: " + name, 2)
-                    log(_etxt, 2)
-            except Exception:
-                pass
-            if SHUTDOWN_EVENT.is_set():
-                return None
-            # Retry without loudnorm only for intros/outros (non-silent path)
-            if (not force_silent_audio) and _aud_norm:
-                _af2 = ""
-                cmd2 = (
-                    f'{ffmpeg} -y -i "{src}" '
-                    f"-r {fps} -s {resolution} -sws_flags lanczos "
-                    f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
-                    f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
-                    f"-pix_fmt yuv420p{_af2} -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
-                    f'-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats "{dst}"'
-                )
                 if SHUTDOWN_EVENT.is_set():
                     return None
-                rc2, err2 = run_proc_cancellable(cmd2, prefer_shell=True)
-                if rc2 != 0:
-                    # Final fallback: synthesize clean silent audio
-                    cmd3 = (
-                        f'{ffmpeg} -y -i "{src}" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 '
-                        f"-map 0:v -map 1:a "
-                        f"-r {fps} -s {resolution} -sws_flags lanczos "
-                        f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
-                        f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
-                        f"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 -shortest "
-                        f'-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats "{dst}"'
-                    )
-                    if SHUTDOWN_EVENT.is_set():
-                        return None
-                    rc3, err3 = run_proc_cancellable(cmd3, prefer_shell=True)
-                    if rc3 != 0:
-                        return None
-                    else:
-                        # Built with silent fallback
-                        try:
-                            _asset_manifest[name] = {"silent": True, "aud_norm": False}
-                            with open(manifest_path, "w", encoding="utf-8") as _mf2:
-                                json.dump(_asset_manifest, _mf2, indent=2)
-                        except Exception:
-                            pass
-                        return f"{rel_assets_dir}/{name}"
-        # Successful build, record in manifest
-        try:
-            _asset_manifest[name] = {"silent": desired_silent, "aud_norm": desired_audnorm}
-            with open(manifest_path, "w", encoding="utf-8") as _mf3:
-                json.dump(_asset_manifest, _mf3, indent=2)
-        except Exception:
-            pass
-        return f"{rel_assets_dir}/{name}"
+                rc3, err3 = run_proc_cancellable(cmd3, prefer_shell=True)
+                if rc3 != 0:
+                    return None
+                else:
+                    # Built with silent fallback
+                    try:
+                        asset_manifest[name] = {"silent": True, "aud_norm": False}
+                        with open(manifest_path, "w", encoding="utf-8") as _mf2:
+                            json.dump(asset_manifest, _mf2, indent=2)
+                    except Exception:
+                        pass
+                    return f"{rel_assets_dir}/{name}"
+    # Successful build, record in manifest
+    try:
+        asset_manifest[name] = {"silent": desired_silent, "aud_norm": desired_audnorm}
+        with open(manifest_path, "w", encoding="utf-8") as _mf3:
+            json.dump(asset_manifest, _mf3, indent=2)
+    except Exception:
+        pass
+    return f"{rel_assets_dir}/{name}"
 
-    # New sequencing: random(intro) -> static -> clip -> static -> random_chance(random(transition) -> static) -> ... -> random(outro)
-    # Pull lists and config values
-    try:
-        from clippy.config import intro as _intro_list  # type: ignore
-    except Exception:
-        _intro_list = []
-    try:
-        from clippy.config import outro as _outro_list  # type: ignore
-    except Exception:
-        _outro_list = []
-    try:
-        from clippy.config import transitions as _transitions_list  # type: ignore
-    except Exception:
-        _transitions_list = []
-    try:
-        from clippy.config import static as _static_name  # type: ignore
-    except Exception:
-        _static_name = "static.mp4"
-    try:
-        from clippy.config import transition_probability as _trans_prob  # type: ignore
-    except Exception:
-        _trans_prob = 0.35
-    try:
-        from clippy.config import transitions_weights as _trans_weights  # type: ignore
-    except Exception:
-        _trans_weights = {}
-    try:
-        from clippy.config import transition_cooldown as _trans_cooldown  # type: ignore
-    except Exception:
-        _trans_cooldown = 0
-    try:
-        from clippy.config import silence_static as _silence_static  # type: ignore
-    except Exception:
-        _silence_static = True
 
-    def _append_trans_file(name: str) -> bool:
-        if not name:
-            return False
-        # Use normalized copy to ensure decoder compatibility
-        rel_norm = _ensure_transcoded(name)
-        if rel_norm:
-            lines.append(f"file {rel_norm}")
-            return True
-        # If normalization fails or file missing, skip to avoid bad AAC streams
-        try:
-            log("WARN Skipping transition (normalization failed): " + str(name), 2)
-        except Exception:
-            pass
-        return False
-
-    # Intro (single random choice, if any), then static
-    if isinstance(_intro_list, (list, tuple)) and _intro_list:
-        _in_choice = random.choice(list(_intro_list))
-        if _append_trans_file(_in_choice):
-            _append_trans_file(_static_name)
-
+def prepare_clips_concurrent(compilation, max_workers):
+    """Download, normalize, and overlay clips concurrently with a live progress board."""
     total = len(compilation)
     # Enable VT sequences on Windows for nicer updates
     try:
@@ -891,20 +813,6 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
                 kernel32.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
     except Exception:
         pass
-
-    # Behavior flags
-    try:
-        from clippy.config import max_concurrency as _max_workers  # type: ignore
-    except Exception:
-        _max_workers = 4
-    try:
-        from clippy.config import skip_bad_clip as _skip_bad  # type: ignore
-    except Exception:
-        _skip_bad = True
-    try:
-        from clippy.config import no_random_transitions as _no_rand  # type: ignore
-    except Exception:
-        _no_rand = False
 
     # Progress board: print N lines and update in-place
     _lock = threading.Lock()
@@ -1012,7 +920,7 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
         return clip, (p_rc != 1)
 
     results: List[tuple[ClipRow, bool]] = [None] * total  # type: ignore
-    with ThreadPoolExecutor(max_workers=_max_workers) as ex:
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
         futs = {ex.submit(_prep, clip, i + 1): i for i, clip in enumerate(compilation)}
         for fut in as_completed(futs):
             idx = futs[fut]
@@ -1020,6 +928,75 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
                 results[idx] = fut.result()
             except Exception:
                 results[idx] = (compilation[idx], False)
+    return results
+
+
+def build_concat_list(compilation, results, transitions_abs, assets_out_dir, rel_assets_dir, asset_manifest, manifest_path):
+    """Assemble the ffmpeg concat file lines from processed clips and transition assets."""
+    lines = []
+
+    # Pull lists and config values
+    try:
+        from clippy.config import intro as _intro_list  # type: ignore
+    except Exception:
+        _intro_list = []
+    try:
+        from clippy.config import outro as _outro_list  # type: ignore
+    except Exception:
+        _outro_list = []
+    try:
+        from clippy.config import transitions as _transitions_list  # type: ignore
+    except Exception:
+        _transitions_list = []
+    try:
+        from clippy.config import static as _static_name  # type: ignore
+    except Exception:
+        _static_name = "static.mp4"
+    try:
+        from clippy.config import transition_probability as _trans_prob  # type: ignore
+    except Exception:
+        _trans_prob = 0.35
+    try:
+        from clippy.config import transitions_weights as _trans_weights  # type: ignore
+    except Exception:
+        _trans_weights = {}
+    try:
+        from clippy.config import transition_cooldown as _trans_cooldown  # type: ignore
+    except Exception:
+        _trans_cooldown = 0
+    try:
+        from clippy.config import silence_static as _silence_static  # type: ignore
+    except Exception:
+        _silence_static = True
+    try:
+        from clippy.config import skip_bad_clip as _skip_bad  # type: ignore
+    except Exception:
+        _skip_bad = True
+    try:
+        from clippy.config import no_random_transitions as _no_rand  # type: ignore
+    except Exception:
+        _no_rand = False
+
+    def _append_trans_file(name: str) -> bool:
+        if not name:
+            return False
+        # Use normalized copy to ensure decoder compatibility
+        rel_norm = transcode_asset(name, transitions_abs, assets_out_dir, rel_assets_dir, asset_manifest, manifest_path)
+        if rel_norm:
+            lines.append(f"file {rel_norm}")
+            return True
+        # If normalization fails or file missing, skip to avoid bad AAC streams
+        try:
+            log("WARN Skipping transition (normalization failed): " + str(name), 2)
+        except Exception:
+            pass
+        return False
+
+    # Intro (single random choice, if any), then static
+    if isinstance(_intro_list, (list, tuple)) and _intro_list:
+        _in_choice = random.choice(list(_intro_list))
+        if _append_trans_file(_in_choice):
+            _append_trans_file(_static_name)
 
     # recent transitions for simple cooldown avoidance
     _recent_transitions: list[str] = []
@@ -1075,6 +1052,45 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
     if isinstance(_outro_list, (list, tuple)) and _outro_list:
         _out_choice = random.choice(list(_outro_list))
         _append_trans_file(_out_choice)
+    return lines
+
+
+def write_concat_file(index: int, compilation: List[ClipRow]):
+    path = os.path.join(cache, f"comp{index}")
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    # Resolve transitions directory dynamically and reference it relative to cache for ffmpeg concat
+    cache_abs = os.path.abspath(cache)
+    transitions_abs = os.path.abspath(resolve_transitions_dir())
+    # Prepare a normalized transitions cache to ensure consistent codecs (avoid AV1 decode issues)
+    assets_out_dir = os.path.join(cache_abs, "_trans")
+    try:
+        os.makedirs(assets_out_dir, exist_ok=True)
+    except Exception:
+        pass
+    rel_assets_dir = os.path.relpath(assets_out_dir, start=cache_abs).replace("\\", "/")
+    # Manifest to record how each asset was built (silent vs. normalized) to avoid stale reuse
+    manifest_path = os.path.join(assets_out_dir, "_manifest.json")
+    try:
+        with open(manifest_path, encoding="utf-8") as _mf:
+            asset_manifest = json.load(_mf) or {}
+    except Exception:
+        asset_manifest = {}
+    # Load max concurrency config
+    try:
+        from clippy.config import max_concurrency as _max_workers  # type: ignore
+    except Exception:
+        _max_workers = 4
+    # Process clips concurrently
+    results = prepare_clips_concurrent(compilation, _max_workers)
+    # Build concat list
+    lines = build_concat_list(
+        compilation, results, transitions_abs, assets_out_dir,
+        rel_assets_dir, asset_manifest, manifest_path,
+    )
+    # Write file
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n")
 

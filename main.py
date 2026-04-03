@@ -86,39 +86,14 @@ except Exception:  # pragma: no cover
         return
 
 
-def main():  # noqa: C901
+def apply_cli_overrides(args):
+    """Propagate CLI arguments to module globals and pipeline/utils modules."""
     global amountOfClips, amountOfCompilations, reactionThreshold
     global bitrate, resolution, container_ext, container_flags
     global fps, audio_bitrate, cache, output, intro, outro, transition
     global enable_overlay, rebuild
     global cq, nvenc_preset, gop, rc_lookahead, spatial_aq, temporal_aq, aq_strength
 
-    # Ensure we have Twitch creds when running a broadcaster ingest
-    ensure_twitch_credentials_if_needed()
-
-    # Show banner unless help is requested or non-interactive
-    # Peek at argv for -h/--help to avoid printing above help output
-    _argv = [a.lower() for a in sys.argv[1:]]
-    if not any(a in ("-h", "--help", "--version") for a in _argv):
-        try:
-            show_banner()
-        except Exception:
-            pass
-        try:
-            from yachalk import chalk as _chalk
-
-            print(str(_chalk.gray(f"Version {CLIPPY_VERSION}")))
-        except Exception:
-            print(f"Version {CLIPPY_VERSION}")
-    args = parse_args()
-    # Seed randomness if provided early
-    if getattr(args, "seed", None) is not None:
-        try:
-            import random as _rnd
-
-            _rnd.seed(int(args.seed))
-        except Exception:
-            pass
     amountOfClips = args.amountOfClips
     amountOfCompilations = args.amountOfCompilations
     reactionThreshold = args.reactionThreshold
@@ -152,17 +127,6 @@ def main():  # noqa: C901
     except Exception:
         pass
 
-    # Resolve simple date window to RFC3339
-    window = resolve_date_window(args.start, args.end)
-    # Show startup summary only when skipping confirmation to avoid duplication
-    if getattr(args, "yes", False):
-        _summarize(
-            args,
-            window,
-            globals().get("resolution", None),
-            globals().get("container_ext", "mp4"),
-            globals().get("bitrate", None),
-        )
     # Apply runtime overrides for quality/bitrate/resolution/container
     # Determine desired bitrate from quality unless explicitly provided
     qmap = {"balanced": "10M", "high": "12M", "max": "16M"}
@@ -320,115 +284,98 @@ def main():  # noqa: C901
     except Exception:
         pass
 
-    # If not in Discord mode, require a broadcaster (CLI or config). In Discord mode, we'll infer later.
-    if not getattr(args, "discord", False):
+
+def display_confirmation(args, window):
+    """Show BBS-style confirmation panel and prompt user to proceed."""
+    try:
+        # Concise BBS-style panel
         try:
-            _def_b = globals().get("default_broadcaster", "")
+            enable_windows_vt()
         except Exception:
-            _def_b = ""
-        if not getattr(args, "broadcaster", None):
-            if _def_b:
-                args.broadcaster = _def_b
-                log("Using default broadcaster from config: " + str(_def_b), 1)
-            else:
-                log(
-                    "No broadcaster provided and no default configured in clippy.yaml (identity.broadcaster)",
-                    5,
-                )
-                log("Set identity.broadcaster via setup_wizard or provide --broadcaster", 1)
-                raise SystemExit(2)
-
-    # Interactive confirmation (default). Use -y/--yes to skip.
-    if not getattr(args, "yes", False):
+            pass
         try:
-            # Concise BBS-style panel
-            try:
-                enable_windows_vt()
-            except Exception:
-                pass
-            try:
-                from yachalk import chalk as _chalk
-            except Exception:
+            from yachalk import chalk as _chalk
+        except Exception:
 
-                class _Plain:
-                    def __getattr__(self, name):
-                        return lambda s: s
+            class _Plain:
+                def __getattr__(self, name):
+                    return lambda s: s
 
-                _chalk = _Plain()  # type: ignore
-            title = THEME.title("Run plan") if THEME else _chalk.cyan_bright("Run plan")
-            bar = THEME.bar("=" * 56) if THEME else _chalk.gray("=" * 56)
+            _chalk = _Plain()  # type: ignore
+        title = THEME.title("Run plan") if THEME else _chalk.cyan_bright("Run plan")
+        bar = THEME.bar("=" * 56) if THEME else _chalk.gray("=" * 56)
 
-            def L(s: str) -> str:
-                # Static labels: darker blue
-                return THEME.section(s) if THEME else str(_chalk.blue(s))
+        def L(s: str) -> str:
+            # Static labels: darker blue
+            return THEME.section(s) if THEME else str(_chalk.blue(s))
 
-            def S(txt: str = " : ") -> str:
-                return THEME.sep(txt) if THEME else str(_chalk.gray(txt))
+        def S(txt: str = " : ") -> str:
+            return THEME.sep(txt) if THEME else str(_chalk.gray(txt))
 
-            def V(v: str, accent: bool = False) -> str:
-                # Dynamic values: white
-                return str(_chalk.white(v))
+        def V(v: str, accent: bool = False) -> str:
+            # Dynamic values: white
+            return str(_chalk.white(v))
 
-            # Gather values
-            try:
-                import clippy.config as _cfg
+        # Gather values
+        try:
+            import clippy.config as _cfg
 
-                _intro_list = getattr(_cfg, "intro", [])
-                _outro_list = getattr(_cfg, "outro", [])
-                _transitions_list = getattr(_cfg, "transitions", [])
-                _tprob = getattr(_cfg, "transition_probability", 0.35)
-                _norand = getattr(_cfg, "no_random_transitions", False)
-            except Exception:
-                _intro_list = []
-                _outro_list = []
-                _transitions_list = []
-                _tprob = 0.35
-                _norand = False
-            try:
-                _total = int(args.amountOfCompilations) * int(args.amountOfClips)
-            except Exception:
-                _total = None
-            # Panel rendering
-            print(bar)
-            print(title)
-            print(bar)
-            print(f"{L('Broadcaster')}{S()}{V(str(args.broadcaster), True)}")
-            print(
-                f"{L('Time Window')}{S()}{V(str(window[0] or 'ANY'), True)} {S('->')} {V(str(window[1] or 'NOW'), True)}"
-            )
-            print(f"{L('Max fetch')}{S()}{V(str(args.max_clips))}")
-            print(f"{L('Min views')}{S()}{V(str(reactionThreshold))}")
-            print(
-                f"{L('Format')}{S()}{V(container_ext)} {S('(')}{V(container_flags or 'no flags')}{S(')')}"
-            )
-            print(
-                f"{L('Resolution')}{S()}{V(resolution)}  {L('FPS')}{S()}{V(str(fps))}  {L('Bitrate')}{S()}{V(str(bitrate))}"
-            )
-            comp_desc = f"{V(str(args.amountOfCompilations))} x {V(str(args.amountOfClips))}"
-            if _total is not None:
-                comp_desc += f" {S('(')}{V(str(_total))} {V('total')}{S(')')}"
-            print(f"{L('Compilations x Clips')}{S()}{comp_desc}")
-            print(f"{L('Cache dir')}{S()}{V(str(cache), True)}")
-            print(f"{L('Output dir')}{S()}{V(str(output), True)}")
-            tr_desc = f"intro={len(_intro_list)}, trans={len(_transitions_list)}, outro={len(_outro_list)}, prob={_tprob}"
-            if _norand:
-                tr_desc += f" {S('[no-random]')}"
-            print(f"{L('Transitions')}{S()}{V(tr_desc)}")
-            print(f"{L('Overlay')}{S()}{V('enabled' if enable_overlay else 'disabled')}")
-            print(f"{L('Rebuild')}{S()}{V('true' if rebuild else 'false')}")
-            print(bar)
-            # Prompt
-            ans = input("Proceed? [Y/n]: ").strip().lower()
-            if ans in ("n", "no"):
-                raise SystemExit("Aborted by user")
-        except EOFError:
-            # If input is not available, fail safe unless --yes provided
-            raise SystemExit("Confirmation required but no TTY available. Re-run with -y/--yes.")
-    cid, secret = load_credentials(args.client_id, args.client_secret)
-    token = get_app_access_token(cid, secret)
+            _intro_list = getattr(_cfg, "intro", [])
+            _outro_list = getattr(_cfg, "outro", [])
+            _transitions_list = getattr(_cfg, "transitions", [])
+            _tprob = getattr(_cfg, "transition_probability", 0.35)
+            _norand = getattr(_cfg, "no_random_transitions", False)
+        except Exception:
+            _intro_list = []
+            _outro_list = []
+            _transitions_list = []
+            _tprob = 0.35
+            _norand = False
+        try:
+            _total = int(args.amountOfCompilations) * int(args.amountOfClips)
+        except Exception:
+            _total = None
+        # Panel rendering
+        print(bar)
+        print(title)
+        print(bar)
+        print(f"{L('Broadcaster')}{S()}{V(str(args.broadcaster), True)}")
+        print(
+            f"{L('Time Window')}{S()}{V(str(window[0] or 'ANY'), True)} {S('->')} {V(str(window[1] or 'NOW'), True)}"
+        )
+        print(f"{L('Max fetch')}{S()}{V(str(args.max_clips))}")
+        print(f"{L('Min views')}{S()}{V(str(reactionThreshold))}")
+        print(
+            f"{L('Format')}{S()}{V(container_ext)} {S('(')}{V(container_flags or 'no flags')}{S(')')}"
+        )
+        print(
+            f"{L('Resolution')}{S()}{V(resolution)}  {L('FPS')}{S()}{V(str(fps))}  {L('Bitrate')}{S()}{V(str(bitrate))}"
+        )
+        comp_desc = f"{V(str(args.amountOfCompilations))} x {V(str(args.amountOfClips))}"
+        if _total is not None:
+            comp_desc += f" {S('(')}{V(str(_total))} {V('total')}{S(')')}"
+        print(f"{L('Compilations x Clips')}{S()}{comp_desc}")
+        print(f"{L('Cache dir')}{S()}{V(str(cache), True)}")
+        print(f"{L('Output dir')}{S()}{V(str(output), True)}")
+        tr_desc = f"intro={len(_intro_list)}, trans={len(_transitions_list)}, outro={len(_outro_list)}, prob={_tprob}"
+        if _norand:
+            tr_desc += f" {S('[no-random]')}"
+        print(f"{L('Transitions')}{S()}{V(tr_desc)}")
+        print(f"{L('Overlay')}{S()}{V('enabled' if enable_overlay else 'disabled')}")
+        print(f"{L('Rebuild')}{S()}{V('true' if rebuild else 'false')}")
+        print(bar)
+        # Prompt
+        ans = input("Proceed? [Y/n]: ").strip().lower()
+        if ans in ("n", "no"):
+            raise SystemExit("Aborted by user")
+    except EOFError:
+        # If input is not available, fail safe unless --yes provided
+        raise SystemExit("Confirmation required but no TTY available. Re-run with -y/--yes.")
 
-    prep_work()
 
+def ingest_clips(args, cid, token, window):
+    """Fetch clips from Discord or Twitch. Returns (clips, broadcaster_id)."""
+    broadcaster_id = None
     if getattr(args, "discord", False):
         # Discord mode: read clip IDs from a channel and resolve via Helix
         try:
@@ -505,7 +452,11 @@ def main():  # noqa: C901
             max_clips=args.max_clips,
         )
     log("Fetched " + str(len(clips)) + " raw clips", 2)
+    return clips, broadcaster_id
 
+
+def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
+    """Apply view-count filter and auto-expand window if needed. Returns (filtered, window)."""
     # Filter by min views (reactionThreshold proxy)
     filtered = [c for c in clips if int(c.get("view_count", 0)) >= reactionThreshold]
     log("Filtered to " + str(len(filtered)) + " clips (>= " + str(reactionThreshold) + " views)", 2)
@@ -607,9 +558,11 @@ def main():  # noqa: C901
         except Exception as e:
             log("Auto-expand failed: " + str(e), 5)
 
-    avatar_map = fetch_creator_avatars(filtered, cid, token)
-    rows = build_clip_rows(filtered, avatar_map)
-    comps = create_compilations_from(rows)
+    return filtered, window
+
+
+def run_pipeline(comps, args, window):
+    """Run stage_one, stage_two, finalize outputs, and write manifest."""
     log("Stage 1 (processing clips)", 1)
     stage_one(comps)
     # Verify concat lists were written for each expected compilation index.
@@ -715,6 +668,91 @@ def main():  # noqa: C901
     except Exception as e:
         log("WARN Failed to write manifest: " + str(e), 2)
     log("Done", 2)
+
+
+def main():  # noqa: C901
+    global amountOfClips, amountOfCompilations, reactionThreshold
+    global bitrate, resolution, container_ext, container_flags
+    global fps, audio_bitrate, cache, output, intro, outro, transition
+    global enable_overlay, rebuild
+    global cq, nvenc_preset, gop, rc_lookahead, spatial_aq, temporal_aq, aq_strength
+
+    # Ensure we have Twitch creds when running a broadcaster ingest
+    ensure_twitch_credentials_if_needed()
+
+    # Show banner unless help is requested or non-interactive
+    # Peek at argv for -h/--help to avoid printing above help output
+    _argv = [a.lower() for a in sys.argv[1:]]
+    if not any(a in ("-h", "--help", "--version") for a in _argv):
+        try:
+            show_banner()
+        except Exception:
+            pass
+        try:
+            from yachalk import chalk as _chalk
+
+            print(str(_chalk.gray(f"Version {CLIPPY_VERSION}")))
+        except Exception:
+            print(f"Version {CLIPPY_VERSION}")
+    args = parse_args()
+    # Seed randomness if provided early
+    if getattr(args, "seed", None) is not None:
+        try:
+            import random as _rnd
+
+            _rnd.seed(int(args.seed))
+        except Exception:
+            pass
+
+    apply_cli_overrides(args)
+
+    # Resolve simple date window to RFC3339
+    window = resolve_date_window(args.start, args.end)
+    # Show startup summary only when skipping confirmation to avoid duplication
+    if getattr(args, "yes", False):
+        _summarize(
+            args,
+            window,
+            globals().get("resolution", None),
+            globals().get("container_ext", "mp4"),
+            globals().get("bitrate", None),
+        )
+
+    # If not in Discord mode, require a broadcaster (CLI or config). In Discord mode, we'll infer later.
+    if not getattr(args, "discord", False):
+        try:
+            _def_b = globals().get("default_broadcaster", "")
+        except Exception:
+            _def_b = ""
+        if not getattr(args, "broadcaster", None):
+            if _def_b:
+                args.broadcaster = _def_b
+                log("Using default broadcaster from config: " + str(_def_b), 1)
+            else:
+                log(
+                    "No broadcaster provided and no default configured in clippy.yaml (identity.broadcaster)",
+                    5,
+                )
+                log("Set identity.broadcaster via setup_wizard or provide --broadcaster", 1)
+                raise SystemExit(2)
+
+    # Interactive confirmation (default). Use -y/--yes to skip.
+    if not getattr(args, "yes", False):
+        display_confirmation(args, window)
+
+    cid, secret = load_credentials(args.client_id, args.client_secret)
+    token = get_app_access_token(cid, secret)
+
+    prep_work()
+
+    clips, broadcaster_id = ingest_clips(args, cid, token, window)
+    filtered, window = filter_and_expand(clips, args, cid, token, broadcaster_id, window)
+
+    avatar_map = fetch_creator_avatars(filtered, cid, token)
+    rows = build_clip_rows(filtered, avatar_map)
+    comps = create_compilations_from(rows)
+
+    run_pipeline(comps, args, window)
 
 
 if __name__ == "__main__":  # pragma: no cover
