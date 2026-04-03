@@ -1,12 +1,15 @@
 # Changelog
+
 ## 2025-10-12 — v0.3.6
 
 - Wizard — Configure intros/outros
+
   - The setup wizard now prompts for `assets.intro` and `assets.outro` filenames (relative to your transitions directory).
   - Press Enter to keep existing values; enter `-` or `none` to clear the list. Values are merged into `clippy.yaml`.
   - Files: `scripts/setup_wizard.py`, `clippy/config_loader.py` (already supports `assets.intro/outro`).
 
 - Docs — README updates
+
   - Document how to configure intros/outros via the wizard, YAML, and per-run CLI overrides.
   - Clarify transitions folder usage and overrides.
   - Files: `README.md`.
@@ -16,9 +19,11 @@
   - Files: `.pre-commit-config.yaml`, `pyproject.toml`, `main.py`, `clippy/pipeline.py`.
 
 All notable changes to this project are documented here. Dates are in YYYY-MM-DD and entries are grouped by date (newest first).
+
 ## 2025-09-14 — v0.3.5
 
 - Feature — Discord mode UX and summaries
+
   - Show friendly Discord channel name (e.g., "Guild / #clips") when ingesting.
   - Log a concise summary for Discord runs: links found, raw clips fetched, filtered count, and compilations created.
   - Remove duplicate "Created N compilations" log (now logged once from the pipeline).
@@ -26,6 +31,7 @@ All notable changes to this project are documented here. Dates are in YYYY-MM-DD
   - Files: `clippy/discord_ingest.py`, `main.py`.
 
 - Wizard — Safer prompts and preservation
+
   - Source selection includes Discord; prompts mask secrets and can validate the bot token with a quick login.
   - Re-running the wizard preserves existing Discord settings unless explicitly changed.
   - Files: `scripts/setup_wizard.py`.
@@ -34,7 +40,6 @@ All notable changes to this project are documented here. Dates are in YYYY-MM-DD
   - Document Discord mode setup and usage, wizard flow, and transitions directory precedence.
   - Ensure references to internal assets fallback are removed; clarify `TRANSITIONS_DIR` usage and `static.mp4` requirement.
   - Files: `README.md`, `scripts/README.md`, `transitions/README.md`, `clippy.yaml.example`.
-
 
 All notable changes to this project are documented here. Dates are in YYYY-MM-DD and entries are grouped by date (newest first). This changelog blends commit history with implementation notes from development sessions to provide full context.
 
@@ -63,51 +68,60 @@ All notable changes to this project are documented here. Dates are in YYYY-MM-DD
 ## 2025-09-14 — v0.3.0
 
 - Cleanup — Remove legacy inline color tags and dead code
+
   - Deleted unused legacy '{@...}' tag stripping and helper functions; all styling now flows through THEME with heuristics for label/value/path lines.
-  - Simplified utils logger and added clearer comments; retained symbol accenting (→, :, *).
+  - Simplified utils logger and added clearer comments; retained symbol accenting (→, :, \*).
   - Fixed an unreachable branch in transition appending and tightened ffprobe usage.
   - Files: `utils.py`, `pipeline.py`, `main.py`
 
 - Fix — Accurate Ctrl-C messaging
+
   - Gated the "Interrupted by user (Ctrl-C)" line so it only prints when a KeyboardInterrupt actually occurs.
   - Files: `main.py`
 
 - Docs — Minor docstring and README touch-ups (usage reflects current entrypoint)
-  - Files: `main.py`, `README.md`
 
+  - Files: `main.py`, `README.md`
 
   - Ctrl-C now cooperatively stops work: signals threads, terminates any running ffmpeg/yt-dlp processes, and performs cleanup.
   - Introduced a cancellable process runner used for long ffmpeg and probe operations.
   - A global shutdown event is checked at safe points within workers and normalization steps.
   - Commit: 3c3257b
+
 - Changed — CLI help organization
   - Grouped `--help` output into logical sections (Required, Window & selection, Output & formatting, Transitions & sequencing, Performance & robustness, Cache management, Encoder tuning, Misc).
   - Widened the help formatter for better alignment and readability.
   - Commit: b6ae13e
 - Docs
+
   - Updated README to document transitions/audio policy, output auto-suffix vs `--overwrite-output`, cache flags, and Ctrl-C behavior.
 
 - UI — Startup banner and log symbols
+
   - Added a neon hacker-style ASCII banner at program start (skips when `-h/--help` or non-TTY). Can be disabled with `CLIPPY_NO_BANNER=1`.
   - Switched log prefixes to Markdown-safe symbols to avoid unintended formatting in rich renderers.
   - Files: `clippy/banner.py`, `main.py`, `utils.py`
 
 - Progress — Per-clip ffmpeg progress
+
   - Parse `-progress` output to display live percentages and ETA-like time for Normalizing/Overlay steps in Stage 1.
   - Added an internal `ffprobe` duration probe helper for accurate progress computation.
   - Files: `pipeline.py`
 
 - Progress — Stage 2 concatenate progress
+
   - Added a live progress indicator for the final concatenation step using `-progress` `out_time` and total duration from the concat list.
   - Renders a single updating line with percent and time elapsed/total for each compilation.
   - Files: `pipeline.py`
 
 - Fix — Stage 2 compile loop + finalize clarity
+
   - Ensure the concatenate (Stage 2) runs once per compilation index (bug caused only the last or a single output to be produced).
   - Finalize step now lists exactly which files were moved and warns for any missing compiled indices.
   - Files: `pipeline.py`, `clippy/naming.py`
 
 - Packaging — Internal data and ffprobe
+
   - Internal data fallback removed; runtime resolver now uses TRANSITIONS_DIR, repo transitions/, or CWD transitions/.
   - `transitions/static.mp4` is REQUIRED; ensure it exists under your transitions directory.
   - Bundled `ffprobe` alongside `ffmpeg` and `yt-dlp` in the portable output.
@@ -115,6 +129,7 @@ All notable changes to this project are documented here. Dates are in YYYY-MM-DD
   - Files: `build/Clippy.spec`, `build/build.ps1`, `build/build.sh`, `_internal/README.md`, `utils.py`
 
 - Changed — Cleaner Ctrl-C output during ffmpeg runs
+
   - Paired `-progress` with `-nostats` to suppress noisy frame/fps/bitrate spam on interruption.
   - Failure handling detects user interruption and logs concise messages (e.g., "Normalization interrupted by user") instead of large stderr dumps.
   - Retry loops now stop immediately if a shutdown has been requested; transition asset normalization also uses `-nostats`.
@@ -154,23 +169,28 @@ All notable changes to this project are documented here. Dates are in YYYY-MM-DD
 The following changes were implemented and verified during development and reflected in the current codebase. They may span the commits listed above:
 
 - Audio/codec consistency and normalization
+
   - All segments (clips and non-clip assets) encode with H.264 yuv420p + AAC, enforcing `-ar 48000 -ac 2` for stable concatenation.
   - Transitions/intro/outro/static are normalized into `cache/_trans` on first use; a `_manifest.json` records if audio was kept/silenced and whether loudness normalization applied.
   - Loudness normalization (EBU R128 loudnorm, I=-16, TP=-1.5, LRA=11) is applied to non-clip assets by default; automatic fallback to synthesized clean stereo audio if an asset has no audio or normalization fails.
   - Default policy changed to keep audio ON for transitions/static/intro/outro unless explicitly configured to silence.
 
 - Sequencing and transitions selection
+
   - Sequencing policy: random(optional intro) → static → clip → static → random_chance(transition → static) … → random(optional outro).
   - Weighted random transition selection with simple cooldown to avoid immediate repeats.
 
 - Output naming and finalization
+
   - Final names are computed and shown prior to Stage 2; collisions are handled by auto-suffixing `_1`, `_2`, … unless `--overwrite-output` is specified.
   - Finalization uses the correct container extension and moves files from `cache/` to `output/`.
 
 - Cache lifecycle
+
   - Default cleanup preserves `cache/_trans` to avoid re-encoding non-clip assets; `--keep-cache` retains all, while `--purge-cache` removes everything including preserved folders.
 
 - Tooling and validation scripts
+
   - `scripts/test_transitions.py` probes/normalizes transitions and runs an audio-only concat check to detect cross-file audio issues.
   - `scripts/health_check.py` validates environment, transitions directory, and required binaries.
   - `scripts/check_sequencing.py` confirms concat sequencing against policy.
@@ -182,4 +202,3 @@ The following changes were implemented and verified during development and refle
 
 - Breaking change: `transitions/static.mp4` is required. Place your asset in `transitions/` or provide `--transitions-dir`.
 - Project runs from source.
-
