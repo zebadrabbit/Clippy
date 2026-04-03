@@ -88,6 +88,17 @@ def parse_args() -> argparse.Namespace:
     # Output & formatting
     g_output = p.add_argument_group("Output & formatting")
     g_output.add_argument(
+        "--preset",
+        dest="encoding_preset",
+        type=str,
+        help="Encoding preset (youtube_1080p60, discord_friendly, archive_hq, quick_preview, cpu_only)",
+    )
+    g_output.add_argument(
+        "--list-presets",
+        action="store_true",
+        help="List available encoding presets and exit",
+    )
+    g_output.add_argument(
         "--quality",
         choices=["balanced", "high", "max"],
         help="Quality preset that adjusts bitrate (overridden by --bitrate)",

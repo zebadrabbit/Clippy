@@ -346,3 +346,29 @@ def build_ffprobe_audio_check_cmd(
         "-of", "csv=p=0",
         path,
     ]
+
+
+# ---------------------------------------------------------------------------
+# NVENC detection
+# ---------------------------------------------------------------------------
+
+
+def detect_encoder(ffmpeg_bin: str = "ffmpeg") -> str:
+    """Probe ffmpeg for h264_nvenc support.
+
+    Returns ``"h264_nvenc"`` if NVENC is available, else ``"libx264"``.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            [ffmpeg_bin, "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if "h264_nvenc" in result.stdout:
+            return "h264_nvenc"
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    return "libx264"
