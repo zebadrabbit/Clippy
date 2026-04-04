@@ -40,7 +40,7 @@ class TestClippyConfig:
         assert default_config.encoding.nvenc.cq == "19"
         assert default_config.selection.clips_per_compilation == 12
         assert default_config.selection.compilations == 2
-        assert default_config.selection.min_views == 1
+        assert default_config.selection.min_views == 0
         assert default_config.behavior.max_concurrency == 4
         assert default_config.behavior.skip_bad_clip is True
 
@@ -60,7 +60,7 @@ class TestClippyConfig:
         flat = default_config.to_flat_dict()
         assert flat["bitrate"] == "12M"
         assert flat["amountOfClips"] == 12
-        assert flat["reactionThreshold"] == 1
+        assert flat["reactionThreshold"] == 0
         assert flat["nvenc_preset"] == "slow"
         assert isinstance(flat["intro"], list)
         assert isinstance(flat["transitions"], list)

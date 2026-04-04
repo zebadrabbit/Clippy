@@ -61,13 +61,13 @@ class CredentialsScreen(Screen):
                 )
                 yield Label("Discord Channel ID")
                 yield Input(
-                    value=os.getenv("DISCORD_CHANNEL_ID", ""),
+                    value=str(self.app.config.discord.channel_id or ""),
                     placeholder="Enter Discord channel ID",
                     id="discord-channel-id",
                 )
                 yield Static(
                     "Right-click the channel in Discord and Copy ID (Developer Mode must be on). "
-                    "Pre-filled from .env if available.",
+                    "Pre-filled from clippy.yaml if available.",
                     classes="help-text",
                 )
 
@@ -78,7 +78,8 @@ class CredentialsScreen(Screen):
                 id="save-env",
             )
             yield Static(
-                "Writes your credentials to a local .env file so they auto-fill on future runs.",
+                "Writes API credentials (Client ID, Secret, Discord token) to .env. "
+                "Channel ID and other settings are saved in clippy.yaml.",
                 classes="help-text",
             )
 
@@ -146,6 +147,7 @@ class CredentialsScreen(Screen):
             pass
 
         # Persist to .env if checkbox is checked
+        # Note: discord_channel_id lives in clippy.yaml, not .env
         try:
             if self.query_one("#save-env", Checkbox).value:
                 env_vals: dict[str, str] = {
@@ -154,8 +156,6 @@ class CredentialsScreen(Screen):
                 }
                 if creds.get("discord_token"):
                     env_vals["DISCORD_TOKEN"] = creds["discord_token"]
-                if creds.get("discord_channel_id"):
-                    env_vals["DISCORD_CHANNEL_ID"] = creds["discord_channel_id"]
                 save_env(env_vals)
         except Exception:
             pass  # don't block the workflow if .env write fails

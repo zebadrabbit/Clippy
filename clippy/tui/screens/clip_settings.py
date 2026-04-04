@@ -41,7 +41,7 @@ class ClipSettingsScreen(Screen):
             )
 
             yield Label("Min Views")
-            yield Input(value="0", id="min-views")
+            yield Input(value=str(cfg.selection.min_views), id="min-views")
             yield Static(
                 "Only include clips with at least this many views. Set to 0 for all clips.",
                 classes="help-text",

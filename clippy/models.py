@@ -71,7 +71,7 @@ class EncodingConfig:
 class SelectionConfig:
     clips_per_compilation: int = 12
     compilations: int = 2
-    min_views: int = 1
+    min_views: int = 0
 
 
 @dataclass
@@ -182,7 +182,7 @@ class ClippyConfig:
             selection=SelectionConfig(
                 clips_per_compilation=int(d.get("amountOfClips", 12)),
                 compilations=int(d.get("amountOfCompilations", 2)),
-                min_views=int(d.get("reactionThreshold", 1)),
+                min_views=int(d.get("reactionThreshold", 0)),
             ),
             sequencing=SequencingConfig(
                 transition_probability=float(d.get("transition_probability", 0.35)),

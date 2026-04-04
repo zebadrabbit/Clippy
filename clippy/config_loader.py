@@ -18,7 +18,7 @@ DEFAULTS: Dict[str, Any] = {
     # Selection & counts
     "amountOfClips": 12,
     "amountOfCompilations": 2,
-    "reactionThreshold": 1,
+    "reactionThreshold": 0,
     # Sequencing
     "transition_probability": 0.35,
     "no_random_transitions": False,

@@ -57,7 +57,7 @@ class TestLoadMergedConfig:
         merged = load_merged_config(defaults=DEFAULTS, env={}, file_path="/nonexistent.yaml")
         assert merged["bitrate"] == "12M"
         assert merged["amountOfClips"] == 12
-        assert merged["reactionThreshold"] == 1
+        assert merged["reactionThreshold"] == 0
 
     def test_yaml_override(self, tmp_path):
         yaml_content = """
