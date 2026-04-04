@@ -649,10 +649,22 @@ def create_compilations_from(
                     2,
                 )
     else:
-        # Count-based splitting (original behaviour)
+        # Count-based splitting.
+        # If there aren't enough clips to fully fill every compilation, distribute
+        # evenly rather than front-loading comp 1 and leaving comp N short.
+        total_needed = _clips_per * _num_comps
+        if 0 < len(eligible) < total_needed:
+            per = max(1, len(eligible) // _num_comps)
+            log(
+                f"Only {len(eligible)} clips available for {_num_comps} compilations "
+                f"(needed {total_needed}); distributing {per} per compilation",
+                2,
+            )
+        else:
+            per = _clips_per
         while eligible and len(compilations) < _num_comps:
-            compilations.append(eligible[:_clips_per])
-            eligible = eligible[_clips_per:]
+            compilations.append(eligible[:per])
+            eligible = eligible[per:]
 
     log(f"Created {len(compilations)} compilations", 2)
     return compilations
