@@ -185,6 +185,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable loudness normalization for transitions normalization",
     )
+    g_trans.add_argument(
+        "--no-normalize-clips",
+        action="store_true",
+        dest="no_normalize_clips",
+        help="Disable EBU R128 loudness normalization on Twitch clips (enabled by default)",
+    )
 
     # Performance & robustness
     g_perf = p.add_argument_group("Performance & robustness")

@@ -27,7 +27,9 @@ sequencing:
 audio:
   # If true, silence static.mp4 even when the global flag is false
   silence_static: false
-  # Normalize loudness for non-clip assets (EBU R128)
+  # Apply EBU R128 loudness normalization to every Twitch clip (prevents jarring volume jumps)
+  audio_normalize_clips: true
+  # Normalize loudness for transition/intro/outro assets (EBU R128)
   audio_normalize_transitions: true
 
 encoding:

@@ -83,12 +83,23 @@ class TransitionsScreen(Screen):
                         id="audio-normalize",
                     )
                     yield Static(
-                        "Apply EBU R128 loudness normalization to transition clips "
+                        "Apply EBU R128 loudness normalization to transition/intro/outro clips "
                         "so they match clip audio levels.",
                         classes="help-text",
                     )
 
             with Horizontal():
+                with Vertical(classes="form-group"):
+                    yield Label("Normalize clip audio")
+                    yield Switch(
+                        value=cfg.audio.audio_normalize_clips,
+                        id="audio-normalize-clips",
+                    )
+                    yield Static(
+                        "Apply EBU R128 loudness normalization to every Twitch clip. "
+                        "Prevents jarring volume jumps between loud and quiet clips.",
+                        classes="help-text",
+                    )
                 with Vertical(classes="form-group"):
                     yield Label("Silence static bumper")
                     yield Switch(
@@ -125,6 +136,7 @@ class TransitionsScreen(Screen):
                     self.query_one("#transition-cooldown", Input).value or "1"
                 ),
                 "no_random_transitions": self.query_one("#no-random", Switch).value,
+                "audio_normalize_clips": self.query_one("#audio-normalize-clips", Switch).value,
                 "audio_normalize_transitions": self.query_one("#audio-normalize", Switch).value,
                 "silence_static": self.query_one("#silence-static", Switch).value,
                 "no_overlay": self.query_one("#no-overlay", Switch).value,

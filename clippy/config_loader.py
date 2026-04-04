@@ -25,6 +25,7 @@ DEFAULTS: Dict[str, Any] = {
     "transitions_weights": {},
     "transition_cooldown": 1,
     # Audio policy for non-clip assets
+    "audio_normalize_clips": True,
     "audio_normalize_transitions": True,
     "silence_static": False,
     # Encoding
@@ -195,6 +196,9 @@ def load_merged_config(
 
     merged["silence_static"] = _coerce_bool(
         aud.get("silence_static"), merged.get("silence_static", False)
+    )
+    merged["audio_normalize_clips"] = _coerce_bool(
+        aud.get("audio_normalize_clips"), merged.get("audio_normalize_clips", True)
     )
     merged["audio_normalize_transitions"] = _coerce_bool(
         aud.get("audio_normalize_transitions"), merged.get("audio_normalize_transitions", True)

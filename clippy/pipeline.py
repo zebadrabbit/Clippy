@@ -511,6 +511,15 @@ def process_clip(
         return 1
     # inject ffmpeg progress flags
     _norm_cmd = ffmpeg + " " + replace_vars(ffmpegNormalizeVideos, clip)
+    # Inject loudnorm for clip audio normalization if enabled
+    try:
+        from clippy.config import audio_normalize_clips as _audio_norm_clips  # type: ignore
+    except ImportError:
+        _audio_norm_clips = True
+    if _audio_norm_clips and " -movflags " in _norm_cmd:
+        _norm_cmd = _norm_cmd.replace(
+            " -movflags ", " -af loudnorm=I=-16:TP=-1.5:LRA=11 -movflags "
+        )
     # Ensure we suppress ffmpeg periodic stats when using -progress
     if " -stats " in _norm_cmd:
         _norm_cmd = _norm_cmd.replace(" -stats ", " -nostats -progress pipe:2 ")

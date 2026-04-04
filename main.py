@@ -295,6 +295,8 @@ def apply_cli_overrides(args):
             _cfg.transitions_rebuild = True
         if getattr(args, "no_audio_normalize_transitions", False):
             _cfg.audio_normalize_transitions = False
+        if getattr(args, "no_normalize_clips", False):
+            _cfg.audio_normalize_clips = False
         # Cache policy overrides
         if getattr(args, "keep_clips", False):
             _cfg.keep_clips = True

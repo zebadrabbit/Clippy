@@ -255,6 +255,8 @@ class ProgressScreen(Screen):
             _cfg_mod.transition_cooldown = tr["transition_cooldown"]
         if "no_random_transitions" in tr:
             _cfg_mod.no_random_transitions = tr["no_random_transitions"]
+        if "audio_normalize_clips" in tr:
+            _cfg_mod.audio_normalize_clips = tr["audio_normalize_clips"]
         if "audio_normalize_transitions" in tr:
             _cfg_mod.audio_normalize_transitions = tr["audio_normalize_transitions"]
         if "silence_static" in tr:

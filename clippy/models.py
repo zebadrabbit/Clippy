@@ -85,6 +85,7 @@ class SequencingConfig:
 @dataclass
 class AudioConfig:
     silence_static: bool = False
+    audio_normalize_clips: bool = True
     audio_normalize_transitions: bool = True
 
 
@@ -195,6 +196,7 @@ class ClippyConfig:
             ),
             audio=AudioConfig(
                 silence_static=bool(d.get("silence_static", False)),
+                audio_normalize_clips=bool(d.get("audio_normalize_clips", True)),
                 audio_normalize_transitions=bool(d.get("audio_normalize_transitions", True)),
             ),
             paths=PathsConfig(
@@ -275,6 +277,7 @@ class ClippyConfig:
             "transition_cooldown": self.sequencing.transition_cooldown,
             # Audio
             "silence_static": self.audio.silence_static,
+            "audio_normalize_clips": self.audio.audio_normalize_clips,
             "audio_normalize_transitions": self.audio.audio_normalize_transitions,
             # Paths
             "cache": self.paths.cache,
