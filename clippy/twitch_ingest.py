@@ -183,9 +183,7 @@ def fetch_creator_avatars(clips: _t.Iterable[dict], client_id: str, token: str) 
     return avatar_map
 
 
-def build_clip_rows(
-    clips: _t.Iterable[dict], avatar_map: dict | None = None
-) -> list[ClipRow]:
+def build_clip_rows(clips: _t.Iterable[dict], avatar_map: dict | None = None) -> list[ClipRow]:
     """Convert raw Helix clip dicts to pipeline ClipRow instances.
 
     Each ClipRow holds: id, created_ts, author, avatar_url, view_count, url.
@@ -208,6 +206,8 @@ def build_clip_rows(
                     avatar_url=avatar_url,
                     view_count=int(c.get("view_count", 0)),
                     url=c.get("url", ""),
+                    title=c.get("title", ""),
+                    duration=float(c.get("duration", 0)),
                 )
             )
         except Exception as e:  # pragma: no cover — mixed data-parsing errors

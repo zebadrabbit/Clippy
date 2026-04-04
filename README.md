@@ -4,15 +4,21 @@ Create highlight compilations directly from Twitch clips. Audio is ON by default
 
 ## Features
 
-- Twitch Helix ingestion with simple date window and auto-expand lookback
-- Discord channel ingestion (optional): read clip links from a Discord channel using discord.py
+- **Two interfaces**: Interactive Textual TUI (`--tui`) for beginners, full CLI for power users
+- Twitch Helix ingestion with date windows, auto-expand lookback, and nostalgia mode
+- Discord channel ingestion (optional): read clip links curated by your community
+- Duration-based sizing: request compilations by target length (`--target-duration 20`) instead of clip count
+- Auto-expand: fills missing clips from outside the date range (newest to oldest)
+- Nostalgia mode: mixes in random older clips (>6 months) for variety
+- 5 encoding presets (youtube_1080p60, discord_friendly, archive_hq, quick_preview, cpu_only)
 - Min-views filter, weighted selection, and themed colorized logs
 - Creator avatar overlay, transitions, and output finalization to `output/`
 - yt-dlp downloads with retries; `.env` or env-based credentials
-- NVENC-based encoding tuned for fewer artifacts at transitions
-- Interactive confirmation by default (use `-y` to auto-approve)
+- NVENC-based encoding tuned for fewer artifacts at transitions, with libx264 fallback
 - Resilient audio: loudness normalization for assets, synthesize clean stereo audio if missing
 - Ctrl-C friendly: cooperative shutdown that stops workers and terminates ffmpeg cleanly
+- Save credentials to `.env` from the TUI or CLI (`--save-env`)
+- Summary screen with output paths, compilation lengths, and contributor credits
 
 ## Setup (first time, PowerShell on Windows)
 
@@ -20,174 +26,171 @@ Create highlight compilations directly from Twitch clips. Audio is ON by default
 python -m venv .venv
 \.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python .\scripts\setup_wizard.py
 ```
 
-### What the setup wizard does
-
-- Source selection: choose Twitch or Discord as your clip source
-- Guides you through entering your Twitch credentials and saves them to a `.env` file
-- Writes a starter `clippy.yaml` with sensible defaults (clips per compilation, min views, quality, fps/resolution)
-- Optionally sets a default broadcaster so you can run without specifying `--broadcaster`
-- Discord setup (optional): prompts for Discord channel ID and supports masked bot token entry; can perform a quick token login check
-- Preserves existing settings on re-run (including Discord config); secrets are masked in prompts
-- Checks for ffmpeg/yt-dlp and NVENC availability; suggests fixes if missing
-- Helps you select or create a transitions folder (`transitions/`), explains the required `static.mp4`
-- Requires `transitions/static.mp4`; you can set a custom directory with `--transitions-dir` or TRANSITIONS_DIR
-- You can run with just: `python .\main.py -y` after saving defaults
-
-You can re-run the wizard at any time to adjust settings; it will merge with the existing YAML and leave custom edits intact.
-
-## Configuration
-
-- The wizard creates `clippy.yaml` and `.env` for you. A commented example remains in `clippy.yaml.example`.
-- Precedence: CLI flags > Environment (.env) > clippy.yaml > built-in defaults.
-
-Key env vars (advanced):
-
-- `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` – Twitch credentials used by the Helix API
-- `TRANSITIONS_DIR` – point to a custom transitions folder (`static.mp4` required)
-
-## Usage
-
-Basic:
+For the TUI, also install the optional dependency:
 
 ```powershell
-python main.py --broadcaster somechannel --max-clips 80 --clips 12 --compilations 2 --min-views 5
+pip install "textual>=0.40"
 ```
 
-Confirm settings (default prompt) or skip with `-y`:
+Or install all optional dependencies at once:
 
 ```powershell
+pip install -e ".[tui,dev]"
+```
+
+## Quick Start
+
+### TUI (recommended for first-time users)
+
+```powershell
+python main.py --tui
+```
+
+The TUI walks you through 6 steps: Source > Credentials > Clip Settings > Quality > Transitions > Review & Start. It saves credentials to `.env` on request so subsequent runs auto-fill.
+
+### CLI
+
+```powershell
+# By clip count
+python main.py --broadcaster somechannel --clips 12 --compilations 2 --min-views 5
+
+# By target duration (minutes)
+python main.py --broadcaster somechannel --target-duration 20 --compilations 2
+
+# With auto-expand and nostalgia
+python main.py --broadcaster somechannel --clips 12 --compilations 2 --auto-expand --nostalgia
+
+# Auto-confirm
 python main.py --broadcaster somechannel -y
 ```
 
-### Discord mode (optional)
+### Discord mode
 
 Prerequisites:
 
 - A Discord bot in your server with permission to read the target channel
-- The “Message Content Intent” enabled for your bot in the Discord Developer Portal
+- The "Message Content Intent" enabled for your bot in the Discord Developer Portal
 - Bot token saved to `.env` as `DISCORD_TOKEN`
-
-Config:
-
-- Set `discord.channel_id` and optional `discord.message_limit` in `clippy.yaml`
-- Or pass `--discord-channel-id` and `--discord-limit` on the CLI
-
-Run:
+- Channel ID saved to `.env` as `DISCORD_CHANNEL_ID` (or pass via CLI/TUI)
 
 ```powershell
-python .\main.py --discord --discord-channel-id 123456789012345678 -y
+python main.py --discord --discord-channel-id 123456789012345678 -y
 ```
 
-What happens:
+What happens: Clippy reads messages from the channel, extracts Twitch clip links, resolves them via Helix, and builds compilations. This lets your Twitch community curate clips collaboratively.
 
-- Clippy reads recent messages from the channel, extracts Twitch clip links, resolves them via Helix, and builds compilations
-- Logs display the channel name (e.g., “Guild / #clips”), the number of links found, raw clips fetched, clips after min-views, and compilations created
+## Configuration
 
-````
+- Precedence: CLI flags > Environment (`.env`) > `clippy.yaml` > built-in defaults.
+- The TUI and setup wizard create `clippy.yaml` and `.env` for you. A commented example remains in `clippy.yaml.example`.
 
-Auto-expand lookback to gather more clips:
-```powershell
-python main.py --broadcaster somechannel --auto-expand --expand-step-days 14 --max-lookback-days 180
-````
+Key env vars:
 
-Quality, resolution, and container:
+| Variable | Description |
+|---|---|
+| `TWITCH_CLIENT_ID` | Twitch app client ID for Helix API |
+| `TWITCH_CLIENT_SECRET` | Twitch app client secret |
+| `DISCORD_TOKEN` | Discord bot token (for Discord mode) |
+| `DISCORD_CHANNEL_ID` | Discord channel to read clip links from |
+| `TRANSITIONS_DIR` | Custom transitions folder path |
 
-```powershell
-# Preset quality (sets bitrate unless --bitrate provided)
-python main.py --broadcaster somechannel --quality high
+## CLI Reference
 
-# Explicit bitrate and resolution
-python main.py --broadcaster somechannel --bitrate 16M --resolution 1920x1080
-
-# Container format (mp4 with faststart, or mkv)
-python main.py --broadcaster somechannel --format mkv
-```
-
-Help is now grouped into logical sections:
+Help is grouped into logical sections:
 
 ```powershell
 python main.py -h
 ```
 
-Sections include: Required, Window & selection, Output & formatting, Transitions & sequencing, Performance & robustness, Cache management, Encoder (NVENC) tuning, Misc.
+Key flags:
+
+| Flag | Description |
+|---|---|
+| `--tui` | Launch the interactive TUI |
+| `--broadcaster` | Twitch channel name |
+| `--clips` | Clips per compilation (default: 12) |
+| `--compilations` | Number of compilations (default: 2) |
+| `--target-duration` | Target compilation length in minutes (alternative to `--clips`) |
+| `--auto-expand` | Fill missing clips from outside date range |
+| `--no-auto-expand` | Disable auto-expand |
+| `--nostalgia` | Mix in random older clips (>6 months) |
+| `--min-views` | Minimum view count filter |
+| `--preset` | Encoding preset name (use `--list-presets` to see options) |
+| `--nvenc-preset` | NVENC encoder preset (slow, medium, fast, etc.) |
+| `--quality` | Quality tier (low, medium, high, max) |
+| `--format` | Container format (mp4, mkv) |
+| `--save-env` | Save credentials to `.env` for future runs |
+| `-y` / `--yes` | Auto-confirm settings |
+
+## Encoding Presets
+
+Use `--list-presets` to see all available presets:
+
+| Preset | Resolution | FPS | Codec | Use Case |
+|---|---|---|---|---|
+| `youtube_1080p60` | 1920x1080 | 60 | h264_nvenc | YouTube uploads |
+| `discord_friendly` | 1280x720 | 30 | h264_nvenc | Discord file size limits |
+| `archive_hq` | 1920x1080 | 60 | h264_nvenc | High-quality archive (MKV) |
+| `quick_preview` | 1280x720 | 30 | h264_nvenc | Fast preview renders |
+| `cpu_only` | 1920x1080 | 60 | libx264 | Systems without NVENC GPU |
+
+Apply a preset and customize:
+
+```powershell
+python main.py --broadcaster somechannel --preset youtube_1080p60 --cq 18
+```
 
 ## Outputs
 
 - Final files are moved to `output/` with names like: `<channel>_<start>_to_<end>_compilation.mp4` (or `.mkv`).
 - Work-in-progress artifacts live under `cache/` and are cleaned unless `--keep-cache` is set.
 - If a file exists, we auto-suffix with `_1`, `_2`, ... unless `--overwrite-output` is provided.
+- The TUI summary screen shows output paths, compilation lengths, and contributor credits.
 
-## Transitions & sequencing
+## Transitions & Sequencing
 
 - `transitions/static.mp4` is required and placed between every segment.
-- Sequence: random(optional intro) → static → clip → static → random_chance(transition → static) … → random(optional outro)
+- Sequence: random(optional intro) > static > clip > static > random_chance(transition > static) ... > random(optional outro)
 - All non-clip assets are normalized to `cache/_trans` on first use to ensure uniform codecs and audio (48 kHz stereo). You can force a rebuild with `--rebuild-transitions`.
 
 ### Intro/Outro configuration
 
-- Where they live: filenames are relative to your transitions folder (default `transitions/`, or whatever you set with `--transitions-dir` or the TRANSITIONS_DIR env var).
-- Configure via the wizard: re-run `python .\\scripts\\setup_wizard.py` and enter comma-separated lists when prompted (e.g., `intro.mp4` or `introA.mp4, introB.mp4`). Press Enter to keep existing values, or enter `-`/`none` to clear the list.
-- Configure via YAML: edit `clippy.yaml` under the `assets` section:
+- Where they live: filenames are relative to your transitions folder (default `transitions/`, or whatever you set with `--transitions-dir` or `TRANSITIONS_DIR`).
+- Configure via `clippy.yaml` under the `assets` section:
 
-  assets:
+```yaml
+assets:
   static: static.mp4
-  intro: - intro.mp4
-  outro: - outro.mp4
+  intro:
+    - intro.mp4
+  outro:
+    - outro.mp4
+```
 
-- Override per-run: use `--intro` or `--outro` to force a single file for that run, and `--transition` to force the transition choice when selected. Random transitions still obey `--transition-prob` and `--no-random-transitions`.
+- Override per-run: use `--intro` or `--outro` to force a single file for that run, and `--transition` to force the transition choice when selected.
 
-### Internal data and ENV
-
-- `static.mp4` is REQUIRED. Place it under `transitions/` or point TRANSITIONS_DIR to a folder that contains it.
-- Override transitions location with `TRANSITIONS_DIR` (absolute or relative path).
-- Common ENV:
-  - `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`: Twitch API credentials
-  - TRANSITIONS_DIR: Set a custom transitions directory
-  - `TRANSITIONS_DIR=path`: Use a specific transitions folder
-
-### Transitions 101: creating and validating assets
-
-There are two easy ways to prepare transitions:
-
-1. Import existing clips at the correct format
+### Creating and validating transitions
 
 ```powershell
-# Normalize/convert any video into the transitions folder
+# Import an existing clip as a transition
 python .\scripts\import_media.py path\to\your\clip.mp4 --type transition
 
-# Set a specific output name (e.g., outro_custom.mp4)
-python .\scripts\import_media.py path\to\outro.mov --type outro --name outro_custom.mp4
-
-# Replace or create the required static.mp4
-python .\scripts\import_media.py path\to\image_or_video.mp4 --type static --overwrite
-```
-
-2. Generate multiple transitions from a long video
-
-```powershell
-# Slice random 1–3s segments and write transition_XX.mp4 files
+# Generate multiple transitions from a long video
 python .\scripts\make_transitions.py -i .\long_source.mp4 -n 8
-```
 
-Validate and troubleshoot:
-
-```powershell
-# Normalize all transitions and run an audio-only concat probe
+# Validate transitions
 python .\scripts\test_transitions.py --normalize --concat-audio-check
-
-# Verify a previously generated concat list (e.g., cache\comp0)
-python .\scripts\check_sequencing.py --comp .\cache\comp0 --transitions-dir .\transitions
 ```
 
-## Notes
+## Troubleshooting
 
-- Min views equals `--min-views` (maps to `reactionThreshold`).
-- NVENC settings aim to reduce blockiness: VBR HQ + CQ, B-frames, lookahead, AQ, lanczos scaling.
-- If your GPU lacks NVENC, we can switch to libx264 on request.
-- Ctrl-C: The app will stop workers and terminate any ongoing ffmpeg/yt-dlp processes, then perform normal cleanup.
+- **Seeing only a few clips?** Use `--auto-expand` or `--target-duration` to let Clippy gather more.
+- **Pixelation at cuts?** Try `--quality max` or `--bitrate 16M`.
+- **Concat AAC errors?** Run `python .\scripts\test_transitions.py --normalize`.
+- **No NVENC?** Use `--preset cpu_only` or let Clippy auto-detect with `detect_encoder()`.
+- **Duplicate log messages in TUI?** Fixed in v0.5.0 — update to latest.
 
 ## Health Check
 
@@ -195,40 +198,8 @@ python .\scripts\check_sequencing.py --comp .\cache\comp0 --transitions-dir .\tr
 python .\scripts\health_check.py
 ```
 
-## Troubleshooting
-
-- Seeing only a few clips? Use `--auto-expand` or expand the date window. The app logs effective Helix parameters.
-- Pixelation at cuts? Try `--quality max` or `--bitrate 16M`.
-- Concat AAC errors? Ensure your transitions are normalized by running `python .\scripts\test_transitions.py --normalize`.
-
-## Running from source (Python)
-
-This project now runs as a standard Python application. Use the setup steps above to configure your environment, then run commands like:
-
-```powershell
-# Health check
-python .\scripts\health_check.py
-
-# Build a compilation (skip confirmation with -y)
-python .\main.py --broadcaster <name> -y
-```
-
-## Manual setup (optional)
-
-If you prefer not to use the wizard, you can create `.env` yourself and edit `clippy.yaml`:
-
-```powershell
-"TWITCH_CLIENT_ID=your_id`nTWITCH_CLIENT_SECRET=your_secret" | Out-File -Encoding utf8 .env
-```
-
 ## Docs
 
 - [Contributing](docs/CONTRIBUTING.md)
 - [Code of Conduct](docs/CODE_OF_CONDUCT.md)
 - [Security Policy](docs/SECURITY.md)
-
-## Roadmap
-
-- Parallel clip processing
-- Optional libx264 encoder flag
-- Advanced scoring and auto-keyframe alignment

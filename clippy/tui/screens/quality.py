@@ -27,6 +27,10 @@ class QualityScreen(Screen):
                         *[Option(f"{name} — {desc}", id=name) for name, desc in list_presets()],
                         id="preset-list",
                     )
+                    yield Static(
+                        "Pick a preset to auto-fill the parameters, then tweak as needed.",
+                        classes="help-text",
+                    )
 
                 # Right panel: parameter builder
                 with Vertical(id="builder-panel"):
@@ -40,14 +44,29 @@ class QualityScreen(Screen):
                                 value="h264_nvenc",
                                 id="codec-select",
                             )
+                            yield Static(
+                                "NVENC uses your GPU for fast encoding. "
+                                "libx264 is a CPU fallback.",
+                                classes="help-text",
+                            )
                         with Vertical(classes="form-group"):
                             yield Label("CQ (quality)")
                             yield Input(value="19", id="cq-input")
+                            yield Static(
+                                "Constant quality level. Lower = better quality, larger files. "
+                                "Typical range: 16-28.",
+                                classes="help-text",
+                            )
 
                     with Horizontal():
                         with Vertical(classes="form-group"):
                             yield Label("Max Bitrate")
                             yield Input(value="12M", id="bitrate-input")
+                            yield Static(
+                                "Peak bitrate cap (e.g. 12M, 8M). "
+                                "Prevents spikes in complex scenes.",
+                                classes="help-text",
+                            )
                         with Vertical(classes="form-group"):
                             yield Label("Preset")
                             yield Select(
@@ -58,6 +77,11 @@ class QualityScreen(Screen):
                                 ],
                                 value="slow",
                                 id="preset-select",
+                            )
+                            yield Static(
+                                "Encoder speed/quality trade-off. "
+                                "Slow = best quality, Fast = quicker encode.",
+                                classes="help-text",
                             )
 
                     with Horizontal():
@@ -72,6 +96,10 @@ class QualityScreen(Screen):
                                 value="1920x1080",
                                 id="resolution-select",
                             )
+                            yield Static(
+                                "Output video resolution. Clips are scaled to fit.",
+                                classes="help-text",
+                            )
                         with Vertical(classes="form-group"):
                             yield Label("FPS")
                             yield Select(
@@ -79,17 +107,30 @@ class QualityScreen(Screen):
                                 value="60",
                                 id="fps-select",
                             )
+                            yield Static(
+                                "Frames per second. 60 for smooth gameplay, 30 for smaller files.",
+                                classes="help-text",
+                            )
 
                     with Horizontal():
                         with Vertical(classes="form-group"):
                             yield Label("Audio Bitrate")
                             yield Input(value="192k", id="audio-bitrate-input")
+                            yield Static(
+                                "AAC audio bitrate (e.g. 192k, 128k). "
+                                "Higher = better audio quality.",
+                                classes="help-text",
+                            )
                         with Vertical(classes="form-group"):
                             yield Label("Container")
                             yield Select(
                                 [("mp4", "mp4"), ("mkv", "mkv")],
                                 value="mp4",
                                 id="container-select",
+                            )
+                            yield Static(
+                                "MP4 for broad compatibility, MKV for lossless container features.",
+                                classes="help-text",
                             )
 
             # Bottom: command preview
@@ -99,7 +140,8 @@ class QualityScreen(Screen):
             # Warnings
             yield Static("", id="warnings")
 
-            with Vertical(classes="button-bar"):
+            with Horizontal(classes="button-bar"):
+                yield Button("← Back", id="back-btn")
                 yield Button("Next →", variant="primary", id="next-btn")
 
     def on_mount(self) -> None:
@@ -165,6 +207,8 @@ class QualityScreen(Screen):
             pass
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "next-btn":
+        if event.button.id == "back-btn":
+            self.app.pop_screen()
+        elif event.button.id == "next-btn":
             self.app.workflow["encoder_params"] = self._build_params()
             self.app.advance_to("transitions")

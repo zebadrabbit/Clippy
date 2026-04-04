@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from clippy.ffmpeg import (
     EncoderParams,
     build_concat_cmd,
@@ -94,8 +92,8 @@ class TestBuildCommands:
     def test_normalize_cmd(self):
         enc = EncoderParams(resolution="1920x1080", fps="60")
         cmd = build_normalize_cmd("clip123", enc, "./cache")
-        assert 'clip123/clip.mp4' in cmd
-        assert 'clip123/normalized.mp4' in cmd
+        assert "clip123/clip.mp4" in cmd
+        assert "clip123/normalized.mp4" in cmd
         assert "h264_nvenc" in cmd
 
     def test_overlay_cmd(self):

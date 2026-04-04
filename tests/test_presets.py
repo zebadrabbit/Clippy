@@ -38,7 +38,7 @@ class TestPresets:
         """Modifying the returned preset should not affect the original."""
         enc1 = from_preset("discord_friendly")
         enc2 = from_preset("discord_friendly")
-        enc1_modified = enc1.with_overrides(cq=30)
+        _ = enc1.with_overrides(cq=30)
         assert enc2.cq != 30  # original unchanged
 
     def test_cpu_only_uses_libx264(self):

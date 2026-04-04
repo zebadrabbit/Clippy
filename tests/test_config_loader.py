@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
-
-import pytest
-
 from clippy.config_loader import (
     DEFAULTS,
     _coerce_bool,
@@ -74,9 +69,7 @@ selection:
 """
         yaml_file = tmp_path / "clippy.yaml"
         yaml_file.write_text(yaml_content, encoding="utf-8")
-        merged = load_merged_config(
-            defaults=DEFAULTS, env={}, file_path=str(yaml_file)
-        )
+        merged = load_merged_config(defaults=DEFAULTS, env={}, file_path=str(yaml_file))
         assert merged["bitrate"] == "20M"
         assert merged["fps"] == "30"
         assert merged["amountOfClips"] == 8
@@ -99,7 +92,5 @@ selection:
         yaml_file = tmp_path / "clippy.yaml"
         yaml_file.write_text("not: [valid: yaml: content", encoding="utf-8")
         # Should not raise, should fall back to defaults
-        merged = load_merged_config(
-            defaults=DEFAULTS, env={}, file_path=str(yaml_file)
-        )
+        merged = load_merged_config(defaults=DEFAULTS, env={}, file_path=str(yaml_file))
         assert merged["bitrate"] == DEFAULTS["bitrate"]

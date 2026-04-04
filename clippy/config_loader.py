@@ -274,7 +274,7 @@ def load_config(
     defaults: dict[str, Any] | None = None,
     env: dict[str, str] | None = None,
     file_path: str | None = None,
-) -> "ClippyConfig":
+) -> "ClippyConfig":  # noqa: F821
     """Load configuration and return a typed ClippyConfig dataclass.
 
     This is the preferred entry point for new code. Wraps load_merged_config()

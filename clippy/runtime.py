@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 from typing import Optional
 
 
@@ -24,6 +25,37 @@ def _load_env_if_present():
     except OSError:
         # best-effort; ignore file-read errors
         pass
+
+
+def save_env(values: dict[str, str]) -> None:
+    """Write or update a .env file with the given key=value pairs.
+
+    Preserves existing comments, ordering, and keys not in *values*.
+    """
+    env_path = Path(".env")
+
+    existing_lines: list[str] = []
+    if env_path.is_file():
+        existing_lines = env_path.read_text(encoding="utf-8").splitlines()
+
+    written_keys: set[str] = set()
+    new_lines: list[str] = []
+
+    for line in existing_lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in values:
+                new_lines.append(f"{key}={values[key]}")
+                written_keys.add(key)
+                continue
+        new_lines.append(line)
+
+    for key, val in values.items():
+        if key not in written_keys:
+            new_lines.append(f"{key}={val}")
+
+    env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
 
 def ensure_twitch_credentials_if_needed():

@@ -11,11 +11,10 @@ This module has NO side effects — it only produces command strings/lists.
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, List, Optional
 
 from clippy.models import ClippyConfig
-
 
 # ---------------------------------------------------------------------------
 # Encoder parameters
@@ -64,8 +63,7 @@ class EncoderParams:
 
     # yt-dlp
     yt_format: str = (
-        "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]"
-        "/best[ext=mp4][height<=1080]"
+        "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]" "/best[ext=mp4][height<=1080]"
     )
 
     # Metadata
@@ -108,10 +106,7 @@ class EncoderParams:
 
     def full_encoding_flags(self) -> str:
         """video + pixel_format + audio, for embedding into any command."""
-        return (
-            f"{self.video_flags()} -pix_fmt {self.pixel_format} "
-            f"{self.audio_flags()}"
-        )
+        return f"{self.video_flags()} -pix_fmt {self.pixel_format} " f"{self.audio_flags()}"
 
     # -----------------------------------------------------------------------
     # Factories
@@ -164,7 +159,7 @@ class EncoderParams:
     def to_command_preview(self) -> str:
         """Human-readable preview of the full ffmpeg encoding flags."""
         parts = [
-            f"ffmpeg -i <input>",
+            "ffmpeg -i <input>",
             self.sizing_flags(),
             self.full_encoding_flags(),
             self.container_flags,
@@ -230,7 +225,7 @@ def build_overlay_cmd(
         f"drawbox=enable='between(t,3,10)':x=0:y=(ih)-238:h=157:w=1000:color=black@0.7:t=fill,"
         f"drawtext=enable='between(t,3,10)':x=198:y=(h)-190:fontfile='{safe_font}':fontsize=28:fontcolor=white@0.4:text='clip by',"
         f"drawtext=enable='between(t,3,10)':x=198:y=(h)-160:fontfile='{safe_font}':fontsize=48:fontcolor=white@0.9:text='{safe_author}',"
-        f'overlay=enable=\'between(t,3,10)\':x=50:y=H-223[overlay]"'
+        f"overlay=enable='between(t,3,10)':x=50:y=H-223[overlay]\""
     )
 
     return (
@@ -271,9 +266,9 @@ def build_thumbnail_cmd(
 ) -> str:
     """Build the ffmpeg command to extract a single-frame thumbnail."""
     return (
-        f'{ffmpeg_bin} -ss 00:00:05 '
+        f"{ffmpeg_bin} -ss 00:00:05 "
         f'-i "{cache_dir}/{clip_id}/{clip_id}.mp4" '
-        f'-vframes 1 -s {resolution} '
+        f"-vframes 1 -s {resolution} "
         f'"{cache_dir}/{clip_id}/preview.png"'
     )
 
@@ -304,7 +299,7 @@ def build_transcode_cmd(
             f"{encoder.video_flags()} -pix_fmt {encoder.pixel_format} "
             f"-c:a {encoder.audio_codec} -b:a {encoder.audio_bitrate} "
             f"-ar {encoder.audio_sample_rate} -ac {encoder.audio_channels} "
-            f'-shortest -movflags +faststart -preset {encoder.preset} '
+            f"-shortest -movflags +faststart -preset {encoder.preset} "
             f'-loglevel error -stats -y "{dst}"'
         )
 
@@ -326,9 +321,12 @@ def build_ffprobe_duration_cmd(
     """Build ffprobe command to get file duration (returns list for subprocess)."""
     return [
         ffprobe_bin,
-        "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
         path,
     ]
 
@@ -340,10 +338,14 @@ def build_ffprobe_audio_check_cmd(
     """Build ffprobe command to check if a file has an audio stream."""
     return [
         ffprobe_bin,
-        "-v", "error",
-        "-select_streams", "a:0",
-        "-show_entries", "stream=codec_type",
-        "-of", "csv=p=0",
+        "-v",
+        "error",
+        "-select_streams",
+        "a:0",
+        "-show_entries",
+        "stream=codec_type",
+        "-of",
+        "csv=p=0",
         path,
     ]
 

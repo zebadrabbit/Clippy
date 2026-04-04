@@ -11,7 +11,6 @@ from typing import Dict, List, Tuple
 
 from clippy.ffmpeg import EncoderParams
 
-
 # ---------------------------------------------------------------------------
 # Preset definitions
 # ---------------------------------------------------------------------------

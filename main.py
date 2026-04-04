@@ -19,7 +19,7 @@
 # ║                                                                            ║
 # ╚════════════════════════════════════════════════════════════════════════════╝
 
-"""Clippy entrypoint: fetch Twitch clips and build compilations.
+r"""Clippy entrypoint: fetch Twitch clips and build compilations.
 
 Quick start (PowerShell):
     $env:TWITCH_CLIENT_ID="xxxxx"; $env:TWITCH_CLIENT_SECRET="yyyyy"; \
@@ -42,26 +42,16 @@ from typing import Optional
 
 import clippy.utils as utils_mod
 from clippy.config import (
-    amountOfClips,
-    amountOfCompilations,
-    reactionThreshold,
     bitrate,
-    resolution,
+    cache,
     container_ext,
     container_flags,
-    fps,
-    audio_bitrate,
-    cache,
-    output,
     enable_overlay,
+    fps,
+    output,
+    reactionThreshold,
     rebuild,
-    cq,
-    nvenc_preset,
-    gop,
-    rc_lookahead,
-    spatial_aq,
-    temporal_aq,
-    aq_strength,
+    resolution,
 )
 from clippy.twitch_ingest import (
     build_clip_rows,
@@ -378,7 +368,14 @@ def display_confirmation(args, window):
         comp_desc = f"{V(str(args.amountOfCompilations))} x {V(str(args.amountOfClips))}"
         if _total is not None:
             comp_desc += f" {S('(')}{V(str(_total))} {V('total')}{S(')')}"
-        print(f"{L('Compilations x Clips')}{S()}{comp_desc}")
+        target_dur = getattr(args, "target_duration", 0) or 0
+        if target_dur > 0:
+            comp_desc = f"{V(str(args.amountOfCompilations))} x ~{V(str(target_dur))} min"
+        print(f"{L('Compilations')}{S()}{comp_desc}")
+        if getattr(args, "auto_expand", False) and not getattr(args, "no_auto_expand", False):
+            print(f"{L('Auto-expand')}{S()}{V('enabled')}")
+        if getattr(args, "nostalgia", False):
+            print(f"{L('Nostalgia mode')}{S()}{V('enabled')}")
         print(f"{L('Cache dir')}{S()}{V(str(cache), True)}")
         print(f"{L('Output dir')}{S()}{V(str(output), True)}")
         tr_desc = f"intro={len(_intro_list)}, trans={len(_transitions_list)}, outro={len(_outro_list)}, prob={_tprob}"
@@ -484,14 +481,28 @@ def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
     # Filter by min views (reactionThreshold proxy)
     filtered = [c for c in clips if int(c.get("view_count", 0)) >= reactionThreshold]
     log("Filtered to " + str(len(filtered)) + " clips (>= " + str(reactionThreshold) + " views)", 2)
+
+    # Compute target total — use duration estimate if --target-duration is set
+    target_duration_min = getattr(args, "target_duration", 0) or 0
+    if target_duration_min > 0:
+        # Estimate ~30s avg clip duration to figure out how many clips we need
+        est_clips = max(1, int((target_duration_min * 60) / 30))
+        target_total = est_clips * int(args.amountOfCompilations)
+    else:
+        target_total = int(args.amountOfClips) * int(args.amountOfCompilations)
+
+    # Determine if auto-expand is active
+    do_auto_expand = getattr(args, "auto_expand", False)
+    if getattr(args, "no_auto_expand", False):
+        do_auto_expand = False
+
     if not filtered:
         # If auto-expand is off and we got none, stop here early.
-        if not getattr(args, "auto_expand", False):
+        if not do_auto_expand:
             raise SystemExit("No clips meet criteria")
 
     # Auto-expand: extend the start date backwards until we reach target clips or max lookback
-    target_total = int(args.amountOfClips) * int(args.amountOfCompilations)
-    if getattr(args, "auto_expand", False) and len(filtered) < target_total:
+    if do_auto_expand and len(filtered) < target_total:
         try:
             # Helper to parse ISO8601 Z to aware datetime
             def _parse_iso_z(s: Optional[str]) -> Optional[datetime]:
@@ -581,6 +592,42 @@ def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
             )
         except Exception as e:  # auto-expand is best-effort
             log("Auto-expand failed: " + str(e), 5)
+
+    # Nostalgia mode: mix in random older clips (>6 months old)
+    if getattr(args, "nostalgia", False) and filtered:
+        import random as _rng
+
+        log("Nostalgia mode: fetching older clips (>6 months)...", 1)
+        six_months_ago = datetime.now(timezone.utc) - timedelta(days=180)
+        one_year_ago = six_months_ago - timedelta(days=180)
+        try:
+            old_clips = fetch_clips(
+                broadcaster_id=broadcaster_id,
+                client_id=cid,
+                token=token,
+                started_at=one_year_ago.isoformat().replace("+00:00", "Z"),
+                ended_at=six_months_ago.isoformat().replace("+00:00", "Z"),
+                max_clips=50,
+            )
+            old_filtered = [
+                c for c in old_clips if int(c.get("view_count", 0)) >= reactionThreshold
+            ]
+            seen_ids = {c.get("id") for c in filtered}
+            old_unique = [c for c in old_filtered if c.get("id") not in seen_ids]
+            if old_unique:
+                n_nostalgia = max(1, target_total // 5)
+                n_nostalgia = min(n_nostalgia, len(old_unique))
+                picks = _rng.sample(old_unique, n_nostalgia)
+                log(f"Mixing in {len(picks)} nostalgia clip(s)", 2)
+                result = list(filtered[: target_total - n_nostalgia])
+                for p in picks:
+                    pos = _rng.randint(0, len(result))
+                    result.insert(pos, p)
+                filtered = result
+            else:
+                log("No unique nostalgia clips found (>6 months old)", 2)
+        except Exception as e:  # nostalgia is best-effort
+            log(f"Nostalgia fetch failed: {e}", 5)
 
     return filtered, window
 
@@ -719,6 +766,14 @@ def main():  # noqa: C901
         except Exception:  # cosmetic; non-fatal
             print(f"Version {CLIPPY_VERSION}")
     args = parse_args()
+
+    # Launch TUI if requested
+    if getattr(args, "tui", False):
+        from clippy.tui.app import run_tui
+
+        run_tui()
+        return
+
     # Seed randomness if provided early
     if getattr(args, "seed", None) is not None:
         try:
@@ -767,6 +822,21 @@ def main():  # noqa: C901
     cid, secret = load_credentials(args.client_id, args.client_secret)
     token = get_app_access_token(cid, secret)
 
+    # Save credentials to .env if requested
+    if getattr(args, "save_env", False):
+        try:
+            from clippy.runtime import save_env
+
+            env_vals = {"TWITCH_CLIENT_ID": cid, "TWITCH_CLIENT_SECRET": secret}
+            if getattr(args, "discord_token", None):
+                env_vals["DISCORD_TOKEN"] = args.discord_token
+            if getattr(args, "discord_channel_id", None):
+                env_vals["DISCORD_CHANNEL_ID"] = str(args.discord_channel_id)
+            save_env(env_vals)
+            log("Credentials saved to .env", 1)
+        except Exception as e:  # non-fatal
+            log(f"Failed to save .env: {e}", 5)
+
     prep_work()
 
     clips, broadcaster_id = ingest_clips(args, cid, token, window)
@@ -774,7 +844,11 @@ def main():  # noqa: C901
 
     avatar_map = fetch_creator_avatars(filtered, cid, token)
     rows = build_clip_rows(filtered, avatar_map)
-    comps = create_compilations_from(rows)
+
+    # Duration-based or count-based compilation splitting
+    target_duration_min = getattr(args, "target_duration", 0) or 0
+    target_duration_secs = target_duration_min * 60 if target_duration_min > 0 else 0
+    comps = create_compilations_from(rows, target_duration_secs=target_duration_secs)
 
     run_pipeline(comps, args, window)
 

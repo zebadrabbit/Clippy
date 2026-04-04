@@ -1,5 +1,59 @@
 # Changelog
 
+## 2026-04-03 — v0.5.0
+
+TUI enhancements, duration-based compilations, nostalgia mode, and UX polish.
+
+- Feature — Duration-based compilations
+  - New `--target-duration` CLI flag: specify target compilation length in minutes instead of clip count.
+  - TUI clip settings screen offers "By count" vs "By duration" sizing mode.
+  - `ClipRow` now captures `title` and `duration` from Helix for accurate duration math.
+  - `create_compilations_from()` supports `target_duration_secs` parameter.
+
+- Feature — Nostalgia mode
+  - `--nostalgia` CLI flag mixes in random older clips (>6 months) for variety.
+  - Replaces ~20% of clips with nostalgia picks inserted at random positions.
+
+- Feature — Auto-expand improvements
+  - Auto-expand now defaults on in TUI; fills clips from outside date range (newest to oldest).
+  - `--no-auto-expand` flag to explicitly disable.
+  - Blank date ranges display as "All time" instead of empty arrow.
+
+- Feature — Save credentials to `.env`
+  - TUI credentials screen has "Save to .env" button.
+  - CLI `--save-env` flag writes/updates `.env` with Twitch/Discord credentials.
+  - Pre-fills credentials from existing `.env` on next launch.
+
+- Feature — Summary screen
+  - New post-pipeline summary with copyable output file paths.
+  - Shows compilation lengths, clip counts, and contributor credits (for YouTube descriptions).
+
+- Feature — Transition file picker (TUI)
+  - Transitions screen shows absolute directory path and scan button.
+  - Configurable probability, cooldown, audio normalization, and overlay toggle.
+  - All options have descriptive help text.
+
+- UX — TUI polish
+  - All screens now have a Back button for navigation.
+  - All form fields have muted help text explaining their purpose.
+  - Discord channel ID pre-fills from `.env`.
+  - Fixed `--preset` / `--nvenc-preset` CLI conflict (renamed NVENC preset flag).
+  - Fixed duplicate log messages in TUI progress screen.
+  - Fixed docstring escape sequence warning (`\m` → raw string).
+
+- CLI — New flags
+  - `--tui`: launch the interactive TUI.
+  - `--target-duration`: compilation length in minutes.
+  - `--nostalgia`: enable nostalgia mode.
+  - `--no-auto-expand`: disable auto-expand.
+  - `--save-env`: save credentials to `.env`.
+  - `--nvenc-preset`: renamed from `--preset` to avoid conflict with encoding presets.
+
+- Docs — README rewrite
+  - Reorganized around TUI-first workflow with CLI reference table.
+  - Added encoding presets table, duration-based examples, Discord setup section.
+  - Removed outdated setup wizard references; streamlined troubleshooting.
+
 ## 2026-04-02 — v0.4.0
 
 Major architecture overhaul: robustness, Textual TUI, and ffmpeg preset system.

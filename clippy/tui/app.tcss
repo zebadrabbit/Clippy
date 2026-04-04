@@ -37,7 +37,8 @@ Footer {
 
 .button-bar {
     dock: bottom;
-    height: 3;
+    height: auto;
+    min-height: 3;
     align: right middle;
     padding: 0 2;
 }
@@ -75,4 +76,56 @@ Footer {
 .log-panel {
     height: 1fr;
     border: solid $primary-background;
+}
+
+.help-text {
+    color: $text-muted;
+    margin: 0 0 1 2;
+}
+
+/* Summary screen */
+.section-header {
+    text-style: bold;
+    color: $accent;
+    margin-top: 1;
+}
+
+/* Transition file picker */
+#transition-list {
+    height: 1fr;
+    min-height: 8;
+    max-height: 16;
+    border: solid $primary-background;
+    margin-bottom: 1;
+}
+
+.transition-row {
+    height: 3;
+    align: left middle;
+}
+
+.transition-checkbox {
+    width: 1fr;
+}
+
+.weight-input {
+    width: 10;
+}
+
+#select-bar {
+    height: auto;
+    margin-bottom: 1;
+}
+
+#select-bar Button {
+    margin-right: 1;
+}
+
+#scan-btn {
+    margin-bottom: 1;
+}
+
+/* Utility */
+.hidden {
+    display: none;
 }

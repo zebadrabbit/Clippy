@@ -17,8 +17,7 @@ class YtDlpConfig:
 
     binary: str = "yt-dlp"
     format_spec: str = (
-        "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]"
-        "/best[ext=mp4][height<=1080]"
+        "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]" "/best[ext=mp4][height<=1080]"
     )
     retries: int = 5
     merge_format: str = "mp4"
@@ -37,11 +36,16 @@ class YtDlpConfig:
             "--no-check-certificate",
             "--quiet",
             "--progress",
-            "--retries", str(self.retries),
-            "--ffmpeg-location", self.ffmpeg_location,
-            "--merge-output-format", self.merge_format,
-            "--format", self.format_spec,
-            "-o", output_path,
+            "--retries",
+            str(self.retries),
+            "--ffmpeg-location",
+            self.ffmpeg_location,
+            "--merge-output-format",
+            self.merge_format,
+            "--format",
+            self.format_spec,
+            "-o",
+            output_path,
         ]
         cmd.extend(self.extra_args)
         cmd.append(url)
@@ -50,6 +54,7 @@ class YtDlpConfig:
     def to_command_str(self, url: str, output_path: str) -> str:
         """Build the command as a single string (for display / legacy compat)."""
         import shlex
+
         return " ".join(shlex.quote(t) for t in self.to_command(url, output_path))
 
     @classmethod
@@ -78,16 +83,14 @@ class YtDlpConfig:
 YTDLP_PRESETS: Dict[str, YtDlpConfig] = {
     "twitch_1080p": YtDlpConfig(
         format_spec=(
-            "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]"
-            "/best[ext=mp4][height<=1080]"
+            "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]" "/best[ext=mp4][height<=1080]"
         ),
         name="twitch_1080p",
         description="Twitch clips up to 1080p (default)",
     ),
     "twitch_720p": YtDlpConfig(
         format_spec=(
-            "bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]"
-            "/best[ext=mp4][height<=720]"
+            "bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]" "/best[ext=mp4][height<=720]"
         ),
         name="twitch_720p",
         description="Twitch clips up to 720p — smaller downloads",

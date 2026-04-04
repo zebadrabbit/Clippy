@@ -9,8 +9,8 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.widgets import Footer, Header
 
-from clippy.models import ClippyConfig
 from clippy.config import get_config
+from clippy.models import ClippyConfig
 
 
 class ClippyApp(App):
@@ -43,21 +43,27 @@ class ClippyApp(App):
 
     def on_mount(self) -> None:
         from clippy.tui.screens.source import SourceScreen
+
         self.push_screen(SourceScreen())
 
     def action_back(self) -> None:
         if len(self.screen_stack) > 1:
             self.pop_screen()
 
-    def advance_to(self, screen_name: str) -> None:
+    def advance_to(self, screen_name: str, **kwargs) -> None:
         """Navigate to the next screen in the workflow."""
-        from clippy.tui.screens.source import SourceScreen
-        from clippy.tui.screens.credentials import CredentialsScreen
         from clippy.tui.screens.clip_settings import ClipSettingsScreen
-        from clippy.tui.screens.quality import QualityScreen
-        from clippy.tui.screens.transitions import TransitionsScreen
-        from clippy.tui.screens.review import ReviewScreen
+        from clippy.tui.screens.credentials import CredentialsScreen
         from clippy.tui.screens.progress import ProgressScreen
+        from clippy.tui.screens.quality import QualityScreen
+        from clippy.tui.screens.review import ReviewScreen
+        from clippy.tui.screens.source import SourceScreen
+        from clippy.tui.screens.summary import SummaryScreen
+        from clippy.tui.screens.transitions import TransitionsScreen
+
+        if screen_name == "summary":
+            self.push_screen(SummaryScreen(**kwargs))
+            return
 
         screens = {
             "source": SourceScreen,
@@ -75,6 +81,9 @@ class ClippyApp(App):
 
 def run_tui(config: ClippyConfig | None = None) -> None:
     """Entry point for the TUI."""
+    from clippy.runtime import _load_env_if_present
+
+    _load_env_if_present()
     app = ClippyApp(config=config)
     app.run()
 

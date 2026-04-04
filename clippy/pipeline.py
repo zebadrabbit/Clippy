@@ -44,33 +44,32 @@ from PIL import Image
 from clippy.config import (
     amountOfClips,
     amountOfCompilations,
-    reactionThreshold,
-    bitrate,
-    resolution,
-    fps,
-    audio_bitrate,
-    cache,
-    enable_overlay,
-    rebuild,
-    cq,
-    nvenc_preset,
-    gop,
-    rc_lookahead,
-    spatial_aq,
-    temporal_aq,
     aq_strength,
+    audio_bitrate,
+    bitrate,
+    cache,
+    cq,
+    enable_overlay,
     ffmpeg,
-    ffprobe,
-    youtubeDl,
-    youtubeDlOptions,
-    ffmpegNormalizeVideos,
     ffmpegApplyOverlay,
     ffmpegBuildSegments,
     ffmpegCreateThumbnail,
+    ffmpegNormalizeVideos,
+    ffprobe,
+    fps,
+    gop,
+    nvenc_preset,
+    rc_lookahead,
+    reactionThreshold,
+    rebuild,
+    resolution,
+    spatial_aq,
+    temporal_aq,
+    youtubeDl,
+    youtubeDlOptions,
 )
-from clippy.utils import find_transition_file, log, replace_vars, resolve_transitions_dir
-
 from clippy.models import ClipRow
+from clippy.utils import find_transition_file, log, replace_vars, resolve_transitions_dir
 
 logger = logging.getLogger(__name__)
 
@@ -601,19 +600,58 @@ def process_clip(
     return 0
 
 
-def create_compilations_from(clips: List[ClipRow]) -> List[List[ClipRow]]:
+def create_compilations_from(
+    clips: List[ClipRow],
+    target_duration_secs: float = 0,
+) -> List[List[ClipRow]]:
+    """Split clips into compilations by count or by target duration.
+
+    When *target_duration_secs* > 0, clips are added to each compilation
+    until the cumulative duration reaches the target.  Otherwise the
+    legacy count-based logic is used.
+    """
+    # Read live values from config module (not stale module-level imports)
+    import clippy.config as _cfg
+
+    _clips_per = getattr(_cfg, "amountOfClips", amountOfClips)
+    _num_comps = getattr(_cfg, "amountOfCompilations", amountOfCompilations)
+    _threshold = getattr(_cfg, "reactionThreshold", reactionThreshold)
     # filter by view threshold (reactions reused as views)
-    eligible = [c for c in clips if c.view_count >= reactionThreshold]
+    eligible = [c for c in clips if c.view_count >= _threshold]
     random.shuffle(eligible)
     compilations: List[List[ClipRow]] = []
-    while eligible and len(compilations) < amountOfCompilations:
-        compilations.append(eligible[:amountOfClips])
-        eligible = eligible[amountOfClips:]
+
+    if target_duration_secs > 0:
+        # Duration-based splitting
+        while eligible and len(compilations) < _num_comps:
+            comp: List[ClipRow] = []
+            running = 0.0
+            while eligible:
+                clip = eligible[0]
+                clip_dur = clip.duration if clip.duration > 0 else 30.0  # fallback
+                if comp and running + clip_dur > target_duration_secs:
+                    break
+                comp.append(eligible.pop(0))
+                running += clip_dur
+            if comp:
+                compilations.append(comp)
+                log(
+                    f"Compilation {len(compilations)}: " f"{len(comp)} clips, ~{running:.0f}s",
+                    2,
+                )
+    else:
+        # Count-based splitting (original behaviour)
+        while eligible and len(compilations) < _num_comps:
+            compilations.append(eligible[:_clips_per])
+            eligible = eligible[_clips_per:]
+
     log(f"Created {len(compilations)} compilations", 2)
     return compilations
 
 
-def transcode_asset(name, transitions_abs, assets_out_dir, rel_assets_dir, asset_manifest, manifest_path):
+def transcode_asset(
+    name, transitions_abs, assets_out_dir, rel_assets_dir, asset_manifest, manifest_path
+):
     """Transcode a transition/intro/outro asset to a normalized cache copy."""
     if not name:
         return None
@@ -928,7 +966,15 @@ def prepare_clips_concurrent(compilation, max_workers):
     return results
 
 
-def build_concat_list(compilation, results, transitions_abs, assets_out_dir, rel_assets_dir, asset_manifest, manifest_path):
+def build_concat_list(
+    compilation,
+    results,
+    transitions_abs,
+    assets_out_dir,
+    rel_assets_dir,
+    asset_manifest,
+    manifest_path,
+):
     """Assemble the ffmpeg concat file lines from processed clips and transition assets."""
     lines = []
 
@@ -978,7 +1024,9 @@ def build_concat_list(compilation, results, transitions_abs, assets_out_dir, rel
         if not name:
             return False
         # Use normalized copy to ensure decoder compatibility
-        rel_norm = transcode_asset(name, transitions_abs, assets_out_dir, rel_assets_dir, asset_manifest, manifest_path)
+        rel_norm = transcode_asset(
+            name, transitions_abs, assets_out_dir, rel_assets_dir, asset_manifest, manifest_path
+        )
         if rel_norm:
             lines.append(f"file {rel_norm}")
             return True
@@ -1084,8 +1132,13 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
     results = prepare_clips_concurrent(compilation, _max_workers)
     # Build concat list
     lines = build_concat_list(
-        compilation, results, transitions_abs, assets_out_dir,
-        rel_assets_dir, asset_manifest, manifest_path,
+        compilation,
+        results,
+        transitions_abs,
+        assets_out_dir,
+        rel_assets_dir,
+        asset_manifest,
+        manifest_path,
     )
     # Write file
     with open(path, "w") as f:

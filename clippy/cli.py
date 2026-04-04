@@ -65,9 +65,27 @@ def parse_args() -> argparse.Namespace:
         help="Number of compilations to create",
     )
     g_window.add_argument(
+        "--target-duration",
+        dest="target_duration",
+        type=float,
+        default=0,
+        help="Target compilation length in minutes (alternative to --clips). "
+        "Clips are added until the duration is reached.",
+    )
+    g_window.add_argument(
         "--auto-expand",
         action="store_true",
         help="If not enough clips, auto-expand the start date backwards in steps to gather more",
+    )
+    g_window.add_argument(
+        "--no-auto-expand",
+        action="store_true",
+        help="Disable auto-expand even if the default would enable it",
+    )
+    g_window.add_argument(
+        "--nostalgia",
+        action="store_true",
+        help="Mix in random older clips (>6 months old) for variety",
     )
     g_window.add_argument(
         "--expand-step-days",
@@ -198,7 +216,7 @@ def parse_args() -> argparse.Namespace:
     g_nvenc = p.add_argument_group("Encoder (NVENC) tuning")
     g_nvenc.add_argument("--cq", type=str, help="NVENC constant quality (lower is higher quality)")
     g_nvenc.add_argument(
-        "--preset",
+        "--nvenc-preset",
         dest="nvenc_preset",
         type=str,
         choices=["slow", "medium", "fast", "hp", "hq", "bd", "ll", "llhq", "llhp"],
@@ -234,7 +252,17 @@ def parse_args() -> argparse.Namespace:
 
     # Misc
     g_misc = p.add_argument_group("Misc")
+    g_misc.add_argument(
+        "--tui",
+        action="store_true",
+        help="Launch the interactive TUI instead of the console prompts",
+    )
     g_misc.add_argument("-y", "--yes", action="store_true", help="Auto-confirm the settings prompt")
+    g_misc.add_argument(
+        "--save-env",
+        action="store_true",
+        help="Save Twitch/Discord credentials to .env file for future runs",
+    )
     g_misc.add_argument("--version", action="version", version=f"Clippy {__version__}")
 
     return p.parse_args()

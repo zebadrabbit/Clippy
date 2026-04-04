@@ -10,7 +10,6 @@ import dataclasses
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-
 # ---------------------------------------------------------------------------
 # Pipeline data models
 # ---------------------------------------------------------------------------
@@ -29,6 +28,8 @@ class ClipRow:
     avatar_url: str
     view_count: int
     url: str
+    title: str = ""
+    duration: float = 0.0
 
     # Backwards-compat: allow positional indexing for migration period
     def __getitem__(self, idx: int) -> Any:
@@ -61,8 +62,7 @@ class EncodingConfig:
     container_ext: str = "mp4"
     container_flags: str = "-movflags +faststart"
     yt_format: str = (
-        "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]"
-        "/best[ext=mp4][height<=1080]"
+        "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]" "/best[ext=mp4][height<=1080]"
     )
     nvenc: NvencConfig = field(default_factory=NvencConfig)
 
@@ -192,9 +192,7 @@ class ClippyConfig:
             ),
             audio=AudioConfig(
                 silence_static=bool(d.get("silence_static", False)),
-                audio_normalize_transitions=bool(
-                    d.get("audio_normalize_transitions", True)
-                ),
+                audio_normalize_transitions=bool(d.get("audio_normalize_transitions", True)),
             ),
             paths=PathsConfig(
                 cache=str(d.get("cache", "./cache")),
