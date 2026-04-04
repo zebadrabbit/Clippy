@@ -53,6 +53,9 @@ def finalize_outputs(
     final_names: Optional[List[str]] = None,
     overwrite_output: bool = False,
     purge_cache: bool = False,
+    keep_clips: bool = False,
+    cache_ttl_days: int = 0,
+    cache_max_size_mb: int = 0,
 ) -> List[str]:
     """Move compiled files from cache to output with improved naming then optionally clean cache."""
     # Import late to avoid circulars
@@ -154,27 +157,17 @@ def finalize_outputs(
     if keep_cache and not purge_cache:
         log("Cache retained (--keep-cache set)", 0)
         return final_names
-    # clean cache except leave directory itself
+    # Apply cache policy (TTL, size budget, or plain cleanup)
     log("Cleaning cache", 1)
     try:
-        preserve_set = set()
-        if not purge_cache:
-            try:
-                from clippy.config import cache_preserve_dirs as _preserve
-            except ImportError:
-                _preserve = []
-            preserve_set = {d.strip().lower() for d in _preserve if isinstance(d, str)}
-        for entry in os.listdir(cache):
-            if entry.strip().lower() in preserve_set:
-                continue
-            path = os.path.join(cache, entry)
-            try:
-                if os.path.isdir(path):
-                    shutil.rmtree(path, ignore_errors=True)
-                else:
-                    os.remove(path)
-            except OSError:
-                pass
+        from clippy.cache import apply_cache_policy
+        apply_cache_policy(
+            cache_root=cache,
+            keep_clips=keep_clips,
+            ttl_days=cache_ttl_days,
+            max_size_mb=cache_max_size_mb,
+            purge=purge_cache,
+        )
         log("Cache cleaned", 2)
     except OSError as e:  # pragma: no cover
         log("Cache cleanup failed: " + str(e), 5)

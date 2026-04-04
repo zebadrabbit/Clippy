@@ -295,6 +295,13 @@ def apply_cli_overrides(args):
             _cfg.transitions_rebuild = True
         if getattr(args, "no_audio_normalize_transitions", False):
             _cfg.audio_normalize_transitions = False
+        # Cache policy overrides
+        if getattr(args, "keep_clips", False):
+            _cfg.keep_clips = True
+        if getattr(args, "cache_ttl_days", 0):
+            _cfg.cache_ttl_days = int(args.cache_ttl_days)
+        if getattr(args, "cache_max_size_mb", 0):
+            _cfg.cache_max_size_mb = int(args.cache_max_size_mb)
     except (ImportError, AttributeError):
         pass
 
@@ -714,6 +721,9 @@ def run_pipeline(comps, args, window):
         final_names=final_names,
         overwrite_output=getattr(args, "overwrite_output", False),
         purge_cache=getattr(args, "purge_cache", False),
+        keep_clips=getattr(args, "keep_clips", False),
+        cache_ttl_days=getattr(args, "cache_ttl_days", 0),
+        cache_max_size_mb=getattr(args, "cache_max_size_mb", 0),
     )
     # Write manifest.json with metadata and clip IDs per compilation
     try:

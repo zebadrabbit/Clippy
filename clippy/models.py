@@ -101,6 +101,9 @@ class BehaviorConfig:
     rebuild: bool = False
     enable_overlay: bool = True
     transitions_rebuild: bool = False
+    keep_clips: bool = False
+    cache_ttl_days: int = 0
+    cache_max_size_mb: int = 0
 
 
 @dataclass
@@ -204,6 +207,9 @@ class ClippyConfig:
                 rebuild=bool(d.get("rebuild", False)),
                 enable_overlay=bool(d.get("enable_overlay", True)),
                 transitions_rebuild=bool(d.get("transitions_rebuild", False)),
+                keep_clips=bool(d.get("keep_clips", False)),
+                cache_ttl_days=int(d.get("cache_ttl_days", 0)),
+                cache_max_size_mb=int(d.get("cache_max_size_mb", 0)),
             ),
             assets=AssetsConfig(
                 fontfile=str(d.get("fontfile", "assets/fonts/Roboto-Medium.ttf")),
@@ -279,6 +285,9 @@ class ClippyConfig:
             "rebuild": self.behavior.rebuild,
             "enable_overlay": self.behavior.enable_overlay,
             "transitions_rebuild": self.behavior.transitions_rebuild,
+            "keep_clips": self.behavior.keep_clips,
+            "cache_ttl_days": self.behavior.cache_ttl_days,
+            "cache_max_size_mb": self.behavior.cache_max_size_mb,
             # Assets
             "fontfile": self.assets.fontfile,
             "static": self.assets.static,

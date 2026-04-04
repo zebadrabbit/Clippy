@@ -209,7 +209,38 @@ def parse_args() -> argparse.Namespace:
     g_cache.add_argument(
         "--purge-cache",
         action="store_true",
-        help="Purge entire cache after run (ignore --keep-cache and cache_preserve_dirs)",
+        help="Purge entire cache after run (overrides --keep-cache and --keep-clips)",
+    )
+    g_cache.add_argument(
+        "--keep-clips",
+        dest="keep_clips",
+        action="store_true",
+        help=(
+            "Keep per-clip processed files between runs so they can be reused. "
+            "Pair with --cache-ttl-days or --cache-max-size-mb to bound disk usage."
+        ),
+    )
+    g_cache.add_argument(
+        "--cache-ttl-days",
+        dest="cache_ttl_days",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "When --keep-clips is set, delete any cached clip directory older than N days. "
+            "0 = keep forever (default)."
+        ),
+    )
+    g_cache.add_argument(
+        "--cache-max-size-mb",
+        dest="cache_max_size_mb",
+        type=int,
+        default=0,
+        metavar="MB",
+        help=(
+            "When --keep-clips is set, cap total cached clip size at N MB. "
+            "Oldest clips are evicted first. 0 = unlimited (default)."
+        ),
     )
 
     # Encoder tuning (NVENC)

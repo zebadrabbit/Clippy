@@ -68,6 +68,14 @@ behavior:
   transitions_rebuild: false
   # Enable overlay (avatar + text) on clips
   enable_overlay: true
+  # --- Cache retention policy ---
+  # Keep per-clip processed files between runs (reuse on --rebuild).
+  # When false (default), per-clip dirs are deleted at end of each run.
+  keep_clips: false
+  # Delete cached clip dirs older than N days. 0 = keep forever (requires keep_clips: true).
+  cache_ttl_days: 0
+  # Cap total cached clip size in MB; evicts oldest first. 0 = unlimited (requires keep_clips: true).
+  cache_max_size_mb: 0
 
 assets:
   # Required: static mp4 file name in your transitions directory

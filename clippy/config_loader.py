@@ -47,7 +47,9 @@ DEFAULTS: Dict[str, Any] = {
     "rebuild": False,
     "enable_overlay": True,
     "transitions_rebuild": False,
-    # Assets & overlay
+    "keep_clips": False,
+    "cache_ttl_days": 0,
+    "cache_max_size_mb": 0,
     "fontfile": "assets/fonts/Roboto-Medium.ttf",
     "static": "static.mp4",
     "intro": ["intro.mp4"],
@@ -233,6 +235,15 @@ def load_merged_config(
     )
     merged["transitions_rebuild"] = _coerce_bool(
         beh.get("transitions_rebuild"), merged.get("transitions_rebuild", False)
+    )
+    merged["keep_clips"] = _coerce_bool(
+        beh.get("keep_clips"), merged.get("keep_clips", False)
+    )
+    merged["cache_ttl_days"] = _coerce_int(
+        beh.get("cache_ttl_days"), merged.get("cache_ttl_days", 0)
+    )
+    merged["cache_max_size_mb"] = _coerce_int(
+        beh.get("cache_max_size_mb"), merged.get("cache_max_size_mb", 0)
     )
 
     merged["static"] = _coerce_str(assets.get("static"), merged.get("static"))
