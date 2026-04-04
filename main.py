@@ -42,6 +42,7 @@ from typing import Optional
 
 import clippy.utils as utils_mod
 from clippy.config import (
+    audio_bitrate,
     bitrate,
     cache,
     container_ext,
