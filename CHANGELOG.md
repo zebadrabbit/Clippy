@@ -2,6 +2,15 @@
 
 ## 2026-06-13 — Unreleased (v2 refinement)
 
+- Refactor — Config single source of truth (Stage 4b: TUI writer)
+  - The TUI progress screen now builds a `ClippyConfig` and calls `set_config()`
+    (like the CLI) instead of poking module globals and folding them back via
+    `refresh_from_globals()`. Both entry paths now write the typed config the same way.
+  - `_sync_encoder_params` and the transition/audio/selection settings sync are
+    expressed as `dataclasses.replace` updates; the unused `clippy.pipeline` alias and
+    the dead `getattr(_cfg_mod, "cache", ...)` read were removed.
+  - Tests: add `tests/test_tui_config.py` (skipped without `textual`). 96 passing.
+
 - Refactor — Config single source of truth (Stage 4a: remaining readers)
   - Migrated the remaining function-local `from clippy.config import X` reads to
     `get_config()` in `pipeline.py` (audio-normalize flags, transition assets/weights/

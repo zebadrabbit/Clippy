@@ -95,23 +95,35 @@ class _StdoutCapture(io.TextIOBase):
 
 
 def _sync_encoder_params(params: EncoderParams) -> None:
-    """Push the selected encoder settings into the live config module."""
+    """Push the selected encoder settings into the typed config (single source of truth)."""
+    import dataclasses as _dc
+
     import clippy.config as _cfg_mod
 
+    cfg = _cfg_mod.get_config()
+    nvenc = _dc.replace(
+        cfg.encoding.nvenc,
+        cq=str(params.cq),
+        preset=params.preset,
+        gop=str(params.gop),
+        rc_lookahead=str(params.rc_lookahead),
+        spatial_aq=str(params.spatial_aq),
+        aq_strength=str(params.aq_strength),
+        temporal_aq=str(params.temporal_aq),
+    )
+    encoding = _dc.replace(
+        cfg.encoding,
+        bitrate=params.max_bitrate,
+        audio_bitrate=params.audio_bitrate,
+        fps=params.fps,
+        resolution=params.resolution,
+        container_ext=params.container_ext,
+        container_flags=params.container_flags,
+        nvenc=nvenc,
+    )
+    _cfg_mod.set_config(cfg.replace(encoding=encoding))
+    # video_codec is not modelled on ClippyConfig; keep it as a module attribute.
     _cfg_mod.video_codec = params.video_codec
-    _cfg_mod.cq = str(params.cq)
-    _cfg_mod.bitrate = params.max_bitrate
-    _cfg_mod.audio_bitrate = params.audio_bitrate
-    _cfg_mod.fps = params.fps
-    _cfg_mod.resolution = params.resolution
-    _cfg_mod.nvenc_preset = params.preset
-    _cfg_mod.container_ext = params.container_ext
-    _cfg_mod.container_flags = params.container_flags
-    _cfg_mod.gop = str(params.gop)
-    _cfg_mod.rc_lookahead = str(params.rc_lookahead)
-    _cfg_mod.spatial_aq = str(params.spatial_aq)
-    _cfg_mod.aq_strength = str(params.aq_strength)
-    _cfg_mod.temporal_aq = str(params.temporal_aq)
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +234,6 @@ class ProgressScreen(Screen):
     async def _run_pipeline(self) -> None:  # noqa: C901
         """Execute the full pipeline in a background thread."""
         import clippy.config as _cfg_mod
-        import clippy.pipeline as _pl
         from clippy.naming import (
             ensure_unique_names,
             finalize_outputs,
@@ -262,46 +273,69 @@ class ProgressScreen(Screen):
         target_duration_secs = float(cs.get("target_duration_min", 0)) * 60
         target_total = clips_per_comp * compilations
 
-        # Sync TUI values into config module so pipeline reads them
-        _cfg_mod.amountOfClips = clips_per_comp
-        _cfg_mod.amountOfCompilations = compilations
-        _cfg_mod.reactionThreshold = min_views
+        # Fold all TUI selections into the typed config (single source of truth).
+        import dataclasses as _dc
 
-        # Sync transition settings
         tr = wf.get("transitions", {})
+        cfg = _cfg_mod.get_config()
+
+        selection = _dc.replace(
+            cfg.selection,
+            clips_per_compilation=clips_per_comp,
+            compilations=compilations,
+            min_views=min_views,
+        )
+
+        assets = cfg.assets
         if tr.get("selected_transitions") is not None:
-            _cfg_mod.transitions = tr["selected_transitions"]
+            assets = _dc.replace(assets, transitions=tr["selected_transitions"])
+
+        seq = cfg.sequencing
+        _seq_updates = {}
         if "transition_mode" in tr:
-            _cfg_mod.transition_mode = tr["transition_mode"]
+            _seq_updates["transition_mode"] = tr["transition_mode"]
         if tr.get("transition_exclude") is not None:
-            _cfg_mod.transition_exclude = tr["transition_exclude"]
+            _seq_updates["transition_exclude"] = tr["transition_exclude"]
         if tr.get("transitions_weights"):
-            _cfg_mod.transitions_weights = tr["transitions_weights"]
+            _seq_updates["transitions_weights"] = tr["transitions_weights"]
         if "transition_probability" in tr:
-            _cfg_mod.transition_probability = tr["transition_probability"]
+            _seq_updates["transition_probability"] = tr["transition_probability"]
         if "transition_cooldown" in tr:
-            _cfg_mod.transition_cooldown = tr["transition_cooldown"]
+            _seq_updates["transition_cooldown"] = tr["transition_cooldown"]
         if "no_random_transitions" in tr:
-            _cfg_mod.no_random_transitions = tr["no_random_transitions"]
+            _seq_updates["no_random_transitions"] = tr["no_random_transitions"]
+        if _seq_updates:
+            seq = _dc.replace(seq, **_seq_updates)
+
+        audio = cfg.audio
+        _audio_updates = {}
         if "audio_normalize_clips" in tr:
-            _cfg_mod.audio_normalize_clips = tr["audio_normalize_clips"]
+            _audio_updates["audio_normalize_clips"] = tr["audio_normalize_clips"]
         if "audio_normalize_transitions" in tr:
-            _cfg_mod.audio_normalize_transitions = tr["audio_normalize_transitions"]
+            _audio_updates["audio_normalize_transitions"] = tr["audio_normalize_transitions"]
         if "silence_static" in tr:
-            _cfg_mod.silence_static = tr["silence_static"]
+            _audio_updates["silence_static"] = tr["silence_static"]
+        if _audio_updates:
+            audio = _dc.replace(audio, **_audio_updates)
+
+        behavior = cfg.behavior
         if "no_overlay" in tr:
-            _cfg_mod.enable_overlay = not tr["no_overlay"]
-            _pl.enable_overlay = not tr["no_overlay"]
+            behavior = _dc.replace(behavior, enable_overlay=not tr["no_overlay"])
+
+        _cfg_mod.set_config(
+            cfg.replace(
+                selection=selection,
+                assets=assets,
+                sequencing=seq,
+                audio=audio,
+                behavior=behavior,
+            )
+        )
+
+        # transitions_dir is not modelled on ClippyConfig.
         if tr.get("transitions_dir"):
             _cfg_mod.transitions_dir = tr["transitions_dir"]
             os.environ["TRANSITIONS_DIR"] = tr["transitions_dir"]
-
-        # Fold all TUI selections (written to the legacy globals above) into the
-        # typed config so the pipeline reads them as the single source of truth.
-        try:
-            _cfg_mod.refresh_from_globals()
-        except Exception:  # config reconciliation must not abort the run
-            pass
 
         start_date = cs.get("start", "")
         end_date = cs.get("end", "")
@@ -430,9 +464,9 @@ class ProgressScreen(Screen):
             self._log("[green]Stage 1 complete[/]")
 
             # ---- Build final names ----
-            getattr(_cfg_mod, "cache", "cache")  # reserved for future use
-            output_dir = getattr(_cfg_mod, "output", "output")
-            ext = getattr(_cfg_mod, "container_ext", "mp4")
+            _final_cfg = _cfg_mod.get_config()
+            output_dir = _final_cfg.paths.output
+            ext = _final_cfg.encoding.container_ext
             b_safe = sanitize_filename(broadcaster.lower()) or "broadcaster"
             start_iso, end_iso = window
 
