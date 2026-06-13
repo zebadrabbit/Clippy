@@ -42,7 +42,7 @@ from typing import Optional
 
 import clippy.utils as utils_mod
 from clippy.config import (
-    audio_bitrate,
+    audio_bitrate,  # noqa: F401  # seeds module global read by apply_cli_overrides
     bitrate,
     cache,
     container_ext,
@@ -305,6 +305,16 @@ def apply_cli_overrides(args):
             _cfg.cache_ttl_days = int(args.cache_ttl_days)
         if getattr(args, "cache_max_size_mb", 0):
             _cfg.cache_max_size_mb = int(args.cache_max_size_mb)
+    except (ImportError, AttributeError):
+        pass
+
+    # Single source of truth: fold the legacy-global overrides applied above
+    # back into the typed ClippyConfig so reads (templating, pipeline) stay
+    # consistent with the CLI flags.
+    try:
+        import clippy.config as _cfg
+
+        _cfg.refresh_from_globals()
     except (ImportError, AttributeError):
         pass
 

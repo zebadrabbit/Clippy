@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-06-13 — Unreleased (v2 refinement)
+
+- Refactor — Config single source of truth (Stage 1)
+  - The typed `ClippyConfig` singleton is now authoritative. `utils._cfg_get` (and
+    therefore the ffmpeg templating hot path) reads from the typed config, falling
+    back to module globals only for values it does not model (binary paths, etc.).
+  - New `config.refresh_from_globals()` folds the legacy-global overrides applied by
+    the CLI (`apply_cli_overrides`) back into the typed config, so CLI and TUI paths
+    can no longer diverge.
+  - The singleton is initialised from the fully-resolved globals at import (e.g.
+    absolute fontfile path), so `get_config()` is correct from the first read.
+  - Tests: add `tests/test_config_singleton.py`; update transition-pool test to drive
+    through the typed config (89 passing).
+
 ## 2026-05-30 — Unreleased
 
 - Fix — TUI encoder settings now reach the pipeline

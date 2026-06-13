@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import clippy.config as cfg
+from clippy.models import ClippyConfig
 from clippy.utils import discover_transition_files, resolve_transition_pool
 
 
@@ -30,11 +33,19 @@ class TestTransitionResolver:
             (tmp_path / name).write_text("", encoding="utf-8")
 
         monkeypatch.setenv("TRANSITIONS_DIR", str(tmp_path))
-        monkeypatch.setattr(
-            cfg, "transitions", ["custom_pick.mp4", "transition_01.mp4"], raising=False
+        # Drive the resolver through the typed config (the single source of truth).
+        base = ClippyConfig()
+        custom = base.replace(
+            assets=dataclasses.replace(
+                base.assets, transitions=["custom_pick.mp4", "transition_01.mp4"]
+            ),
+            sequencing=dataclasses.replace(
+                base.sequencing,
+                transition_mode="hybrid",
+                transition_exclude=["transition_02.mp4"],
+            ),
         )
-        monkeypatch.setattr(cfg, "transition_mode", "hybrid", raising=False)
-        monkeypatch.setattr(cfg, "transition_exclude", ["transition_02.mp4"], raising=False)
+        monkeypatch.setattr(cfg, "_CONFIG", custom, raising=False)
 
         assert resolve_transition_pool(str(tmp_path)) == [
             "custom_pick.mp4",

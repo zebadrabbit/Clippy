@@ -15,6 +15,7 @@ assumed repo root is adjusted accordingly.
 from __future__ import annotations
 
 import os
+import sys
 from typing import Any, Optional
 
 from clippy.models import ClippyConfig
@@ -166,3 +167,32 @@ def set_config(cfg: ClippyConfig) -> None:
     _CONFIG = cfg
     # Keep module-level globals in sync for code that still reads them
     globals().update(cfg.to_flat_dict())
+
+
+def refresh_from_globals() -> ClippyConfig:
+    """Rebuild the typed config singleton from the current module-level globals.
+
+    The legacy CLI path (``apply_cli_overrides``) mutates the module globals in
+    place.  Calling this afterwards folds those overrides back into the typed
+    ``ClippyConfig`` so the dataclass stays the single source of truth that the
+    rest of the app reads from.  Values not modelled on ``ClippyConfig`` (binary
+    paths, etc.) are left untouched on the module.
+    """
+    mod = sys.modules[__name__]
+    # The flat dict keys are exactly the legacy global names the dataclass models.
+    keys = ClippyConfig().to_flat_dict().keys()
+    snapshot: dict[str, Any] = dict(_merged)
+    for key in keys:
+        if hasattr(mod, key):
+            snapshot[key] = getattr(mod, key)
+    cfg = ClippyConfig.from_merged_dict(snapshot)
+    set_config(cfg)
+    return cfg
+
+
+# Initialise the singleton from the fully-resolved globals (e.g. absolute
+# fontfile path) so get_config() is authoritative from the first read.
+try:
+    refresh_from_globals()
+except Exception:  # config bootstrap must never crash the import
+    pass

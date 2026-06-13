@@ -20,8 +20,16 @@ import re
 def _cfg_get(name: str, default=None):
     """Best-effort getter for config values.
 
-    Reads directly from the imported clippy.config module.
+    Prefers the typed ``ClippyConfig`` singleton (the single source of truth)
+    and falls back to the legacy module globals for values it does not model
+    (binary paths, transitions_dir, etc.).
     """
+    try:
+        flat = _cfg_mod.get_config().to_flat_dict()
+        if name in flat:
+            return flat[name]
+    except Exception:  # typed config unavailable; fall through to globals
+        pass
     try:
         return getattr(_cfg_mod, name, default)
     except Exception:  # config can fail in many ways; broad catch intentional
