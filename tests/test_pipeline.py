@@ -53,3 +53,23 @@ def test_stage_two_honors_typed_config_resolution(monkeypatch, sample_clip):
     pipeline.stage_two([[sample_clip]])
 
     assert "1280x720" in captured["cmd"]
+
+
+def test_overlay_filter_scales_with_resolution():
+    f1080 = pipeline._overlay_filter("Bob", "/f.ttf", "1920x1080")
+    f720 = pipeline._overlay_filter("Bob", "/f.ttf", "1280x720")
+    # Author text: 48px at 1080p -> 32px at 720p (48 * 720/1080).
+    assert "fontsize=48" in f1080
+    assert "fontsize=32" in f720
+    # Avatar scaled: 128px at 1080p -> 85px at 720p.
+    assert "scale=-2:128" in f1080
+    assert "scale=-2:85" in f720
+    # Content preserved.
+    assert "text='Bob'" in f1080
+    assert "clip by" in f1080
+
+
+def test_overlay_filter_bad_resolution_defaults_to_1080():
+    f = pipeline._overlay_filter("X", "/f.ttf", "not-a-resolution")
+    assert "fontsize=48" in f  # falls back to 1080p scaling
+    assert "scale=-2:128" in f

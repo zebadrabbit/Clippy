@@ -2,6 +2,13 @@
 
 ## 2026-06-13 — Unreleased (v2 refinement)
 
+- Fix — Resolution-aware creator overlay (Track 2)
+  - The credit banner, "clip by" / author text, and avatar were hand-tuned with 1080p
+    pixel coordinates, so they were mis-placed/oversized at other resolutions (e.g. the
+    720p `discord_friendly` preset). All coordinates, font sizes, and the avatar now
+    scale by `height / 1080`. Validated against ffmpeg at 720p and 1080p.
+  - Tests: add overlay-scaling cases to `tests/test_pipeline.py`.
+
 - Feature — Friendly preflight checks (Track 2)
   - New `clippy/preflight.py` collects common setup problems and reports them all at
     once in plain English with a concrete fix for each, instead of failing on the first

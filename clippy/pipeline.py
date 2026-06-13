@@ -92,16 +92,35 @@ def _current_encoder_params() -> EncoderParams:
     )
 
 
-def _overlay_filter(author: str, fontfile: str) -> str:
-    """Build the drawtext/overlay filter graph for a clip."""
+def _overlay_filter(author: str, fontfile: str, resolution: str = "1920x1080") -> str:
+    """Build the drawtext/overlay filter graph for a clip.
+
+    The original coordinates were hand-tuned for 1080p; they are now scaled by
+    ``height / 1080`` so the credit banner, text, and avatar keep their proportions
+    at other resolutions (e.g. 720p ``discord_friendly``).
+    """
     safe_author = author.replace("'", "\\'")
     safe_font = fontfile.replace("\\", "/")
+    try:
+        height = int(str(resolution).lower().split("x")[1])
+    except (IndexError, ValueError):
+        height = 1080
+    s = height / 1080.0
+
+    def px(v: float) -> int:
+        return max(1, int(round(v * s)))
+
+    box_off, box_h, box_w = px(238), px(157), px(1000)
+    cb_x, cb_off, cb_fs = px(198), px(190), max(10, px(28))
+    au_x, au_off, au_fs = px(198), px(160), max(12, px(48))
+    av_x, av_off, av_h = px(50), px(223), px(128)
+    en = "enable='between(t,3,10)'"
     return (
-        '"[0:v]'
-        "drawbox=enable='between(t,3,10)':x=0:y=(ih)-238:h=157:w=1000:color=black@0.7:t=fill,"
-        f"drawtext=enable='between(t,3,10)':x=198:y=(h)-190:fontfile='{safe_font}':fontsize=28:fontcolor=white@0.4:text='clip by',"
-        f"drawtext=enable='between(t,3,10)':x=198:y=(h)-160:fontfile='{safe_font}':fontsize=48:fontcolor=white@0.9:text='{safe_author}',"
-        "overlay=enable='between(t,3,10)':x=50:y=H-223[overlay]\""
+        f'"[1:v]scale=-2:{av_h}[av];'
+        f"[0:v]drawbox={en}:x=0:y=(ih)-{box_off}:h={box_h}:w={box_w}:color=black@0.7:t=fill,"
+        f"drawtext={en}:x={cb_x}:y=(h)-{cb_off}:fontfile='{safe_font}':fontsize={cb_fs}:fontcolor=white@0.4:text='clip by',"
+        f"drawtext={en}:x={au_x}:y=(h)-{au_off}:fontfile='{safe_font}':fontsize={au_fs}:fontcolor=white@0.9:text='{safe_author}'[base];"
+        f'[base][av]overlay={en}:x={av_x}:y=H-{av_off}[overlay]"'
     )
 
 
@@ -603,7 +622,7 @@ def process_clip(
         _ovl_cmd = (
             f'{ffmpeg} -i "{cache}/{clip.id}/normalized.mp4" '
             f'-i "{cache}/{clip.id}/avatar.png" '
-            f"-filter_complex {_overlay_filter(clip.author, cfg.assets.fontfile)} "
+            f"-filter_complex {_overlay_filter(clip.author, cfg.assets.fontfile, enc.resolution)} "
             f'-map "[overlay]" -map "0:a" '
             f"{enc.sizing_flags()} "
             f"{enc.full_encoding_flags()} "
