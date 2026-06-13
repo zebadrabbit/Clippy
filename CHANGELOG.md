@@ -2,6 +2,17 @@
 
 ## 2026-06-13 — Unreleased (v2 refinement)
 
+- Tooling — Reliable lint/format gate + CI
+  - Replaced the hanging pre-commit setup with a native git hook (`.githooks/pre-commit`)
+    that runs black then ruff on staged Python files using the project's own tools — no
+    framework/env-build step to stall on. Enable with `git config core.hooksPath .githooks`
+    or `scripts/install-hooks.{sh,ps1}`. (The `pre-commit` framework's `run` step stalled
+    during store init on Windows, leaving commits hung with a stale index.lock.)
+  - `.pre-commit-config.yaml` switched to local/system hooks for anyone who still uses the
+    framework.
+  - Added `.github/workflows/ci.yml`: ruff + black --check + pytest on Python 3.10/3.11/3.12
+    for pushes and PRs. This is the gate that would have caught this session's bugs/lint debris.
+
 - Refactor — Config single source of truth (Stage 4b: TUI writer)
   - The TUI progress screen now builds a `ClippyConfig` and calls `set_config()`
     (like the CLI) instead of poking module globals and folding them back via

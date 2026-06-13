@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+#
+# Native Clippy pre-commit hook: lint + format staged Python files.
+#
+# We use a plain git hook instead of the pre-commit framework because
+# `pre-commit run` stalls during its store/environment initialization on some
+# setups (notably Windows), which left commits hanging with a stale index.lock.
+# This script has no framework and nothing to install — it just runs the ruff
+# and black already provided by the project's dev dependencies.
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+# (or run: ./scripts/install-hooks.sh)
+#
+# Bypass for a single commit:  git commit --no-verify
+set -euo pipefail
+
+# Collect staged Python files (Added/Copied/Modified/Renamed), NUL-safe.
+mapfile -d '' -t files < <(git diff --cached --name-only --diff-filter=ACMR -z -- '*.py')
+if [ ${#files[@]} -eq 0 ]; then
+  exit 0
+fi
+
+# Prefer the project virtualenv's tools, then fall back to PATH.
+if [ -x ".venv/Scripts/ruff.exe" ]; then
+  RUFF=".venv/Scripts/ruff.exe"; BLACK=".venv/Scripts/black.exe"
+elif [ -x ".venv/bin/ruff" ]; then
+  RUFF=".venv/bin/ruff"; BLACK=".venv/bin/black"
+else
+  RUFF="ruff"; BLACK="black"
+fi
+
+if ! command -v "$RUFF" >/dev/null 2>&1 && [ ! -x "$RUFF" ]; then
+  echo "pre-commit: ruff not found — install dev deps:  pip install -e \".[dev]\"" >&2
+  exit 1
+fi
+
+# Format first (black), then lint (ruff). This order means black settles
+# whitespace/formatting before ruff checks, avoiding ruff flagging things black
+# would have fixed and aborting the hook under `set -e`.
+echo "pre-commit: black on ${#files[@]} file(s)"
+"$BLACK" "${files[@]}"
+
+echo "pre-commit: ruff --fix on ${#files[@]} file(s)"
+"$RUFF" check --force-exclude --fix "${files[@]}"
+
+# Re-stage anything the autofixers changed so the commit includes the fixes.
+git add -- "${files[@]}"

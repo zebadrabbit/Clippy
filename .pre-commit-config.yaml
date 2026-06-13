@@ -1,43 +1,23 @@
+# Local hooks: run the tools already installed in the project virtualenv.
+#
+# We deliberately avoid the upstream black/ruff pre-commit repos because building
+# their isolated hook environments stalled on first run in this project, which left
+# commits hanging with a stale .git/index.lock. `language: system` runs ruff/black
+# straight from PATH (the activated .venv), so there is nothing to install.
+#
+# Tool configuration (line length, excludes, lint rules) lives in pyproject.toml.
 repos:
-  - repo: https://github.com/psf/black
-    rev: 24.8.0
-    hooks:
-      - id: black
-        name: black (python formatter)
-        language_version: python3.12
-        args: ["--line-length=100"]
-        exclude: |
-          (?x)^(
-            bin/|
-            cache/|
-            output/|
-            assets/|
-            transitions/|
-            docs/
-          )
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+  - repo: local
     hooks:
       - id: ruff
-        name: ruff (lint)
-        args: ["--fix"]
-        exclude: |
-          (?x)^(\
-            bin/|\
-            cache/|\
-            output/|\
-            assets/|\
-            transitions/|\
-            docs/\
-          )
-      - id: ruff-format
-        name: ruff (format)
-        exclude: |
-          (?x)^(\
-            bin/|\
-            cache/|\
-            output/|\
-            assets/|\
-            transitions/|\
-            docs/\
-          )
+        name: ruff (lint, autofix)
+        entry: ruff check --force-exclude --fix
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: black
+        name: black (format)
+        entry: black
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
