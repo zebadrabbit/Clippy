@@ -10,12 +10,10 @@ import pytest
 
 from clippy.cache import (
     _clip_dirs,
-    _dir_mtime,
     _dir_size_mb,
     apply_cache_policy,
     cache_size_mb,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -40,20 +40,6 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-import clippy.utils as utils_mod
-from clippy.config import (
-    audio_bitrate,  # noqa: F401  # seeds module global read by apply_cli_overrides
-    bitrate,
-    cache,
-    container_ext,
-    container_flags,
-    enable_overlay,
-    fps,
-    output,
-    reactionThreshold,
-    rebuild,
-    resolution,
-)
 from clippy.twitch_ingest import (
     build_clip_rows,
     fetch_clips,
@@ -72,7 +58,6 @@ This lets users run Twitch-only flows without installing discord.py.
 """
 
 # Import processing helpers from existing main module
-import clippy.pipeline as pipeline_mod
 from clippy import __version__ as CLIPPY_VERSION
 from clippy.banner import show_banner
 from clippy.cli import parse_args
@@ -102,130 +87,152 @@ except ImportError:  # pragma: no cover
 
 
 def apply_cli_overrides(args):
-    """Propagate CLI arguments to module globals and pipeline/utils modules."""
-    global amountOfClips, amountOfCompilations, reactionThreshold
-    global bitrate, resolution, container_ext, container_flags
-    global fps, audio_bitrate, cache, output, intro, outro, transition
-    global enable_overlay, rebuild
-    global cq, nvenc_preset, gop, rc_lookahead, spatial_aq, temporal_aq, aq_strength
+    """Build the typed ClippyConfig from defaults + CLI args (the single writer).
 
-    amountOfClips = args.amountOfClips
-    amountOfCompilations = args.amountOfCompilations
-    reactionThreshold = args.reactionThreshold
+    Every CLI override flows into one ``set_config()`` call, so the typed config is
+    the single source of truth the pipeline and templating read from.  Values not
+    modelled on ``ClippyConfig`` (the transitions-dir resolver) are handled as
+    explicit side effects at the end.
+    """
+    import dataclasses as _dc
 
-    # Propagate requested counts to config and pipeline modules so they don't use defaults
-    try:
-        import clippy.config as _cfg
+    import clippy.config as _cfg
 
-        _cfg.amountOfClips = amountOfClips
-        _cfg.amountOfCompilations = amountOfCompilations
-        _cfg.reactionThreshold = reactionThreshold
-    except (ImportError, AttributeError):
-        pass
-    try:
-        import clippy.pipeline as _pl
+    cfg = _cfg.get_config()
 
-        _pl.amountOfClips = amountOfClips
-        _pl.amountOfCompilations = amountOfCompilations
-        _pl.reactionThreshold = reactionThreshold
-    except (ImportError, AttributeError):
-        pass
+    # Discord prefill: borrow the configured broadcaster for nicer summaries.
+    if getattr(args, "discord", False) and not getattr(args, "broadcaster", None):
+        if cfg.identity.broadcaster:
+            args.broadcaster = cfg.identity.broadcaster
 
-    # If running in Discord mode and no broadcaster provided, prefill from config default for nicer summaries
-    try:
-        if getattr(args, "discord", False) and not getattr(args, "broadcaster", None):
-            import clippy.config as _cfg
+    # --- Selection ---
+    selection = _dc.replace(
+        cfg.selection,
+        clips_per_compilation=args.amountOfClips,
+        compilations=args.amountOfCompilations,
+        min_views=args.reactionThreshold,
+    )
 
-            _def_b_prefill = getattr(_cfg, "default_broadcaster", "")
-            if _def_b_prefill:
-                args.broadcaster = _def_b_prefill
-    except (ImportError, AttributeError):
-        pass
-
-    # Apply runtime overrides for quality/bitrate/resolution/container
-    # Determine desired bitrate from quality unless explicitly provided
+    # --- Encoding ---
     qmap = {"balanced": "10M", "high": "12M", "max": "16M"}
-    chosen_bitrate = args.bitrate or (qmap.get(args.quality) if args.quality else None) or bitrate
-    chosen_resolution = args.resolution or resolution
-    # Container selection
-    chosen_ext = container_ext if "container_ext" in globals() else "mp4"
-    chosen_flags = container_flags if "container_flags" in globals() else "-movflags +faststart"
-    if args.format:
-        if args.format == "mp4":
-            chosen_ext = "mp4"
-            chosen_flags = "-movflags +faststart"
-        elif args.format == "mkv":
-            chosen_ext = "mkv"
-            chosen_flags = ""
+    chosen_bitrate = (
+        args.bitrate or (qmap.get(args.quality) if args.quality else None) or cfg.encoding.bitrate
+    )
+    container_ext = cfg.encoding.container_ext
+    container_flags = cfg.encoding.container_flags
+    if args.format == "mp4":
+        container_ext, container_flags = "mp4", "-movflags +faststart"
+    elif args.format == "mkv":
+        container_ext, container_flags = "mkv", ""
+    nvenc = _dc.replace(
+        cfg.encoding.nvenc,
+        **{
+            k: str(v)
+            for k, v in {
+                "cq": args.cq,
+                "preset": args.nvenc_preset,
+                "gop": args.gop,
+                "rc_lookahead": args.rc_lookahead,
+                "spatial_aq": args.spatial_aq,
+                "temporal_aq": args.temporal_aq,
+                "aq_strength": args.aq_strength,
+            }.items()
+            if v
+        },
+    )
+    encoding = _dc.replace(
+        cfg.encoding,
+        bitrate=chosen_bitrate,
+        resolution=args.resolution or cfg.encoding.resolution,
+        container_ext=container_ext,
+        container_flags=container_flags,
+        fps=args.fps or cfg.encoding.fps,
+        audio_bitrate=args.audio_bitrate or cfg.encoding.audio_bitrate,
+        yt_format=args.yt_format or cfg.encoding.yt_format,
+        nvenc=nvenc,
+    )
 
-    # Update globals in this module for logging
-    bitrate = chosen_bitrate
-    resolution = chosen_resolution
-    container_ext = chosen_ext
-    container_flags = chosen_flags
-    # Apply additional overrides
-    if args.fps:
-        fps = args.fps
-    if args.audio_bitrate:
-        audio_bitrate = args.audio_bitrate
-    if args.cache_dir:
-        cache = args.cache_dir
-    if args.output_dir:
-        output = args.output_dir
-    # Runtime overrides: if provided, convert to singleton lists to align with pipeline's list-based selection
+    # --- Paths ---
+    paths = _dc.replace(
+        cfg.paths,
+        cache=args.cache_dir or cfg.paths.cache,
+        output=args.output_dir or cfg.paths.output,
+    )
+
+    # --- Assets (single-file intro/outro/transition overrides) ---
+    assets = cfg.assets
     if args.intro is not None:
-        try:
-            import clippy.config as _cfg
-
-            _cfg.intro = [args.intro] if args.intro else []
-        except (ImportError, AttributeError):
-            pass
+        assets = _dc.replace(assets, intro=[args.intro] if args.intro else [])
     if args.outro is not None:
-        try:
-            import clippy.config as _cfg
+        assets = _dc.replace(assets, outro=[args.outro] if args.outro else [])
+    if args.transition:
+        assets = _dc.replace(assets, transitions=[args.transition])
 
-            _cfg.outro = [args.outro] if args.outro else []
-        except (ImportError, AttributeError):
-            pass
-    if args.transition is not None:
-        try:
-            import clippy.config as _cfg
-
-            if args.transition:
-                _cfg.transitions = [args.transition]
-        except (ImportError, AttributeError):
-            pass
+    # --- Sequencing ---
+    sequencing = cfg.sequencing
     if args.transition_prob is not None:
         try:
-            import clippy.config as _cfg
-
-            _cfg.transition_probability = max(0.0, min(1.0, float(args.transition_prob)))
-        except (ImportError, AttributeError, ValueError):
+            sequencing = _dc.replace(
+                sequencing,
+                transition_probability=max(0.0, min(1.0, float(args.transition_prob))),
+            )
+        except (TypeError, ValueError):
             pass
     if args.no_random_transitions:
-        try:
-            import clippy.config as _cfg
+        sequencing = _dc.replace(sequencing, no_random_transitions=True)
 
-            _cfg.no_random_transitions = True
-        except (ImportError, AttributeError):
-            pass
-    if args.skip_bad_clip:
-        try:
-            import clippy.config as _cfg
+    # --- Audio ---
+    audio = cfg.audio
+    if getattr(args, "no_audio_normalize_transitions", False):
+        audio = _dc.replace(audio, audio_normalize_transitions=False)
+    if getattr(args, "no_normalize_clips", False):
+        audio = _dc.replace(audio, audio_normalize_clips=False)
 
-            _cfg.skip_bad_clip = True
-        except (ImportError, AttributeError):
-            pass
-    if args.max_concurrency is not None:
-        try:
-            import clippy.config as _cfg
+    # --- Behavior ---
+    behavior = _dc.replace(
+        cfg.behavior,
+        enable_overlay=False if args.no_overlay else cfg.behavior.enable_overlay,
+        rebuild=True if args.rebuild else cfg.behavior.rebuild,
+        skip_bad_clip=True if args.skip_bad_clip else cfg.behavior.skip_bad_clip,
+        max_concurrency=(
+            max(1, int(args.max_concurrency))
+            if args.max_concurrency is not None
+            else cfg.behavior.max_concurrency
+        ),
+        transitions_rebuild=(
+            True
+            if getattr(args, "rebuild_transitions", False)
+            else cfg.behavior.transitions_rebuild
+        ),
+        keep_clips=True if getattr(args, "keep_clips", False) else cfg.behavior.keep_clips,
+        cache_ttl_days=(
+            int(args.cache_ttl_days)
+            if getattr(args, "cache_ttl_days", 0)
+            else cfg.behavior.cache_ttl_days
+        ),
+        cache_max_size_mb=(
+            int(args.cache_max_size_mb)
+            if getattr(args, "cache_max_size_mb", 0)
+            else cfg.behavior.cache_max_size_mb
+        ),
+    )
 
-            _cfg.max_concurrency = max(1, int(args.max_concurrency))
-        except (ImportError, AttributeError, ValueError):
-            pass
+    _cfg.set_config(
+        cfg.replace(
+            selection=selection,
+            encoding=encoding,
+            paths=paths,
+            assets=assets,
+            sequencing=sequencing,
+            audio=audio,
+            behavior=behavior,
+        )
+    )
+
+    # --- Side effects for values not modelled on ClippyConfig ---
     if args.transitions_dir:
-        # Make resolver see the override
         os.environ["TRANSITIONS_DIR"] = args.transitions_dir
+        _cfg.transitions_dir = args.transitions_dir
         try:
             from clippy.utils import log as _log
 
@@ -233,90 +240,8 @@ def apply_cli_overrides(args):
         except ImportError:
             pass
 
-    if args.no_overlay:
-        enable_overlay = False
-    if args.rebuild:
-        rebuild = True
-    if args.cq:
-        cq = args.cq
-    if args.nvenc_preset:
-        nvenc_preset = args.nvenc_preset
-    if args.gop:
-        gop = args.gop
-    if args.rc_lookahead:
-        rc_lookahead = args.rc_lookahead
-    if args.spatial_aq:
-        spatial_aq = args.spatial_aq
-    if args.temporal_aq:
-        temporal_aq = args.temporal_aq
-    if args.aq_strength:
-        aq_strength = args.aq_strength
-    # Propagate to pipeline and utils modules used for replacements
-    try:
-        pipeline_mod.bitrate = chosen_bitrate
-        pipeline_mod.resolution = chosen_resolution
-        pipeline_mod.container_ext = chosen_ext
-        pipeline_mod.container_flags = chosen_flags
-        pipeline_mod.fps = fps
-        pipeline_mod.audio_bitrate = audio_bitrate
-        pipeline_mod.cache = cache
-        pipeline_mod.output = output
-        # no direct single-file intro/outro/transition globals; pipeline reads from config lists at runtime
-        pipeline_mod.enable_overlay = enable_overlay
-        pipeline_mod.rebuild = rebuild
-    except AttributeError:
-        pass
-    try:
-        utils_mod.bitrate = chosen_bitrate
-        utils_mod.resolution = chosen_resolution
-        utils_mod.fps = fps
-        utils_mod.audio_bitrate = audio_bitrate
-        utils_mod.cache = cache
-    except AttributeError:
-        pass
-    # yt-dlp format override via config string
-    if args.yt_format:
-        try:
-            import clippy.config as _cfg
-
-            _cfg.yt_format = args.yt_format
-            # Rebuild youtubeDlOptions string if present
-            if hasattr(_cfg, "youtubeDlOptions"):
-                _cfg.youtubeDlOptions = _cfg.youtubeDlOptions.replace("{yt_format}", _cfg.yt_format)
-        except (ImportError, AttributeError):
-            pass
-    # Fail fast if required transition is missing
+    # Fail fast if the required static transition is missing.
     ensure_transitions_static_present(getattr(args, "transitions_dir", None))
-
-    # Apply transitions controls to config (used by pipeline write_concat_file)
-    try:
-        import clippy.config as _cfg
-
-        if getattr(args, "rebuild_transitions", False):
-            _cfg.transitions_rebuild = True
-        if getattr(args, "no_audio_normalize_transitions", False):
-            _cfg.audio_normalize_transitions = False
-        if getattr(args, "no_normalize_clips", False):
-            _cfg.audio_normalize_clips = False
-        # Cache policy overrides
-        if getattr(args, "keep_clips", False):
-            _cfg.keep_clips = True
-        if getattr(args, "cache_ttl_days", 0):
-            _cfg.cache_ttl_days = int(args.cache_ttl_days)
-        if getattr(args, "cache_max_size_mb", 0):
-            _cfg.cache_max_size_mb = int(args.cache_max_size_mb)
-    except (ImportError, AttributeError):
-        pass
-
-    # Single source of truth: fold the legacy-global overrides applied above
-    # back into the typed ClippyConfig so reads (templating, pipeline) stay
-    # consistent with the CLI flags.
-    try:
-        import clippy.config as _cfg
-
-        _cfg.refresh_from_globals()
-    except (ImportError, AttributeError):
-        pass
 
 
 def display_confirmation(args, window):
@@ -350,21 +275,25 @@ def display_confirmation(args, window):
             # Dynamic values: white
             return str(_chalk.white(v))
 
-        # Gather values
-        try:
-            import clippy.config as _cfg
+        # Gather values from the typed config (single source of truth)
+        from clippy.config import get_config
 
-            _intro_list = getattr(_cfg, "intro", [])
-            _outro_list = getattr(_cfg, "outro", [])
-            _transitions_list = getattr(_cfg, "transitions", [])
-            _tprob = getattr(_cfg, "transition_probability", 0.35)
-            _norand = getattr(_cfg, "no_random_transitions", False)
-        except (ImportError, AttributeError):
-            _intro_list = []
-            _outro_list = []
-            _transitions_list = []
-            _tprob = 0.35
-            _norand = False
+        _live = get_config()
+        _intro_list = _live.assets.intro
+        _outro_list = _live.assets.outro
+        _transitions_list = _live.assets.transitions
+        _tprob = _live.sequencing.transition_probability
+        _norand = _live.sequencing.no_random_transitions
+        _min_views = _live.selection.min_views
+        _container_ext = _live.encoding.container_ext
+        _container_flags = _live.encoding.container_flags
+        _resolution = _live.encoding.resolution
+        _fps = _live.encoding.fps
+        _bitrate = _live.encoding.bitrate
+        _cache = _live.paths.cache
+        _output = _live.paths.output
+        _overlay = _live.behavior.enable_overlay
+        _rebuild = _live.behavior.rebuild
         try:
             _total = int(args.amountOfCompilations) * int(args.amountOfClips)
         except (ValueError, TypeError):
@@ -378,12 +307,12 @@ def display_confirmation(args, window):
             f"{L('Time Window')}{S()}{V(str(window[0] or 'ANY'), True)} {S('->')} {V(str(window[1] or 'NOW'), True)}"
         )
         print(f"{L('Max fetch')}{S()}{V(str(args.max_clips))}")
-        print(f"{L('Min views')}{S()}{V(str(reactionThreshold))}")
+        print(f"{L('Min views')}{S()}{V(str(_min_views))}")
         print(
-            f"{L('Format')}{S()}{V(container_ext)} {S('(')}{V(container_flags or 'no flags')}{S(')')}"
+            f"{L('Format')}{S()}{V(_container_ext)} {S('(')}{V(_container_flags or 'no flags')}{S(')')}"
         )
         print(
-            f"{L('Resolution')}{S()}{V(resolution)}  {L('FPS')}{S()}{V(str(fps))}  {L('Bitrate')}{S()}{V(str(bitrate))}"
+            f"{L('Resolution')}{S()}{V(_resolution)}  {L('FPS')}{S()}{V(str(_fps))}  {L('Bitrate')}{S()}{V(str(_bitrate))}"
         )
         comp_desc = f"{V(str(args.amountOfCompilations))} x {V(str(args.amountOfClips))}"
         if _total is not None:
@@ -396,14 +325,14 @@ def display_confirmation(args, window):
             print(f"{L('Auto-expand')}{S()}{V('enabled')}")
         if getattr(args, "nostalgia", False):
             print(f"{L('Nostalgia mode')}{S()}{V('enabled')}")
-        print(f"{L('Cache dir')}{S()}{V(str(cache), True)}")
-        print(f"{L('Output dir')}{S()}{V(str(output), True)}")
+        print(f"{L('Cache dir')}{S()}{V(str(_cache), True)}")
+        print(f"{L('Output dir')}{S()}{V(str(_output), True)}")
         tr_desc = f"intro={len(_intro_list)}, trans={len(_transitions_list)}, outro={len(_outro_list)}, prob={_tprob}"
         if _norand:
             tr_desc += f" {S('[no-random]')}"
         print(f"{L('Transitions')}{S()}{V(tr_desc)}")
-        print(f"{L('Overlay')}{S()}{V('enabled' if enable_overlay else 'disabled')}")
-        print(f"{L('Rebuild')}{S()}{V('true' if rebuild else 'false')}")
+        print(f"{L('Overlay')}{S()}{V('enabled' if _overlay else 'disabled')}")
+        print(f"{L('Rebuild')}{S()}{V('true' if _rebuild else 'false')}")
         print(bar)
         # Prompt
         ans = input("Proceed? [Y/n]: ").strip().lower()
@@ -498,9 +427,12 @@ def ingest_clips(args, cid, token, window):
 
 def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
     """Apply view-count filter and auto-expand window if needed. Returns (filtered, window)."""
-    # Filter by min views (reactionThreshold proxy)
-    filtered = [c for c in clips if int(c.get("view_count", 0)) >= reactionThreshold]
-    log("Filtered to " + str(len(filtered)) + " clips (>= " + str(reactionThreshold) + " views)", 2)
+    from clippy.config import get_config
+
+    min_views = get_config().selection.min_views
+    # Filter by min views
+    filtered = [c for c in clips if int(c.get("view_count", 0)) >= min_views]
+    log("Filtered to " + str(len(filtered)) + " clips (>= " + str(min_views) + " views)", 2)
 
     # Compute target total — use duration estimate if --target-duration is set
     target_duration_min = getattr(args, "target_duration", 0) or 0
@@ -565,9 +497,7 @@ def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
                 if not seg_clips:
                     log("Auto-expand: no clips found for segment", 2)
                 # Filter and dedupe
-                seg_filtered = [
-                    c for c in seg_clips if int(c.get("view_count", 0)) >= reactionThreshold
-                ]
+                seg_filtered = [c for c in seg_clips if int(c.get("view_count", 0)) >= min_views]
                 before = len(collected)
                 for c in seg_filtered:
                     cid_ = c.get("id")
@@ -629,9 +559,7 @@ def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
                 ended_at=six_months_ago.isoformat().replace("+00:00", "Z"),
                 max_clips=50,
             )
-            old_filtered = [
-                c for c in old_clips if int(c.get("view_count", 0)) >= reactionThreshold
-            ]
+            old_filtered = [c for c in old_clips if int(c.get("view_count", 0)) >= min_views]
             seen_ids = {c.get("id") for c in filtered}
             old_unique = [c for c in old_filtered if c.get("id") not in seen_ids]
             if old_unique:
@@ -654,6 +582,11 @@ def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
 
 def run_pipeline(comps, args, window):
     """Run stage_one, stage_two, finalize outputs, and write manifest."""
+    from clippy.config import get_config
+
+    _live = get_config()
+    cache = _live.paths.cache
+    output = _live.paths.output
     log("Stage 1 (processing clips)", 1)
     stage_one(comps)
     # Verify concat lists were written for each expected compilation index.
@@ -700,10 +633,7 @@ def run_pipeline(comps, args, window):
         date_range = f"{s_part}_to_{e_part}"
     else:
         date_range = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    try:
-        from clippy.config import container_ext as _ext
-    except ImportError:
-        _ext = "mp4"
+    _ext = _live.encoding.container_ext
     base_names = []
     for i in range(len(comps)):
         if len(comps) == 1:
@@ -765,12 +695,6 @@ def run_pipeline(comps, args, window):
 
 
 def main():  # noqa: C901
-    global amountOfClips, amountOfCompilations, reactionThreshold
-    global bitrate, resolution, container_ext, container_flags
-    global fps, audio_bitrate, cache, output, intro, outro, transition
-    global enable_overlay, rebuild
-    global cq, nvenc_preset, gop, rc_lookahead, spatial_aq, temporal_aq, aq_strength
-
     # Ensure we have Twitch creds when running a broadcaster ingest
     ensure_twitch_credentials_if_needed()
 
@@ -812,18 +736,23 @@ def main():  # noqa: C901
     window = resolve_date_window(args.start, args.end)
     # Show startup summary only when skipping confirmation to avoid duplication
     if getattr(args, "yes", False):
+        from clippy.config import get_config
+
+        _enc = get_config().encoding
         _summarize(
             args,
             window,
-            globals().get("resolution", None),
-            globals().get("container_ext", "mp4"),
-            globals().get("bitrate", None),
+            _enc.resolution,
+            _enc.container_ext,
+            _enc.bitrate,
         )
 
     # If not in Discord mode, require a broadcaster (CLI or config). In Discord mode, we'll infer later.
     if not getattr(args, "discord", False):
         try:
-            _def_b = globals().get("default_broadcaster", "")
+            from clippy.config import get_config
+
+            _def_b = get_config().identity.broadcaster
         except Exception:  # defensive fallback
             _def_b = ""
         if not getattr(args, "broadcaster", None):

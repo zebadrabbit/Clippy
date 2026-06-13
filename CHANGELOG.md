@@ -2,6 +2,22 @@
 
 ## 2026-06-13 — Unreleased (v2 refinement)
 
+- Fix — Default broadcaster from `clippy.yaml` (`identity.broadcaster`) never worked:
+  `main()` read `globals().get("default_broadcaster")` from its own module, where the
+  name never existed, so it was always empty. Now reads `get_config().identity.broadcaster`.
+- Fix — Several CLI encoder flags (`--cq`, `--gop`, `--nvenc-preset`, `--rc-lookahead`,
+  `--spatial-aq`, `--temporal-aq`, `--aq-strength`) were effectively no-ops: they only
+  set `main`'s module globals, which the config reconciliation never read. They now
+  flow into the typed config and reach the encoder.
+- Refactor — Config single source of truth (Stage 3: `apply_cli_overrides` is the single writer)
+  - `apply_cli_overrides` now builds a `ClippyConfig` from defaults + CLI args and calls
+    `set_config()` once, instead of hand-poking module globals on `main`, `clippy.config`,
+    `clippy.pipeline`, and `clippy.utils`. All four-way global juggling is gone.
+  - `main`'s readers (`display_confirmation`, `filter_and_expand`, `run_pipeline`, the
+    startup summary) read from `get_config()` instead of module globals.
+  - Removed all now-dead module-level config imports and module aliases from `main.py`.
+  - Tests: add `tests/test_main_overrides.py` (CLI→typed-config mapping); whole repo now
+    passes `ruff` (95 passing).
 - Fix — `stage_two` crashed on every run with `NameError: enc` when building the
   final concat command; the encoder params are now resolved locally. (Surfaced
   because the pre-commit lint hooks were not running.)
