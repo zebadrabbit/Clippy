@@ -165,14 +165,9 @@ def replace_vars(s, m):
     # Container settings
     s = s.replace("{ext}", _cfg_get("container_ext", "mp4"))
     s = s.replace("{container_flags}", _cfg_get("container_flags", "-movflags +faststart"))
-    # yt-dlp format string
-    try:
-        from clippy.config import yt_format
-
-        s = s.replace("{yt_format}", yt_format)
-    except ImportError:
-        pass
-    # ffmpeg path into youtubeDl options
+    # yt-dlp format string (modelled on the typed config)
+    s = s.replace("{yt_format}", _cfg_get("yt_format", ""))
+    # ffmpeg path into youtubeDl options (unmodelled binary path)
     try:
         from clippy.config import ffmpeg as _ff
 

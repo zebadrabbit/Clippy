@@ -532,11 +532,10 @@ def process_clip(
     on_norm_progress: Optional[callable] = None,
     on_overlay_progress: Optional[callable] = None,
 ) -> int:
-    import clippy.config as _cfg_mod
-
+    cfg = get_config()
     clip_dir = os.path.join(cache, clip.id)
     final_path = os.path.join(clip_dir, f"{clip.id}.mp4")
-    if os.path.isfile(final_path) and not get_config().behavior.rebuild:
+    if os.path.isfile(final_path) and not cfg.behavior.rebuild:
         return 2
     if not quiet:
         log("Normalizing", 1)
@@ -552,11 +551,7 @@ def process_clip(
         f'-loglevel error -stats -y "{cache}/{clip.id}/normalized.mp4"'
     )
     # Inject loudnorm for clip audio normalization if enabled
-    try:
-        from clippy.config import audio_normalize_clips as _audio_norm_clips  # type: ignore
-    except ImportError:
-        _audio_norm_clips = True
-    if _audio_norm_clips and " -movflags " in _norm_cmd:
+    if cfg.audio.audio_normalize_clips and " -movflags " in _norm_cmd:
         _norm_cmd = _norm_cmd.replace(
             " -movflags ", " -af loudnorm=I=-16:TP=-1.5:LRA=11 -movflags "
         )
@@ -600,7 +595,7 @@ def process_clip(
         os.remove(os.path.join(clip_dir, "clip.mp4"))
     except FileNotFoundError:
         pass
-    if get_config().behavior.enable_overlay:
+    if cfg.behavior.enable_overlay:
         if not quiet:
             log("Overlay", 1)
         if SHUTDOWN_EVENT.is_set():
@@ -608,7 +603,7 @@ def process_clip(
         _ovl_cmd = (
             f'{ffmpeg} -i "{cache}/{clip.id}/normalized.mp4" '
             f'-i "{cache}/{clip.id}/avatar.png" '
-            f"-filter_complex {_overlay_filter(clip.author, _cfg_mod.fontfile)} "
+            f"-filter_complex {_overlay_filter(clip.author, cfg.assets.fontfile)} "
             f'-map "[overlay]" -map "0:a" '
             f"{enc.sizing_flags()} "
             f"{enc.full_encoding_flags()} "
@@ -735,35 +730,15 @@ def transcode_asset(
     dst = os.path.join(assets_out_dir, name)
     enc = _current_encoder_params()
 
-    # Behavior knobs
-    try:
-        from clippy.config import transitions_rebuild as _rebuild_trans  # type: ignore
-    except ImportError:
-        _rebuild_trans = False
-    try:
-        from clippy.config import audio_normalize_transitions as _aud_norm  # type: ignore
-    except ImportError:
-        _aud_norm = True
-    try:
-        from clippy.config import transitions as _cfg_transitions  # type: ignore
-    except ImportError:
-        _cfg_transitions = []
-    try:
-        from clippy.config import static as _cfg_static  # type: ignore
-    except ImportError:
-        _cfg_static = "static.mp4"
-    try:
-        from clippy.config import intro as _cfg_intro  # type: ignore
-    except ImportError:
-        _cfg_intro = []
-    try:
-        from clippy.config import outro as _cfg_outro  # type: ignore
-    except ImportError:
-        _cfg_outro = []
-    try:
-        from clippy.config import silence_static as _silence_static  # type: ignore
-    except ImportError:
-        _silence_static = False
+    # Behavior knobs (read from the typed config)
+    cfg = get_config()
+    _rebuild_trans = cfg.behavior.transitions_rebuild
+    _aud_norm = cfg.audio.audio_normalize_transitions
+    _cfg_transitions = cfg.assets.transitions
+    _cfg_static = cfg.assets.static
+    _cfg_intro = cfg.assets.intro
+    _cfg_outro = cfg.assets.outro
+    _silence_static = cfg.audio.silence_static
 
     # Determine whether to force silence via config
     force_silent_audio = bool(name == _cfg_static and _silence_static)
@@ -1045,44 +1020,18 @@ def build_concat_list(
     """Assemble the ffmpeg concat file lines from processed clips and transition assets."""
     lines = []
 
-    # Pull lists and config values
-    try:
-        from clippy.config import intro as _intro_list  # type: ignore
-    except ImportError:
-        _intro_list = []
-    try:
-        from clippy.config import outro as _outro_list  # type: ignore
-    except ImportError:
-        _outro_list = []
+    # Pull lists and config values from the typed config
+    cfg = get_config()
+    _intro_list = cfg.assets.intro
+    _outro_list = cfg.assets.outro
     _transitions_list = resolve_transition_pool(transitions_dir=transitions_abs)
-    try:
-        from clippy.config import static as _static_name  # type: ignore
-    except ImportError:
-        _static_name = "static.mp4"
-    try:
-        from clippy.config import transition_probability as _trans_prob  # type: ignore
-    except ImportError:
-        _trans_prob = 0.35
-    try:
-        from clippy.config import transitions_weights as _trans_weights  # type: ignore
-    except ImportError:
-        _trans_weights = {}
-    try:
-        from clippy.config import transition_cooldown as _trans_cooldown  # type: ignore
-    except ImportError:
-        _trans_cooldown = 0
-    try:
-        from clippy.config import silence_static as _silence_static  # type: ignore
-    except ImportError:
-        _silence_static = True
-    try:
-        from clippy.config import skip_bad_clip as _skip_bad  # type: ignore
-    except ImportError:
-        _skip_bad = True
-    try:
-        from clippy.config import no_random_transitions as _no_rand  # type: ignore
-    except ImportError:
-        _no_rand = False
+    _static_name = cfg.assets.static
+    _trans_prob = cfg.sequencing.transition_probability
+    _trans_weights = cfg.sequencing.transitions_weights
+    _trans_cooldown = cfg.sequencing.transition_cooldown
+    _silence_static = cfg.audio.silence_static
+    _skip_bad = cfg.behavior.skip_bad_clip
+    _no_rand = cfg.sequencing.no_random_transitions
 
     def _append_trans_file(name: str) -> bool:
         if not name:
@@ -1187,12 +1136,8 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
             asset_manifest = json.load(_mf) or {}
     except (json.JSONDecodeError, OSError):
         asset_manifest = {}
-    # Load max concurrency config
-    try:
-        from clippy.config import max_concurrency as _max_workers  # type: ignore
-    except ImportError:
-        _max_workers = 4
     # Process clips concurrently
+    _max_workers = get_config().behavior.max_concurrency
     results = prepare_clips_concurrent(compilation, _max_workers)
     # Build concat list
     lines = build_concat_list(

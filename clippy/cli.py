@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import argparse
 
-from clippy.config import amountOfClips, amountOfCompilations, reactionThreshold
+from clippy.config import get_config
 
 from . import __version__
 
 
 def parse_args() -> argparse.Namespace:
+    # Defaults come from the typed config (clippy.yaml / built-in defaults).
+    _selection = get_config().selection
+    amountOfClips = _selection.clips_per_compilation
+    amountOfCompilations = _selection.compilations
+    reactionThreshold = _selection.min_views
+
     class WideHelp(argparse.HelpFormatter):
         def __init__(self, *args, **kwargs):
             kwargs.setdefault("max_help_position", 32)

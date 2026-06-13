@@ -59,8 +59,12 @@ def finalize_outputs(
 ) -> List[str]:
     """Move compiled files from cache to output with improved naming then optionally clean cache."""
     # Import late to avoid circulars
-    from clippy.config import cache, output
+    from clippy.config import get_config
     from clippy.utils import log  # local import to avoid circular
+
+    _paths = get_config().paths
+    cache = _paths.cache
+    output = _paths.output
 
     log("Finalizing outputs", 1)
     try:
@@ -80,10 +84,7 @@ def finalize_outputs(
         else:
             date_range = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         # Determine container extension used by ffmpeg for cache outputs
-        try:
-            from clippy.config import container_ext as _ext_cfg
-        except ImportError:
-            _ext_cfg = "mp4"
+        _ext_cfg = get_config().encoding.container_ext
         # Use provided final names (preferred), else derive from broadcaster/date
         if final_names is None:
             final_names = []
@@ -161,6 +162,7 @@ def finalize_outputs(
     log("Cleaning cache", 1)
     try:
         from clippy.cache import apply_cache_policy
+
         apply_cache_policy(
             cache_root=cache,
             keep_clips=keep_clips,

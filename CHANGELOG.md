@@ -2,6 +2,14 @@
 
 ## 2026-06-13 — Unreleased (v2 refinement)
 
+- Refactor — Config single source of truth (Stage 4a: remaining readers)
+  - Migrated the remaining function-local `from clippy.config import X` reads to
+    `get_config()` in `pipeline.py` (audio-normalize flags, transition assets/weights/
+    cooldown/probability, intro/outro/static, skip-bad-clip, max-concurrency, fontfile),
+    `naming.py` (cache/output/container_ext), `cli.py` (selection defaults), and
+    `utils.py` (yt-dlp format). Only genuinely unmodelled values (binary paths,
+    `video_codec`, `transitions_dir`) still read module attributes.
+
 - Fix — Default broadcaster from `clippy.yaml` (`identity.broadcaster`) never worked:
   `main()` read `globals().get("default_broadcaster")` from its own module, where the
   name never existed, so it was always empty. Now reads `get_config().identity.broadcaster`.
