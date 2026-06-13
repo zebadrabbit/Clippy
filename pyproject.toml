@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "clippy"
 version = "0.5.0"
@@ -21,6 +25,13 @@ dev = [
     "pytest-mock",
     "textual-dev",
 ]
+
+# The `clippy` command: `clippy` (CLI), `clippy tui`, `clippy setup`.
+[project.scripts]
+clippy = "clippy.run:console_main"
+
+[tool.setuptools]
+packages = ["clippy", "clippy.tui", "clippy.tui.screens"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

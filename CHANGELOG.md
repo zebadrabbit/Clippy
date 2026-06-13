@@ -2,6 +2,20 @@
 
 ## 2026-06-13 — Unreleased (v2 refinement)
 
+- Feature — `clippy` console command + packaged entry point
+  - `pip install -e .` now provides a `clippy` command with three entry points:
+    `clippy setup` (guided first-run wizard), `clippy tui` (interactive TUI), and
+    `clippy [options]` (the CLI). A first-run hint suggests `clippy setup` when no
+    `clippy.yaml` exists and the terminal is interactive.
+  - The orchestration moved from root `main.py` into the package as `clippy/run.py`
+    (so it ships in the installed package); `main.py` is now a thin shim, so
+    `python main.py ...` keeps working unchanged.
+  - The setup wizard moved into the package as `clippy/wizard.py`
+    (`scripts/setup_wizard.py` is a shim). Added `[build-system]`, `[project.scripts]`,
+    and explicit `[tool.setuptools] packages` to pyproject.
+  - Tests: add `tests/test_console.py` (subcommand dispatch). README/CONTRIBUTING
+    updated to the `clippy` workflow. 101 passing.
+
 - Tooling — Reliable lint/format gate + CI
   - Replaced the hanging pre-commit setup with a native git hook (`.githooks/pre-commit`)
     that runs black then ruff on staged Python files using the project's own tools — no

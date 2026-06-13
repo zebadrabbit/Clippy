@@ -25,27 +25,32 @@ Create highlight compilations directly from Twitch clips. Audio is ON by default
 ```powershell
 python -m venv .venv
 \.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install -e ".[tui]"
 ```
 
-For the TUI, also install the optional dependency:
+This installs Clippy and the `clippy` command (add `,dev` for the test/lint tools:
+`pip install -e ".[tui,dev]"`).
+
+Then run the guided setup, which writes `clippy.yaml` and `.env` for you:
 
 ```powershell
-pip install "textual>=0.40"
-```
-
-Or install all optional dependencies at once:
-
-```powershell
-pip install -e ".[tui,dev]"
+clippy setup
 ```
 
 ## Quick Start
 
+The `clippy` command has three entry points:
+
+```powershell
+clippy setup     # guided first-time setup (credentials + defaults)
+clippy tui       # interactive TUI
+clippy           # the CLI (see clippy --help)
+```
+
 ### TUI (recommended for first-time users)
 
 ```powershell
-python main.py --tui
+clippy tui
 ```
 
 The TUI walks you through 6 steps: Source > Credentials > Clip Settings > Quality > Transitions > Review & Start. It saves credentials to `.env` on request so subsequent runs auto-fill.
@@ -54,17 +59,20 @@ The TUI walks you through 6 steps: Source > Credentials > Clip Settings > Qualit
 
 ```powershell
 # By clip count
-python main.py --broadcaster somechannel --clips 12 --compilations 2 --min-views 5
+clippy --broadcaster somechannel --clips 12 --compilations 2 --min-views 5
 
 # By target duration (minutes)
-python main.py --broadcaster somechannel --target-duration 20 --compilations 2
+clippy --broadcaster somechannel --target-duration 20 --compilations 2
 
 # With auto-expand and nostalgia
-python main.py --broadcaster somechannel --clips 12 --compilations 2 --auto-expand --nostalgia
+clippy --broadcaster somechannel --clips 12 --compilations 2 --auto-expand --nostalgia
 
 # Auto-confirm
-python main.py --broadcaster somechannel -y
+clippy --broadcaster somechannel -y
 ```
+
+> Running from source without installing? Every `clippy ...` command also works as
+> `python main.py ...` (e.g. `python main.py --tui`).
 
 ### Discord mode
 

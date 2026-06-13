@@ -7,7 +7,7 @@ import argparse
 import pytest
 
 import clippy.config as cfg
-import main as main_mod
+import clippy.run as main_mod
 
 
 def _args(**overrides):
