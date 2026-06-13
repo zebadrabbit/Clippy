@@ -296,6 +296,13 @@ class ProgressScreen(Screen):
             _cfg_mod.transitions_dir = tr["transitions_dir"]
             os.environ["TRANSITIONS_DIR"] = tr["transitions_dir"]
 
+        # Fold all TUI selections (written to the legacy globals above) into the
+        # typed config so the pipeline reads them as the single source of truth.
+        try:
+            _cfg_mod.refresh_from_globals()
+        except Exception:  # config reconciliation must not abort the run
+            pass
+
         start_date = cs.get("start", "")
         end_date = cs.get("end", "")
 

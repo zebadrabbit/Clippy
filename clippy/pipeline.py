@@ -42,29 +42,11 @@ import requests
 from PIL import Image
 
 from clippy.config import (
-    amountOfClips,
-    amountOfCompilations,
-    aq_strength,
-    audio_bitrate,
-    bitrate,
     cache,
-    cq,
-    enable_overlay,
     ffmpeg,
-    ffmpegApplyOverlay,
-    ffmpegBuildSegments,
     ffmpegCreateThumbnail,
-    ffmpegNormalizeVideos,
     ffprobe,
-    fps,
-    gop,
-    nvenc_preset,
-    rc_lookahead,
-    reactionThreshold,
-    rebuild,
-    resolution,
-    spatial_aq,
-    temporal_aq,
+    get_config,
     youtubeDl,
     youtubeDlOptions,
 )
@@ -82,25 +64,31 @@ logger = logging.getLogger(__name__)
 
 
 def _current_encoder_params() -> EncoderParams:
-    """Read the live encoder settings from clippy.config."""
-    import clippy.config as _cfg
+    """Read the live encoder settings from the typed config (single source of truth).
 
+    ``video_codec`` is not yet modelled on ``ClippyConfig`` (the quality screen sets
+    it as a module attribute), so it is still read from the module with a fallback.
+    """
+    import clippy.config as _cfg_mod
+
+    enc = get_config().encoding
+    nv = enc.nvenc
     return EncoderParams(
-        video_codec=str(getattr(_cfg, "video_codec", "h264_nvenc")),
-        cq=int(getattr(_cfg, "cq", cq)),
-        max_bitrate=str(getattr(_cfg, "bitrate", bitrate)),
-        buf_size=str(getattr(_cfg, "bitrate", bitrate)),
-        preset=str(getattr(_cfg, "nvenc_preset", nvenc_preset)),
-        resolution=str(getattr(_cfg, "resolution", resolution)),
-        fps=str(getattr(_cfg, "fps", fps)),
-        audio_bitrate=str(getattr(_cfg, "audio_bitrate", audio_bitrate)),
-        container_ext=str(getattr(_cfg, "container_ext", "mp4")),
-        container_flags=str(getattr(_cfg, "container_flags", "-movflags +faststart")),
-        gop=int(getattr(_cfg, "gop", gop)),
-        rc_lookahead=int(getattr(_cfg, "rc_lookahead", rc_lookahead)),
-        spatial_aq=int(getattr(_cfg, "spatial_aq", spatial_aq)),
-        aq_strength=int(getattr(_cfg, "aq_strength", aq_strength)),
-        temporal_aq=int(getattr(_cfg, "temporal_aq", temporal_aq)),
+        video_codec=str(getattr(_cfg_mod, "video_codec", "h264_nvenc")),
+        cq=int(nv.cq),
+        max_bitrate=str(enc.bitrate),
+        buf_size=str(enc.bitrate),
+        preset=str(nv.preset),
+        resolution=str(enc.resolution),
+        fps=str(enc.fps),
+        audio_bitrate=str(enc.audio_bitrate),
+        container_ext=str(enc.container_ext),
+        container_flags=str(enc.container_flags),
+        gop=int(nv.gop),
+        rc_lookahead=int(nv.rc_lookahead),
+        spatial_aq=int(nv.spatial_aq),
+        aq_strength=int(nv.aq_strength),
+        temporal_aq=int(nv.temporal_aq),
     )
 
 
@@ -478,7 +466,7 @@ def download_clip(clip: ClipRow, quiet: bool = False) -> int:
     clip_dir = os.path.join(cache, clip.id)
     ensure_dir(clip_dir)
     final_path = os.path.join(clip_dir, f"{clip.id}.mp4")
-    if os.path.isfile(final_path) and not rebuild:
+    if os.path.isfile(final_path) and not get_config().behavior.rebuild:
         return 2
     cmd = youtubeDl + " " + replace_vars(youtubeDlOptions, clip) + " " + clip.url
     if SHUTDOWN_EVENT.is_set():
@@ -517,7 +505,7 @@ def _retry(fn, attempts: int = 3, backoff: float = 1.5):
 def create_thumbnail(clip: ClipRow) -> int:
     clip_dir = os.path.join(cache, clip.id)
     preview = os.path.join(clip_dir, "preview.png")
-    if os.path.isfile(preview) and not rebuild:
+    if os.path.isfile(preview) and not get_config().behavior.rebuild:
         return 2
     if SHUTDOWN_EVENT.is_set():
         return 1
@@ -548,7 +536,7 @@ def process_clip(
 
     clip_dir = os.path.join(cache, clip.id)
     final_path = os.path.join(clip_dir, f"{clip.id}.mp4")
-    if os.path.isfile(final_path) and not rebuild:
+    if os.path.isfile(final_path) and not get_config().behavior.rebuild:
         return 2
     if not quiet:
         log("Normalizing", 1)
@@ -612,7 +600,7 @@ def process_clip(
         os.remove(os.path.join(clip_dir, "clip.mp4"))
     except FileNotFoundError:
         pass
-    if enable_overlay:
+    if get_config().behavior.enable_overlay:
         if not quiet:
             log("Overlay", 1)
         if SHUTDOWN_EVENT.is_set():
@@ -620,7 +608,7 @@ def process_clip(
         _ovl_cmd = (
             f'{ffmpeg} -i "{cache}/{clip.id}/normalized.mp4" '
             f'-i "{cache}/{clip.id}/avatar.png" '
-            f'-filter_complex {_overlay_filter(clip.author, _cfg_mod.fontfile)} '
+            f"-filter_complex {_overlay_filter(clip.author, _cfg_mod.fontfile)} "
             f'-map "[overlay]" -map "0:a" '
             f"{enc.sizing_flags()} "
             f"{enc.full_encoding_flags()} "
@@ -680,12 +668,11 @@ def create_compilations_from(
     until the cumulative duration reaches the target.  Otherwise the
     legacy count-based logic is used.
     """
-    # Read live values from config module (not stale module-level imports)
-    import clippy.config as _cfg
-
-    _clips_per = getattr(_cfg, "amountOfClips", amountOfClips)
-    _num_comps = getattr(_cfg, "amountOfCompilations", amountOfCompilations)
-    _threshold = getattr(_cfg, "reactionThreshold", reactionThreshold)
+    # Read live values from the typed config (single source of truth)
+    _selection = get_config().selection
+    _clips_per = _selection.clips_per_compilation
+    _num_comps = _selection.compilations
+    _threshold = _selection.min_views
     # filter by view threshold (reactions reused as views)
     eligible = [c for c in clips if c.view_count >= _threshold]
     random.shuffle(eligible)
@@ -1023,7 +1010,9 @@ def prepare_clips_concurrent(compilation, max_workers):
                 clip,
                 quiet=True,
                 on_norm_progress=_norm_progress,
-                on_overlay_progress=(_ovl_progress if enable_overlay else None),
+                on_overlay_progress=(
+                    _ovl_progress if get_config().behavior.enable_overlay else None
+                ),
             )
         )
         if p_rc == 1:
@@ -1184,7 +1173,6 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
     # Resolve transitions directory dynamically and reference it relative to cache for ffmpeg concat
     cache_abs = os.path.abspath(cache)
     transitions_abs = os.path.abspath(resolve_transitions_dir())
-    enc = _current_encoder_params()
     # Prepare a normalized transitions cache to ensure consistent codecs (avoid AV1 decode issues)
     assets_out_dir = os.path.join(cache_abs, "_trans")
     try:
@@ -1228,6 +1216,7 @@ def stage_one(compilations: List[List[ClipRow]]):
 
 
 def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]] = None):
+    enc = _current_encoder_params()
     for idx, _ in enumerate(compilations):
         # Compute the expected output filename for logging
         date_str = time.strftime("%d_%m_%y")

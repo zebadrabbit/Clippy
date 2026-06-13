@@ -2,6 +2,20 @@
 
 ## 2026-06-13 — Unreleased (v2 refinement)
 
+- Fix — `stage_two` crashed on every run with `NameError: enc` when building the
+  final concat command; the encoder params are now resolved locally. (Surfaced
+  because the pre-commit lint hooks were not running.)
+- Refactor — Config single source of truth (Stage 2: pipeline reads)
+  - `pipeline.py` no longer relies on stale import-time global bindings: `rebuild`,
+    `enable_overlay`, the selection counts, and `_current_encoder_params` now read
+    from the typed `ClippyConfig`. This closes a latent TUI bug where disabling the
+    overlay (or other settings) silently had no effect.
+  - The TUI's `_run_pipeline` now calls `config.refresh_from_globals()` after writing
+    its selections, so the typed config (the source of truth after Stage 1) reflects
+    them — without this, Stage 1 would have read TUI encoder choices stale.
+  - Removed dead imports (`ffmpegApplyOverlay`, `ffmpegBuildSegments`,
+    `ffmpegNormalizeVideos`) that the inline command builders had superseded.
+  - Tests: add `tests/test_pipeline.py` covering stage_two command assembly (91 passing).
 - Refactor — Config single source of truth (Stage 1)
   - The typed `ClippyConfig` singleton is now authoritative. `utils._cfg_get` (and
     therefore the ffmpeg templating hot path) reads from the typed config, falling
