@@ -340,6 +340,18 @@ class ProgressScreen(Screen):
         start_date = cs.get("start", "")
         end_date = cs.get("end", "")
 
+        # ---- Preflight (credentials are handled by the auth step below) ----
+        from clippy import preflight as _pf
+
+        def _pf_log(msg, level=0):
+            color = "bold red" if level >= 5 else ("yellow" if level == 2 else "")
+            self._log(f"[{color}]{msg}[/]" if color else msg)
+
+        if _pf.report(_pf.run_preflight(require_credentials=False), log=_pf_log):
+            self._set_stage("Setup needed")
+            self._log("[bold red]Fix the problems above, then start the run again.[/]")
+            return
+
         try:
             # ---- Auth ----
             self._set_stage("Authenticating")

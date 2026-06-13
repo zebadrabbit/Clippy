@@ -51,9 +51,8 @@ def _args(**overrides):
 
 @pytest.fixture(autouse=True)
 def _restore_config(monkeypatch):
-    """Snapshot/restore the config singleton; stub the transitions preflight."""
+    """Snapshot/restore the config singleton between tests."""
     monkeypatch.setattr(cfg, "_CONFIG", cfg.get_config(), raising=False)
-    monkeypatch.setattr(main_mod, "ensure_transitions_static_present", lambda *a, **k: None)
     yield
 
 

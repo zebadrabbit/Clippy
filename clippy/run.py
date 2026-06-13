@@ -59,7 +59,7 @@ from clippy.naming import (
     sanitize_filename as _sanitize_filename,
 )
 from clippy.pipeline import create_compilations_from, stage_one, stage_two  # DB removed
-from clippy.runtime import ensure_transitions_static_present, ensure_twitch_credentials_if_needed
+from clippy.runtime import _load_env_if_present
 from clippy.twitch_ingest import (
     build_clip_rows,
     fetch_clips,
@@ -237,9 +237,6 @@ def apply_cli_overrides(args):
             _log("Transitions directory override: " + os.path.abspath(args.transitions_dir), 1)
         except ImportError:
             pass
-
-    # Fail fast if the required static transition is missing.
-    ensure_transitions_static_present(getattr(args, "transitions_dir", None))
 
 
 def display_confirmation(args, window):
@@ -693,8 +690,8 @@ def run_pipeline(comps, args, window):
 
 
 def main():  # noqa: C901
-    # Ensure we have Twitch creds when running a broadcaster ingest
-    ensure_twitch_credentials_if_needed()
+    # Load .env early so preflight + ingestion see saved credentials.
+    _load_env_if_present()
 
     # Show banner unless help is requested or non-interactive
     # Peek at argv for -h/--help to avoid printing above help output
@@ -764,6 +761,12 @@ def main():  # noqa: C901
                 )
                 log("Run 'clippy setup' for guided setup, or pass --broadcaster <name>", 1)
                 raise SystemExit(2)
+
+    # Preflight: report all setup problems (ffmpeg, credentials, transitions) at once.
+    from clippy import preflight as _pf
+
+    if _pf.report(_pf.run_preflight(discord_mode=getattr(args, "discord", False))):
+        raise SystemExit(2)
 
     # Interactive confirmation (default). Use -y/--yes to skip.
     if not getattr(args, "yes", False):

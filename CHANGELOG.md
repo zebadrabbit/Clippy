@@ -2,6 +2,17 @@
 
 ## 2026-06-13 — Unreleased (v2 refinement)
 
+- Feature — Friendly preflight checks (Track 2)
+  - New `clippy/preflight.py` collects common setup problems and reports them all at
+    once in plain English with a concrete fix for each, instead of failing on the first
+    or surfacing a traceback mid-run: missing ffmpeg/ffprobe, missing Twitch creds (or
+    Discord token in Discord mode), missing transitions folder / `static.mp4`, missing
+    overlay font (warning), and an unwritable output folder.
+  - Wired into both the CLI (`clippy`, before auth) and the TUI (before the pipeline).
+    Replaces the piecemeal `ensure_twitch_credentials_if_needed` /
+    `ensure_transitions_static_present` first-failure checks in the run path.
+  - Tests: add `tests/test_preflight.py`.
+
 - Feature — `clippy` console command + packaged entry point
   - `pip install -e .` now provides a `clippy` command with three entry points:
     `clippy setup` (guided first-run wizard), `clippy tui` (interactive TUI), and
