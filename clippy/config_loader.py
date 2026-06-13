@@ -22,6 +22,8 @@ DEFAULTS: Dict[str, Any] = {
     # Sequencing
     "transition_probability": 0.35,
     "no_random_transitions": False,
+    "transition_mode": "explicit",
+    "transition_exclude": [],
     "transitions_weights": {},
     "transition_cooldown": 1,
     # Audio policy for non-clip assets
@@ -187,6 +189,16 @@ def load_merged_config(
     merged["no_random_transitions"] = _coerce_bool(
         seq.get("no_random_transitions"), merged.get("no_random_transitions", False)
     )
+    merged["transition_mode"] = (
+        _coerce_str(seq.get("transition_mode"), merged.get("transition_mode", "explicit"))
+        .strip()
+        .lower()
+    )
+    if merged["transition_mode"] not in ("explicit", "discover", "hybrid"):
+        merged["transition_mode"] = "explicit"
+    merged["transition_exclude"] = _coerce_list_str(
+        seq.get("transition_exclude"), merged.get("transition_exclude", [])
+    )
     merged["transitions_weights"] = _coerce_dict_float(
         seq.get("transitions_weights"), merged.get("transitions_weights", {})
     )
@@ -240,9 +252,7 @@ def load_merged_config(
     merged["transitions_rebuild"] = _coerce_bool(
         beh.get("transitions_rebuild"), merged.get("transitions_rebuild", False)
     )
-    merged["keep_clips"] = _coerce_bool(
-        beh.get("keep_clips"), merged.get("keep_clips", False)
-    )
+    merged["keep_clips"] = _coerce_bool(beh.get("keep_clips"), merged.get("keep_clips", False))
     merged["cache_ttl_days"] = _coerce_int(
         beh.get("cache_ttl_days"), merged.get("cache_ttl_days", 0)
     )

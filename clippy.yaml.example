@@ -19,6 +19,13 @@ sequencing:
   transition_probability: 0.35
   # Disable random transitions entirely (static.mp4 is still used between clips)
   no_random_transitions: false
+  # How to build the eligible transition pool:
+  #   explicit = only use assets.transitions
+  #   discover = scan the transitions dir for transition_*.mp4
+  #   hybrid   = combine both
+  transition_mode: explicit
+  # Optional denylist applied after selection/discovery
+  transition_exclude: []
   # Optional weights for specific transitions (higher = more likely)
   transitions_weights: { }
   # Avoid repeat transitions within the last N picks (0 disables)
@@ -82,9 +89,11 @@ behavior:
 assets:
   # Required: static mp4 file name in your transitions directory
   static: static.mp4
-  # Optionally list custom names for intros, outros, transitions
+  # Optionally list custom names for intros and outros
   # intro: [intro.mp4, intro_2.mp4]
   # outro: [outro.mp4, outro_2.mp4]
+  # Explicit allowlist for random transitions.
+  # Only files listed here are eligible for random insertion.
   # transitions: [transition_01.mp4, transition_02.mp4, transition_03.mp4]
 
 discord:

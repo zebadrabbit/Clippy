@@ -15,6 +15,8 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Label, ProgressBar, RichLog, Static
 
+from clippy.ffmpeg import EncoderParams
+
 # ---------------------------------------------------------------------------
 # Pipeline callback protocol (consumed by both TUI and CLI)
 # ---------------------------------------------------------------------------
@@ -90,6 +92,26 @@ class _StdoutCapture(io.TextIOBase):
 
     def isatty(self) -> bool:
         return False
+
+
+def _sync_encoder_params(params: EncoderParams) -> None:
+    """Push the selected encoder settings into the live config module."""
+    import clippy.config as _cfg_mod
+
+    _cfg_mod.video_codec = params.video_codec
+    _cfg_mod.cq = str(params.cq)
+    _cfg_mod.bitrate = params.max_bitrate
+    _cfg_mod.audio_bitrate = params.audio_bitrate
+    _cfg_mod.fps = params.fps
+    _cfg_mod.resolution = params.resolution
+    _cfg_mod.nvenc_preset = params.preset
+    _cfg_mod.container_ext = params.container_ext
+    _cfg_mod.container_flags = params.container_flags
+    _cfg_mod.gop = str(params.gop)
+    _cfg_mod.rc_lookahead = str(params.rc_lookahead)
+    _cfg_mod.spatial_aq = str(params.spatial_aq)
+    _cfg_mod.aq_strength = str(params.aq_strength)
+    _cfg_mod.temporal_aq = str(params.temporal_aq)
 
 
 # ---------------------------------------------------------------------------
@@ -173,9 +195,7 @@ class ProgressScreen(Screen):
                 # AND TUI handler → RichLog)
                 self_ctx._disabled_handlers = []
                 for h in clippy_logger.handlers:
-                    if h is not self_ctx._handler and isinstance(
-                        h, logging.StreamHandler
-                    ):
+                    if h is not self_ctx._handler and isinstance(h, logging.StreamHandler):
                         h.setLevel(logging.CRITICAL + 1)
                         self_ctx._disabled_handlers.append(h)
 
@@ -202,6 +222,7 @@ class ProgressScreen(Screen):
     async def _run_pipeline(self) -> None:  # noqa: C901
         """Execute the full pipeline in a background thread."""
         import clippy.config as _cfg_mod
+        import clippy.pipeline as _pl
         from clippy.naming import (
             ensure_unique_names,
             finalize_outputs,
@@ -222,7 +243,10 @@ class ProgressScreen(Screen):
         wf = self.app.workflow
         cs = wf.get("clip_settings", {})
         creds = wf.get("credentials", {})
-        wf.get("encoder_params")  # consumed later via workflow dict
+        enc = wf.get("encoder_params")
+
+        if isinstance(enc, EncoderParams):
+            _sync_encoder_params(enc)
 
         broadcaster = cs.get("broadcaster", "")
         if not broadcaster:
@@ -247,6 +271,10 @@ class ProgressScreen(Screen):
         tr = wf.get("transitions", {})
         if tr.get("selected_transitions") is not None:
             _cfg_mod.transitions = tr["selected_transitions"]
+        if "transition_mode" in tr:
+            _cfg_mod.transition_mode = tr["transition_mode"]
+        if tr.get("transition_exclude") is not None:
+            _cfg_mod.transition_exclude = tr["transition_exclude"]
         if tr.get("transitions_weights"):
             _cfg_mod.transitions_weights = tr["transitions_weights"]
         if "transition_probability" in tr:
@@ -263,6 +291,7 @@ class ProgressScreen(Screen):
             _cfg_mod.silence_static = tr["silence_static"]
         if "no_overlay" in tr:
             _cfg_mod.enable_overlay = not tr["no_overlay"]
+            _pl.enable_overlay = not tr["no_overlay"]
         if tr.get("transitions_dir"):
             _cfg_mod.transitions_dir = tr["transitions_dir"]
             os.environ["TRANSITIONS_DIR"] = tr["transitions_dir"]

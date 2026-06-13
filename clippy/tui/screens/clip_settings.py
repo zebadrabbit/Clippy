@@ -8,6 +8,26 @@ from textual.screen import Screen
 from textual.widgets import Button, Input, Label, RadioButton, RadioSet, Static, Switch
 
 
+def _safe_int(value: str, default: int, minimum: int | None = None) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    if minimum is not None and parsed < minimum:
+        return minimum
+    return parsed
+
+
+def _safe_float(value: str, default: float, minimum: float | None = None) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    if minimum is not None and parsed < minimum:
+        return minimum
+    return parsed
+
+
 class ClipSettingsScreen(Screen):
     """Step 3: Configure clip selection."""
 
@@ -153,24 +173,30 @@ class ClipSettingsScreen(Screen):
             "broadcaster": self.query_one("#broadcaster", Input).value.strip(),
             "start": self.query_one("#start-date", Input).value.strip(),
             "end": self.query_one("#end-date", Input).value.strip(),
-            "min_views": int(self.query_one("#min-views", Input).value or "0"),
+            "min_views": _safe_int(self.query_one("#min-views", Input).value or "0", 0, 0),
             "auto_expand": self.query_one("#auto-expand", Switch).value,
             "nostalgia_mode": self.query_one("#nostalgia-mode", Switch).value,
             "sizing_mode": "duration" if by_duration else "count",
         }
 
         if by_duration:
-            settings["target_duration_min"] = float(
-                self.query_one("#target-duration", Input).value or "10"
+            settings["target_duration_min"] = _safe_float(
+                self.query_one("#target-duration", Input).value or "10", 10.0, 0.1
             )
-            settings["compilations"] = int(self.query_one("#compilations-dur", Input).value or "2")
+            settings["compilations"] = _safe_int(
+                self.query_one("#compilations-dur", Input).value or "2", 2, 1
+            )
             # Estimate clips needed so auto-expand has a target
             # Assume ~30s avg clip duration as a rough heuristic
             target_secs = settings["target_duration_min"] * 60
             settings["clips_per_comp"] = max(1, int(target_secs / 30))
         else:
-            settings["clips_per_comp"] = int(self.query_one("#clips-per-comp", Input).value or "12")
-            settings["compilations"] = int(self.query_one("#compilations", Input).value or "2")
+            settings["clips_per_comp"] = _safe_int(
+                self.query_one("#clips-per-comp", Input).value or "12", 12, 1
+            )
+            settings["compilations"] = _safe_int(
+                self.query_one("#compilations", Input).value or "2", 2, 1
+            )
 
         self.app.workflow["clip_settings"] = settings
         self.app.advance_to("quality")

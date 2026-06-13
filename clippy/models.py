@@ -78,6 +78,8 @@ class SelectionConfig:
 class SequencingConfig:
     transition_probability: float = 0.35
     no_random_transitions: bool = False
+    transition_mode: str = "explicit"
+    transition_exclude: List[str] = field(default_factory=list)
     transitions_weights: Dict[str, float] = field(default_factory=dict)
     transition_cooldown: int = 1
 
@@ -191,6 +193,8 @@ class ClippyConfig:
             sequencing=SequencingConfig(
                 transition_probability=float(d.get("transition_probability", 0.35)),
                 no_random_transitions=bool(d.get("no_random_transitions", False)),
+                transition_mode=str(d.get("transition_mode", "explicit")),
+                transition_exclude=list(d.get("transition_exclude", [])),
                 transitions_weights=d.get("transitions_weights", {}),
                 transition_cooldown=int(d.get("transition_cooldown", 1)),
             ),
@@ -273,6 +277,8 @@ class ClippyConfig:
             # Sequencing
             "transition_probability": self.sequencing.transition_probability,
             "no_random_transitions": self.sequencing.no_random_transitions,
+            "transition_mode": self.sequencing.transition_mode,
+            "transition_exclude": list(self.sequencing.transition_exclude),
             "transitions_weights": self.sequencing.transitions_weights,
             "transition_cooldown": self.sequencing.transition_cooldown,
             # Audio

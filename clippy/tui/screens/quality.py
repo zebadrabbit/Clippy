@@ -12,6 +12,14 @@ from clippy.ffmpeg import EncoderParams
 from clippy.presets import PRESETS, list_presets
 
 
+def _clamp_int(value: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, parsed))
+
+
 class QualityScreen(Screen):
     """Step 4: Choose encoding preset and customize parameters."""
 
@@ -180,7 +188,7 @@ class QualityScreen(Screen):
         codec = self.query_one("#codec-select", Select).value
         return EncoderParams(
             video_codec=str(codec) if codec != Select.BLANK else "h264_nvenc",
-            cq=int(self.query_one("#cq-input", Input).value or "19"),
+            cq=_clamp_int(self.query_one("#cq-input", Input).value or "19", 19, 0, 51),
             max_bitrate=self.query_one("#bitrate-input", Input).value or "12M",
             buf_size=self.query_one("#bitrate-input", Input).value or "12M",
             preset=str(self.query_one("#preset-select", Select).value or "slow"),

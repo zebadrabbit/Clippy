@@ -268,6 +268,107 @@ def find_transition_file(name: str) -> str | None:
         return None
 
 
+def _dedupe_names_keep_order(items: list[str]) -> list[str]:
+    """Return unique basenames, preserving first-seen order."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        name = os.path.basename(str(item).strip())
+        if not name:
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(name)
+    return out
+
+
+def discover_transition_files(transitions_dir: str | None = None) -> list[str]:
+    """Discover transition clips from the transitions directory.
+
+    Only files matching the traditional `transition_*` naming pattern are included
+    when discovery is used.
+    """
+    root = os.path.abspath(transitions_dir or resolve_transitions_dir())
+    found: list[str] = []
+    try:
+        for entry in sorted(os.listdir(root)):
+            full = os.path.join(root, entry)
+            if not os.path.isfile(full):
+                continue
+            _stem, ext = os.path.splitext(entry)
+            if ext.lower() not in {".mp4", ".mov", ".mkv", ".webm", ".m4v"}:
+                continue
+            if entry.lower().startswith("transition_"):
+                found.append(entry)
+    except OSError:
+        return []
+    return _dedupe_names_keep_order(found)
+
+
+def resolve_transition_pool(
+    transitions_dir: str | None = None,
+    configured: list[str] | None = None,
+    mode: str | None = None,
+    exclude: list[str] | None = None,
+) -> list[str]:
+    """Resolve the final eligible random-transition pool.
+
+    Modes:
+      - explicit: use only the configured `transitions` list
+      - discover: scan the transitions directory for `transition_*` clips
+      - hybrid: combine both sources
+    """
+    configured_list = _dedupe_names_keep_order(
+        list(configured)
+        if isinstance(configured, (list, tuple))
+        else list(_cfg_get("transitions", []) or [])
+    )
+    discovered_list = discover_transition_files(transitions_dir)
+    raw_mode = str(mode or _cfg_get("transition_mode", "explicit") or "explicit")
+    resolved_mode = raw_mode.strip().lower()
+    if resolved_mode not in {"explicit", "discover", "hybrid"}:
+        resolved_mode = "explicit"
+    exclude_list = (
+        list(exclude)
+        if isinstance(exclude, (list, tuple))
+        else list(_cfg_get("transition_exclude", []) or [])
+    )
+    excluded = {
+        os.path.basename(str(name).strip()).lower() for name in exclude_list if str(name).strip()
+    }
+
+    if resolved_mode == "discover":
+        pool = list(discovered_list)
+    elif resolved_mode == "hybrid":
+        pool = _dedupe_names_keep_order(configured_list + discovered_list)
+    else:
+        pool = list(configured_list)
+
+    resolved: list[str] = []
+    missing: list[str] = []
+    for name in pool:
+        basename = os.path.basename(str(name).strip())
+        if not basename or basename.lower() in excluded:
+            continue
+        if find_transition_file(name):
+            resolved.append(basename)
+        else:
+            missing.append(basename)
+
+    if missing:
+        try:
+            log(
+                "WARN These configured transitions were not found and will be skipped: "
+                + ", ".join(missing),
+                2,
+            )
+        except Exception:
+            pass
+    return _dedupe_names_keep_order(resolved)
+
+
 # clean up the cache folders and get ready to do some work
 def prep_work():
     # make our workspace

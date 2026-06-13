@@ -58,6 +58,8 @@ class TestLoadMergedConfig:
         assert merged["bitrate"] == "12M"
         assert merged["amountOfClips"] == 12
         assert merged["reactionThreshold"] == 0
+        assert merged["transition_mode"] == "explicit"
+        assert merged["transition_exclude"] == []
 
     def test_yaml_override(self, tmp_path):
         yaml_content = """
@@ -66,6 +68,10 @@ encoding:
   fps: "30"
 selection:
   clips_per_compilation: 8
+sequencing:
+  transition_mode: HYBRID
+  transition_exclude:
+    - transition_02.mp4
 """
         yaml_file = tmp_path / "clippy.yaml"
         yaml_file.write_text(yaml_content, encoding="utf-8")
@@ -73,6 +79,8 @@ selection:
         assert merged["bitrate"] == "20M"
         assert merged["fps"] == "30"
         assert merged["amountOfClips"] == 8
+        assert merged["transition_mode"] == "hybrid"
+        assert merged["transition_exclude"] == ["transition_02.mp4"]
 
     def test_env_transitions_dir(self):
         merged = load_merged_config(

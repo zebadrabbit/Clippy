@@ -20,13 +20,11 @@ from pathlib import Path
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _clip_dirs(cache_root: Path) -> list[Path]:
     """Return per-clip subdirectories (skip _trans and any _ prefixed dirs)."""
     try:
-        return [
-            p for p in cache_root.iterdir()
-            if p.is_dir() and not p.name.startswith("_")
-        ]
+        return [p for p in cache_root.iterdir() if p.is_dir() and not p.name.startswith("_")]
     except OSError:
         return []
 
@@ -34,9 +32,7 @@ def _clip_dirs(cache_root: Path) -> list[Path]:
 def _dir_size_mb(path: Path) -> float:
     """Total size of a directory tree in megabytes."""
     try:
-        total = sum(
-            f.stat().st_size for f in path.rglob("*") if f.is_file()
-        )
+        total = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
         return total / (1024.0 * 1024.0)
     except OSError:
         return 0.0
@@ -71,6 +67,7 @@ def _remove_file(path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def cache_size_mb(cache_root: str) -> float:
     """Return total size of all per-clip directories in MB (excludes _trans)."""

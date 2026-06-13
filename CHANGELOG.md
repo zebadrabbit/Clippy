@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-05-30 — Unreleased
+
+- Fix — TUI encoder settings now reach the pipeline
+  - Quality screen selections are synced into the live config before processing starts.
+  - Clip normalization, overlay processing, transition transcoding, and concat output now use the selected codec and encode settings.
+
+- Fix — Workflow inputs are clamped at entry
+  - Clip counts and compilation counts are forced to positive values.
+  - CQ is clamped to the valid 0-51 range.
+  - Transition probability is clamped to 0.0-1.0 and cooldown to 0 or higher.
+
+- UX — Review screen now shows both audio-normalization toggles.
+
 ## 2026-04-03 — v0.5.0
 
 TUI enhancements, duration-based compilations, nostalgia mode, and UX polish.

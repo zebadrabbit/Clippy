@@ -68,10 +68,53 @@ from clippy.config import (
     youtubeDl,
     youtubeDlOptions,
 )
+from clippy.ffmpeg import EncoderParams
 from clippy.models import ClipRow
-from clippy.utils import find_transition_file, log, replace_vars, resolve_transitions_dir
+from clippy.utils import (
+    find_transition_file,
+    log,
+    replace_vars,
+    resolve_transition_pool,
+    resolve_transitions_dir,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _current_encoder_params() -> EncoderParams:
+    """Read the live encoder settings from clippy.config."""
+    import clippy.config as _cfg
+
+    return EncoderParams(
+        video_codec=str(getattr(_cfg, "video_codec", "h264_nvenc")),
+        cq=int(getattr(_cfg, "cq", cq)),
+        max_bitrate=str(getattr(_cfg, "bitrate", bitrate)),
+        buf_size=str(getattr(_cfg, "bitrate", bitrate)),
+        preset=str(getattr(_cfg, "nvenc_preset", nvenc_preset)),
+        resolution=str(getattr(_cfg, "resolution", resolution)),
+        fps=str(getattr(_cfg, "fps", fps)),
+        audio_bitrate=str(getattr(_cfg, "audio_bitrate", audio_bitrate)),
+        container_ext=str(getattr(_cfg, "container_ext", "mp4")),
+        container_flags=str(getattr(_cfg, "container_flags", "-movflags +faststart")),
+        gop=int(getattr(_cfg, "gop", gop)),
+        rc_lookahead=int(getattr(_cfg, "rc_lookahead", rc_lookahead)),
+        spatial_aq=int(getattr(_cfg, "spatial_aq", spatial_aq)),
+        aq_strength=int(getattr(_cfg, "aq_strength", aq_strength)),
+        temporal_aq=int(getattr(_cfg, "temporal_aq", temporal_aq)),
+    )
+
+
+def _overlay_filter(author: str, fontfile: str) -> str:
+    """Build the drawtext/overlay filter graph for a clip."""
+    safe_author = author.replace("'", "\\'")
+    safe_font = fontfile.replace("\\", "/")
+    return (
+        '"[0:v]'
+        "drawbox=enable='between(t,3,10)':x=0:y=(ih)-238:h=157:w=1000:color=black@0.7:t=fill,"
+        f"drawtext=enable='between(t,3,10)':x=198:y=(h)-190:fontfile='{safe_font}':fontsize=28:fontcolor=white@0.4:text='clip by',"
+        f"drawtext=enable='between(t,3,10)':x=198:y=(h)-160:fontfile='{safe_font}':fontsize=48:fontcolor=white@0.9:text='{safe_author}',"
+        "overlay=enable='between(t,3,10)':x=50:y=H-223[overlay]\""
+    )
 
 
 SHUTDOWN_EVENT = threading.Event()
@@ -501,6 +544,8 @@ def process_clip(
     on_norm_progress: Optional[callable] = None,
     on_overlay_progress: Optional[callable] = None,
 ) -> int:
+    import clippy.config as _cfg_mod
+
     clip_dir = os.path.join(cache, clip.id)
     final_path = os.path.join(clip_dir, f"{clip.id}.mp4")
     if os.path.isfile(final_path) and not rebuild:
@@ -509,8 +554,15 @@ def process_clip(
         log("Normalizing", 1)
     if SHUTDOWN_EVENT.is_set():
         return 1
+    enc = _current_encoder_params()
     # inject ffmpeg progress flags
-    _norm_cmd = ffmpeg + " " + replace_vars(ffmpegNormalizeVideos, clip)
+    _norm_cmd = (
+        f'{ffmpeg} -i "{cache}/{clip.id}/clip.mp4" '
+        f"{enc.sizing_flags()} "
+        f"{enc.full_encoding_flags()} "
+        f"{enc.container_flags} -preset {enc.preset} "
+        f'-loglevel error -stats -y "{cache}/{clip.id}/normalized.mp4"'
+    )
     # Inject loudnorm for clip audio normalization if enabled
     try:
         from clippy.config import audio_normalize_clips as _audio_norm_clips  # type: ignore
@@ -565,7 +617,16 @@ def process_clip(
             log("Overlay", 1)
         if SHUTDOWN_EVENT.is_set():
             return 1
-        _ovl_cmd = ffmpeg + " " + replace_vars(ffmpegApplyOverlay, clip)
+        _ovl_cmd = (
+            f'{ffmpeg} -i "{cache}/{clip.id}/normalized.mp4" '
+            f'-i "{cache}/{clip.id}/avatar.png" '
+            f'-filter_complex {_overlay_filter(clip.author, _cfg_mod.fontfile)} '
+            f'-map "[overlay]" -map "0:a" '
+            f"{enc.sizing_flags()} "
+            f"{enc.full_encoding_flags()} "
+            f"{enc.container_flags} -preset {enc.preset} "
+            f'-loglevel error -stats -y "{cache}/{clip.id}/{clip.id}.mp4"'
+        )
         if " -stats " in _ovl_cmd:
             _ovl_cmd = _ovl_cmd.replace(" -stats ", " -nostats -progress pipe:2 ")
         else:
@@ -685,6 +746,7 @@ def transcode_asset(
             pass
         return None
     dst = os.path.join(assets_out_dir, name)
+    enc = _current_encoder_params()
 
     # Behavior knobs
     try:
@@ -755,33 +817,30 @@ def transcode_asset(
         cmd = (
             f'{ffmpeg} -y -i "{src}" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 '
             f"-map 0:v -map 1:a "
-            f"-r {fps} -s {resolution} -sws_flags lanczos "
-            f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
-            f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
-            f"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 -shortest "
-            f'-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats "{dst}"'
+            f"{enc.sizing_flags()} "
+            f"{enc.full_encoding_flags()} -shortest "
+            f"{enc.container_flags} -preset {enc.preset} -loglevel error -nostats "
+            f'"{dst}"'
         )
     else:
         _af = " -af loudnorm=I=-16:TP=-1.5:LRA=11" if _aud_norm else ""
         if has_audio:
             cmd = (
                 f'{ffmpeg} -y -i "{src}" '
-                f"-r {fps} -s {resolution} -sws_flags lanczos "
-                f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
-                f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
-                f"-pix_fmt yuv420p{_af} -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
-                f'-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats "{dst}"'
+                f"{enc.sizing_flags()} "
+                f"{enc.full_encoding_flags()}{_af} "
+                f"{enc.container_flags} -preset {enc.preset} -loglevel error -nostats "
+                f'"{dst}"'
             )
         else:
             # Synthesize clean stereo audio if source lacks audio
             cmd = (
                 f'{ffmpeg} -y -i "{src}" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 '
                 f"-map 0:v -map 1:a "
-                f"-r {fps} -s {resolution} -sws_flags lanczos "
-                f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
-                f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
-                f"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 -shortest "
-                f'-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats "{dst}"'
+                f"{enc.sizing_flags()} "
+                f"{enc.full_encoding_flags()} -shortest "
+                f"{enc.container_flags} -preset {enc.preset} -loglevel error -nostats "
+                f'"{dst}"'
             )
 
     if SHUTDOWN_EVENT.is_set():
@@ -809,11 +868,10 @@ def transcode_asset(
             _af2 = ""
             cmd2 = (
                 f'{ffmpeg} -y -i "{src}" '
-                f"-r {fps} -s {resolution} -sws_flags lanczos "
-                f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
-                f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
-                f"-pix_fmt yuv420p{_af2} -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
-                f'-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats "{dst}"'
+                f"{enc.sizing_flags()} "
+                f"{enc.full_encoding_flags()}{_af2} "
+                f"{enc.container_flags} -preset {enc.preset} -loglevel error -nostats "
+                f'"{dst}"'
             )
             if SHUTDOWN_EVENT.is_set():
                 return None
@@ -823,11 +881,10 @@ def transcode_asset(
                 cmd3 = (
                     f'{ffmpeg} -y -i "{src}" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=48000 '
                     f"-map 0:v -map 1:a "
-                    f"-r {fps} -s {resolution} -sws_flags lanczos "
-                    f"-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
-                    f"-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
-                    f"-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 -shortest "
-                    f'-movflags +faststart -preset {nvenc_preset} -loglevel error -nostats "{dst}"'
+                    f"{enc.sizing_flags()} "
+                    f"{enc.full_encoding_flags()} -shortest "
+                    f"{enc.container_flags} -preset {enc.preset} -loglevel error -nostats "
+                    f'"{dst}"'
                 )
                 if SHUTDOWN_EVENT.is_set():
                     return None
@@ -1008,10 +1065,7 @@ def build_concat_list(
         from clippy.config import outro as _outro_list  # type: ignore
     except ImportError:
         _outro_list = []
-    try:
-        from clippy.config import transitions as _transitions_list  # type: ignore
-    except ImportError:
-        _transitions_list = []
+    _transitions_list = resolve_transition_pool(transitions_dir=transitions_abs)
     try:
         from clippy.config import static as _static_name  # type: ignore
     except ImportError:
@@ -1130,6 +1184,7 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
     # Resolve transitions directory dynamically and reference it relative to cache for ffmpeg concat
     cache_abs = os.path.abspath(cache)
     transitions_abs = os.path.abspath(resolve_transitions_dir())
+    enc = _current_encoder_params()
     # Prepare a normalized transitions cache to ensure consistent codecs (avoid AV1 decode issues)
     assets_out_dir = os.path.join(cache_abs, "_trans")
     try:
@@ -1185,9 +1240,13 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
             log(f"Compiling {out_name} → {final_names[idx]}", 1)
         else:
             log(f"Compiling {out_name}", 1)
-        # Prepare template with index/date and run through replace_vars to fill all tokens
-        tmpl = ffmpegBuildSegments.replace("{idx}", str(idx)).replace("{date}", date_str)
-        cmd = ffmpeg + " " + replace_vars(tmpl, (str(idx), 0, "", "", 0, ""))
+        cmd = (
+            f'{ffmpeg} -f concat -safe 0 -i "{cache}/comp{idx}" '
+            f"{enc.sizing_flags()} "
+            f"{enc.full_encoding_flags()} "
+            f"{enc.container_flags} -preset {enc.preset} "
+            f'-loglevel error -stats -y "{cache}/complete_{date_str}_{idx}.{enc.container_ext}"'
+        )
         # Inject progress reporting
         if " -stats " in cmd:
             cmd = cmd.replace(" -stats ", " -nostats -progress pipe:2 ")

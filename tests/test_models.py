@@ -41,6 +41,8 @@ class TestClippyConfig:
         assert default_config.selection.clips_per_compilation == 12
         assert default_config.selection.compilations == 2
         assert default_config.selection.min_views == 0
+        assert default_config.sequencing.transition_mode == "explicit"
+        assert default_config.sequencing.transition_exclude == []
         assert default_config.behavior.max_concurrency == 4
         assert default_config.behavior.skip_bad_clip is True
 
@@ -106,6 +108,8 @@ class TestClippyConfig:
             "reactionThreshold",
             "transition_probability",
             "no_random_transitions",
+            "transition_mode",
+            "transition_exclude",
             "transitions_weights",
             "transition_cooldown",
             "silence_static",

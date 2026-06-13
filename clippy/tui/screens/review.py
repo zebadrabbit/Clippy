@@ -76,12 +76,22 @@ class ReviewScreen(Screen):
         # Transitions
         tr = wf.get("transitions", {})
         selected = tr.get("selected_transitions", [])
+        excluded = tr.get("transition_exclude", [])
         table.add_row("Transitions Dir", tr.get("transitions_dir", "transitions"))
-        table.add_row("Transitions", f"{len(selected)} selected")
+        table.add_row("Transition Mode", str(tr.get("transition_mode", "explicit")))
+        table.add_row(
+            "Transitions",
+            ", ".join(selected) if selected else "Use configured/discovered pool",
+        )
+        if excluded:
+            table.add_row("Excluded", ", ".join(excluded))
         table.add_row("Transition Prob", str(tr.get("transition_probability", 0.35)))
         table.add_row("Cooldown", str(tr.get("transition_cooldown", 1)))
         table.add_row(
             "Audio Normalize", "Yes" if tr.get("audio_normalize_transitions", True) else "No"
+        )
+        table.add_row(
+            "Clip Audio Normalize", "Yes" if tr.get("audio_normalize_clips", True) else "No"
         )
         table.add_row("Overlay", "No" if tr.get("no_overlay", False) else "Yes")
 
