@@ -4,7 +4,7 @@ Create highlight compilations directly from Twitch clips. Audio is ON by default
 
 ## Features
 
-- **Two interfaces**: Interactive Textual TUI (`--tui`) for beginners, full CLI for power users
+- **Two interfaces**: Interactive Textual TUI (`clippy tui`) for beginners, full CLI for power users
 - Twitch Helix ingestion with date windows, auto-expand lookback, and nostalgia mode
 - Discord channel ingestion (optional): read clip links curated by your community
 - Duration-based sizing: request compilations by target length (`--target-duration 20`) instead of clip count
@@ -85,7 +85,7 @@ Prerequisites:
 - Channel ID saved to `.env` as `DISCORD_CHANNEL_ID` (or pass via CLI/TUI)
 
 ```powershell
-python main.py --discord --discord-channel-id 123456789012345678 -y
+clippy --discord --discord-channel-id 123456789012345678 -y
 ```
 
 What happens: Clippy reads messages from the channel, extracts Twitch clip links, resolves them via Helix, and builds compilations. This lets your Twitch community curate clips collaboratively.
@@ -110,7 +110,7 @@ Key env vars:
 Help is grouped into logical sections:
 
 ```powershell
-python main.py -h
+clippy --help
 ```
 
 Key flags:
@@ -148,7 +148,7 @@ Use `--list-presets` to see all available presets:
 Apply a preset and customize:
 
 ```powershell
-python main.py --broadcaster somechannel --preset youtube_1080p60 --cq 18
+clippy --broadcaster somechannel --preset youtube_1080p60 --cq 18
 ```
 
 ## Outputs
@@ -202,6 +202,15 @@ python .\scripts\test_transitions.py --normalize --concat-audio-check
 - **Duplicate log messages in TUI?** Fixed in v0.5.0 — update to latest.
 
 ## Health Check
+
+The quickest check is the built-in `clippy doctor`, which verifies ffmpeg, credentials,
+the transitions folder, and the overlay font:
+
+```powershell
+clippy doctor
+```
+
+A deeper environment script is also available:
 
 ```powershell
 python .\scripts\health_check.py

@@ -18,7 +18,8 @@ Thanks for considering a contribution!
 - Run the tests: `pytest -q`
 - Lint / format manually: `ruff check .` and `black .`
 - Try a small run:
-  - `python main.py --broadcaster <name> --clips 4 --compilations 1 -y`
+  - `clippy --broadcaster <name> --clips 4 --compilations 1 -y`
+  - Check your setup anytime with `clippy doctor`
 - Style: keep patches focused and avoid reformatting unrelated files. The commit
   hook runs `black` then `ruff --fix` on staged Python files; bypass once with
   `git commit --no-verify` if needed.

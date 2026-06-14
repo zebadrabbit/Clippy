@@ -147,7 +147,7 @@ def _print_header():
     print(
         THEME.text("This will help you get set up with Twitch credentials and sensible defaults.")
     )
-    print(THEME.text("You can re-run this anytime; it writes a .env and helper script."))
+    print(THEME.text("You can re-run this anytime; it writes your .env and clippy.yaml."))
     print(THEME.bar(bar) + "\n")
 
 

@@ -2,7 +2,7 @@
 
 This directory contains utility scripts that support setup, media preparation, and validation for running from source.
 
-- `setup_wizard.py` — Guided first-time setup. Creates `.env`, writes `clippy.yaml`, checks binaries, helps you choose a transitions folder, and can generate `run_clippy.ps1` for quick launching. Includes optional Discord setup.
+- `setup_wizard.py` — Guided first-time setup. Creates `.env`, writes `clippy.yaml`, checks binaries, and helps you choose a transitions folder. Includes optional Discord setup. (Now a thin shim for `clippy setup` — prefer that.)
 - `health_check.py` — Standalone preflight: verifies ffmpeg/yt-dlp presence, NVENC availability, Python packages, required folders, transitions/static.mp4, fonts, and `.env` credentials.
 - `import_media.py` — Normalize or convert any source video/image into a valid transition asset (`intro`, `transition`, `outro`, `static`). Ensures correct codecs, fps, resolution, and loudness.
 - `make_transitions.py` — Generate multiple short `transition_XX.mp4` clips by slicing random segments from a long source video.
@@ -33,12 +33,12 @@ If the file doesn’t exist yet, run a small compile first (e.g., `--clips 4 --c
   - Set cache/output paths and concurrency
   - Specify a transitions directory via TRANSITIONS_DIR or place assets under transitions/
   - Optional: configure Discord (channel ID, token check); preserves existing settings on re-run
-  - Generates a ready-to-run PowerShell helper `run_clippy.ps1`
 
-Usage (PowerShell):
+Usage (PowerShell) — prefer the `clippy` command:
 
 ```powershell
-python .\scripts\setup_wizard.py
+clippy setup
+# (equivalent, running from source: python .\scripts\setup_wizard.py)
 ```
 
 Typical usage:
