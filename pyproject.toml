@@ -33,6 +33,9 @@ clippy = "clippy.run:console_main"
 [tool.setuptools]
 packages = ["clippy", "clippy.tui", "clippy.tui.screens"]
 
+[tool.setuptools.package-data]
+clippy = ["assets/fonts/*.ttf", "assets/fonts/*.md", "tui/*.tcss"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

@@ -27,6 +27,26 @@ def test_tui_dispatch(monkeypatch):
     assert called.get("tui") is True
 
 
+def test_doctor_runs_preflight(monkeypatch):
+    called = {}
+
+    def fake(**kwargs):
+        called["ran"] = True
+        return []
+
+    monkeypatch.setattr("clippy.preflight.run_preflight", fake)
+    run.console_main(["doctor"])
+    assert called.get("ran") is True
+
+
+def test_doctor_exits_on_errors(monkeypatch):
+    import clippy.preflight as pf
+
+    monkeypatch.setattr(pf, "run_preflight", lambda **k: [pf.Issue("error", "x", "fix")])
+    with pytest.raises(SystemExit):
+        run.console_main(["doctor"])
+
+
 def test_cli_fallthrough(monkeypatch):
     """Non-subcommand args fall through to the CLI orchestration."""
     called = {}

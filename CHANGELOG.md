@@ -2,6 +2,17 @@
 
 ## 2026-06-13 — Unreleased (v2 refinement)
 
+- Packaging — Bundle assets so an installed `clippy` works outside the repo
+  - The overlay font (`Roboto-Medium.ttf`) and the TUI stylesheet (`app.tcss`) now ship
+    as package data; `config.py` resolves the font from the installed package location
+    (falling back to the repo for source checkouts). Verified the built wheel contains
+    `clippy/assets/fonts/Roboto-Medium.ttf` and `clippy/tui/app.tcss`.
+  - Transitions remain user-supplied (preflight guides you to add `static.mp4`).
+
+- Feature — `clippy doctor`
+  - Runs the preflight checks on demand and reports your setup status, so you can
+    diagnose problems without starting a full run. Exits non-zero if anything is wrong.
+
 - Fix — Resolution-aware creator overlay (Track 2)
   - The credit banner, "clip by" / author text, and avatar were hand-tuned with 1080p
     pixel coordinates, so they were mis-placed/oversized at other resolutions (e.g. the

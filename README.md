@@ -43,6 +43,7 @@ The `clippy` command has three entry points:
 
 ```powershell
 clippy setup     # guided first-time setup (credentials + defaults)
+clippy doctor    # check your setup (ffmpeg, credentials, transitions, ...)
 clippy tui       # interactive TUI
 clippy           # the CLI (see clippy --help)
 ```

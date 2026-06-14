@@ -839,6 +839,7 @@ def console_main(argv: Optional[list[str]] = None) -> None:
     Subcommands:
       clippy setup         Interactive first-run setup (writes clippy.yaml + .env).
       clippy tui           Launch the interactive TUI.
+      clippy doctor        Check your setup (ffmpeg, credentials, transitions, ...).
       clippy [options]     Build compilations (the CLI; see ``clippy --help``).
     """
     args = list(sys.argv[1:] if argv is None else argv)
@@ -854,6 +855,15 @@ def console_main(argv: Optional[list[str]] = None) -> None:
         from clippy.tui.app import run_tui
 
         run_tui()
+        return
+
+    if cmd in ("doctor", "check"):
+        from clippy import preflight as _pf
+
+        _load_env_if_present()
+        if _pf.report(_pf.run_preflight()):
+            raise SystemExit(1)
+        log("All preflight checks passed — you're good to go.", 1)
         return
 
     if cmd == "version":

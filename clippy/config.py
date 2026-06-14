@@ -73,24 +73,24 @@ elif os.path.exists(_bin_youtubedl):
 else:
     YTDL_BIN = "yt-dlp"
 
-# Ensure fontfile resolves when running from source
+# Resolve fontfile for both source checkouts and installed wheels.
+# The font ships as package data under clippy/assets/fonts/, so an installed
+# ``clippy`` finds it even outside the repo directory.
+_PACKAGED_FONT = os.path.join(_PKG_DIR, "assets", "fonts", "Roboto-Medium.ttf")
 try:
     _ff = globals().get("fontfile", "assets/fonts/Roboto-Medium.ttf")
     if not isinstance(_ff, str):
         _ff = "assets/fonts/Roboto-Medium.ttf"
-    if not os.path.isabs(_ff):
-        # Prefer assets/fonts under repo root; fall back to relative
-        _candidate = os.path.join(_REPO_DIR, _ff)
-        if os.path.exists(_candidate):
-            fontfile = _candidate
-        else:
-            _fallback = os.path.join(_REPO_DIR, "assets", "fonts", "Roboto-Medium.ttf")
-            if os.path.exists(_fallback):
-                fontfile = _fallback
-            else:
-                fontfile = _ff  # keep relative; ffmpeg may still resolve
-    else:
+    if os.path.isabs(_ff) and os.path.exists(_ff):
         fontfile = _ff
+    else:
+        # Search order: configured path under repo root, packaged font, repo default.
+        _candidates = [
+            os.path.join(_REPO_DIR, _ff),
+            _PACKAGED_FONT,
+            os.path.join(_REPO_DIR, "assets", "fonts", "Roboto-Medium.ttf"),
+        ]
+        fontfile = next((c for c in _candidates if os.path.exists(c)), _ff)
 except OSError:
     fontfile = "assets/fonts/Roboto-Medium.ttf"
 
