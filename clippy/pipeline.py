@@ -49,7 +49,7 @@ from clippy.config import (
     youtubeDl,
     youtubeDlOptions,
 )
-from clippy.ffmpeg import EncoderParams
+from clippy.ffmpeg import EncoderParams, detect_encoder
 from clippy.models import ClipRow
 from clippy.utils import (
     find_transition_file,
@@ -62,22 +62,34 @@ from clippy.utils import (
 logger = logging.getLogger(__name__)
 
 
+_X264_PRESETS = frozenset(
+    "ultrafast superfast veryfast faster fast medium slow slower veryslow placebo".split()
+)
+
+
 def _current_encoder_params() -> EncoderParams:
     """Read the live encoder settings from the typed config (single source of truth).
 
-    ``video_codec`` is not yet modelled on ``ClippyConfig`` (the quality screen sets
-    it as a module attribute), so it is still read from the module with a fallback.
+    ``video_codec`` is not yet modelled on ``ClippyConfig`` (the quality screen and
+    ``--preset`` set it as a module attribute), so it is still read from the module.
+    When nobody has chosen one, probe ffmpeg so machines without NVENC fall back to
+    libx264 instead of failing every encode.
     """
     import clippy.config as _cfg_mod
 
     enc = get_config().encoding
     nv = enc.nvenc
+    codec = str(getattr(_cfg_mod, "video_codec", "") or detect_encoder(_cfg_mod.ffmpeg))
+    preset = str(nv.preset)
+    if codec == "libx264" and preset not in _X264_PRESETS:
+        # NVENC preset names (p1-p7) are not valid for x264.
+        preset = "medium"
     return EncoderParams(
-        video_codec=str(getattr(_cfg_mod, "video_codec", "h264_nvenc")),
+        video_codec=codec,
         cq=int(nv.cq),
         max_bitrate=str(enc.bitrate),
         buf_size=str(enc.bitrate),
-        preset=str(nv.preset),
+        preset=preset,
         resolution=str(enc.resolution),
         fps=str(enc.fps),
         audio_bitrate=str(enc.audio_bitrate),

@@ -46,6 +46,18 @@ def _check_binaries() -> List[Issue]:
                     "or drop the executable in ./bin/. Download: https://ffmpeg.org/download.html",
                 )
             )
+    if not issues and _cfg.ffmpeg:
+        from clippy.ffmpeg import detect_encoder
+
+        if detect_encoder(_cfg.ffmpeg) != "h264_nvenc":
+            issues.append(
+                Issue(
+                    "warning",
+                    "NVENC (h264_nvenc) not available — encoding will use libx264 on the CPU",
+                    "This works but is slower. Needs an NVIDIA GPU plus an ffmpeg build "
+                    "compiled with --enable-nvenc. Use --preset cpu_only to make it explicit.",
+                )
+            )
     return issues
 
 

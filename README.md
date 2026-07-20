@@ -198,7 +198,7 @@ python .\scripts\test_transitions.py --normalize --concat-audio-check
 - **Seeing only a few clips?** Use `--auto-expand` or `--target-duration` to let Clippy gather more.
 - **Pixelation at cuts?** Try `--quality max` or `--bitrate 16M`.
 - **Concat AAC errors?** Run `python .\scripts\test_transitions.py --normalize`.
-- **No NVENC?** Use `--preset cpu_only` or let Clippy auto-detect with `detect_encoder()`.
+- **No NVENC?** Nothing to do — Clippy probes ffmpeg and falls back to libx264 (CPU) on its own. `clippy doctor` warns when it does. Use `--preset cpu_only` to force it.
 - **Duplicate log messages in TUI?** Fixed in v0.5.0 — update to latest.
 
 ## Health Check

@@ -7,6 +7,8 @@ refinement defined the encoder params locally.
 
 from __future__ import annotations
 
+import pytest
+
 import clippy.pipeline as pipeline
 
 
@@ -73,3 +75,28 @@ def test_overlay_filter_bad_resolution_defaults_to_1080():
     f = pipeline._overlay_filter("X", "/f.ttf", "not-a-resolution")
     assert "fontsize=48" in f  # falls back to 1080p scaling
     assert "scale=-2:128" in f
+
+
+def test_encoder_falls_back_to_libx264_without_nvenc(monkeypatch):
+    """No NVENC and no explicit codec choice -> CPU encoding, with a valid x264 preset."""
+    import clippy.config as cfg
+
+    monkeypatch.setattr(cfg, "video_codec", "", raising=False)
+    monkeypatch.setattr(pipeline, "detect_encoder", lambda _bin: "libx264")
+    monkeypatch.setattr(cfg.get_config().encoding.nvenc, "preset", "p4")
+
+    enc = pipeline._current_encoder_params()
+    assert enc.video_codec == "libx264"
+    assert enc.preset == "medium"  # "p4" is NVENC-only
+    assert "-c:v libx264" in enc.video_flags()
+
+
+def test_explicit_codec_choice_skips_detection(monkeypatch):
+    """A --preset or TUI choice wins over probing."""
+    import clippy.config as cfg
+
+    monkeypatch.setattr(cfg, "video_codec", "h264_nvenc", raising=False)
+    monkeypatch.setattr(
+        pipeline, "detect_encoder", lambda _bin: pytest.fail("should not probe ffmpeg")
+    )
+    assert pipeline._current_encoder_params().video_codec == "h264_nvenc"

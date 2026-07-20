@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, List
 
 from clippy.models import ClippyConfig
@@ -187,10 +188,12 @@ class EncoderParams:
 # ---------------------------------------------------------------------------
 
 
+@lru_cache(maxsize=None)
 def detect_encoder(ffmpeg_bin: str = "ffmpeg") -> str:
     """Probe ffmpeg for h264_nvenc support.
 
     Returns ``"h264_nvenc"`` if NVENC is available, else ``"libx264"``.
+    Cached: the answer cannot change within a run, and this is called per clip.
     """
     import subprocess
 
