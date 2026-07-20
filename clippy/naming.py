@@ -99,7 +99,7 @@ def finalize_outputs(
         missing_indices: list[int] = []
         # Move cache outputs to output dir with final names using their index
         for i in range(compilation_count):
-            # cache file pattern produced by ffmpegBuildSegments
+            # cache file pattern produced by pipeline.create_compilations_from
             date_str = time.strftime("%d_%m_%y")
             cache_name = f"complete_{date_str}_{i}.{_ext_cfg}"
             src = os.path.join(cache, cache_name)

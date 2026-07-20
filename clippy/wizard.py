@@ -76,9 +76,6 @@ try:
         audio_bitrate as DEFAULT_AUDIO_BR,
     )
     from clippy.config import (
-        bitrate as DEFAULT_BITRATE,
-    )
-    from clippy.config import (
         cache as DEFAULT_CACHE,
     )
     from clippy.config import (
@@ -421,12 +418,6 @@ def main():
             discord_section = {"channel_id": ch, "message_limit": int(lim)}
 
         # Optional: quick token validation (no-op login)
-        def _mask(s: str) -> str:
-            try:
-                return _mask_default(s)
-            except Exception:
-                return s
-
         try:
             # Only attempt if a token string is present
             if discord_token:

@@ -84,51 +84,17 @@ try:
     if os.path.isabs(_ff) and os.path.exists(_ff):
         fontfile = _ff
     else:
-        # Search order: configured path under repo root, packaged font, repo default.
+        # Search order: configured path under repo root, then the packaged font.
         _candidates = [
             os.path.join(_REPO_DIR, _ff),
             _PACKAGED_FONT,
-            os.path.join(_REPO_DIR, "assets", "fonts", "Roboto-Medium.ttf"),
         ]
         fontfile = next((c for c in _candidates if os.path.exists(c)), _ff)
 except OSError:
     fontfile = "assets/fonts/Roboto-Medium.ttf"
 
-# Higher quality NVENC settings to reduce blockiness at transitions
-ffmpegNormalizeVideos = (
-    '-i "{cache}/{message_id}/clip.mp4" '
-    "-r {fps} -s {resolution} -sws_flags lanczos "
-    "-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
-    "-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
-    "-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
-    '-movflags +faststart -preset {nvenc_preset} -loglevel error -stats -y "{cache}/{message_id}/normalized.mp4"'
-)
-ffmpegApplyOverlay = (
-    '-i "{cache}/{message_id}/normalized.mp4" -i "{cache}/{message_id}/avatar.png" '
-    '-filter_complex "[0:v]'
-    "drawbox=enable='between(t,3,10)':x=0:y=(ih)-238:h=157:w=1000:color=black@0.7:t=fill,"
-    "drawtext=enable='between(t,3,10)':x=198:y=(h)-190:fontfile='{fontfile}':fontsize=28:fontcolor=white@0.4:text='clip by',"
-    "drawtext=enable='between(t,3,10)':x=198:y=(h)-160:fontfile='{fontfile}':fontsize=48:fontcolor=white@0.9:text='{author}',"
-    "overlay=enable='between(t,3,10)':x=50:y=H-223[overlay]\" "
-    '-map "[overlay]" -map "0:a" '
-    "-r {fps} -s {resolution} -sws_flags lanczos "
-    "-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
-    "-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
-    "-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
-    '-movflags +faststart -preset {nvenc_preset} -loglevel error -stats -y "{cache}/{message_id}/{message_id}.mp4"'
-)
 container_ext = globals().get("container_ext", "mp4")
 container_flags = globals().get("container_flags", "-movflags +faststart")
-ffmpegBuildSegments = (
-    '-f concat -safe 0 -i "{cache}/comp{idx}" '
-    "-r {fps} -s {resolution} -sws_flags lanczos "
-    "-c:v h264_nvenc -rc vbr -cq {cq} -b:v 0 -maxrate {bitrate} -bufsize {bitrate} "
-    "-profile:v high -level 4.2 -g {gop} -bf 3 -rc-lookahead {rc_lookahead} -spatial_aq {spatial_aq} -aq-strength {aq_strength} -temporal-aq {temporal_aq} "
-    "-pix_fmt yuv420p -c:a aac -b:a {audio_bitrate} -ar 48000 -ac 2 "
-    '{container_flags} -preset {nvenc_preset} -loglevel error -stats -y "{cache}/complete_{date}_{idx}.{ext}"'
-)
-ffmpegCreateThumbnail = '-ss 00:00:05 -i "{cache}/{message_id}/{message_id}.mp4" -vframes 1 -s {resolution} "{cache}/{message_id}/preview.png"'
-
 # youtube-dl stuff (yt-dlp). Legacy variable names retained.
 youtubeDl = YTDL_BIN
 youtubeDlOptions = (
@@ -138,9 +104,6 @@ youtubeDlOptions = (
     "--format {yt_format} "
     "-o {cache}/{message_id}/clip.mp4"
 )
-
-# Alias for clarity (kept for legacy references)
-viewThreshold = globals().get("reactionThreshold", 1)
 
 # ---------------------------------------------------------------------------
 # Typed config singleton (preferred for new code)

@@ -44,7 +44,6 @@ from PIL import Image
 from clippy.config import (
     cache,
     ffmpeg,
-    ffmpegCreateThumbnail,
     ffprobe,
     get_config,
     youtubeDl,
@@ -202,55 +201,6 @@ def request_shutdown():
         pass
 
 
-def run_proc(cmd: str, prefer_shell: bool = False):
-    """Run a command and return (returncode, stderr_bytes).
-
-    Windows:
-      - If prefer_shell is True (needed for -filter_complex), run with shell=True.
-      - Otherwise, split simply on spaces and run without shell.
-    POSIX:
-      - Split with shlex and run without shell.
-    """
-    if os.name == "nt":
-        if prefer_shell:
-            try:
-                proc = subprocess.run(
-                    cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-                )
-                return proc.returncode, proc.stderr
-            except FileNotFoundError:
-                try:
-                    log("Executable not found (Windows): " + cmd, 5)
-                except Exception:  # broad catch: log safety
-                    pass
-                raise
-        else:
-            # Use shlex.split with posix=False to preserve quoted segments on Windows
-            tokens = shlex.split(cmd, posix=False)
-            try:
-                proc = subprocess.run(tokens, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                return proc.returncode, proc.stderr
-            except FileNotFoundError:
-                try:
-                    log("Executable not found: " + str(tokens[0]), 5)
-                    log(cmd, 5)
-                except Exception:  # broad catch: log safety
-                    pass
-                raise
-    else:
-        tokens = shlex.split(cmd)
-        try:
-            proc = subprocess.run(tokens, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            return proc.returncode, proc.stderr
-        except FileNotFoundError:
-            try:
-                log("Executable not found: " + str(tokens[0]), 5)
-                log(cmd, 5)
-            except Exception:  # broad catch: log safety
-                pass
-            raise
-
-
 def run_proc_cancellable(
     cmd: str, prefer_shell: bool = False, progress_cb: Optional[callable] = None
 ) -> tuple[int, bytes | None]:
@@ -261,7 +211,7 @@ def run_proc_cancellable(
     Returns (returncode, stderr_bytes_or_None).
     """
     if os.name == "nt":
-        # Tokenization similar to run_proc; use shell for complex filters when needed
+        # Use shell for complex filters when needed
         if prefer_shell:
             args = cmd
             use_shell = True
@@ -285,7 +235,7 @@ def run_proc_cancellable(
         )
         _register_proc(proc)
     except FileNotFoundError:
-        # mirror run_proc error messaging
+        # consistent error messaging
         try:
             if use_shell:
                 log("Executable not found: " + str(cmd), 5)
@@ -519,30 +469,6 @@ def _retry(fn, attempts: int = 3, backoff: float = 1.5):
         except Exception:  # broad catch: sleep may be interrupted
             pass
     return last if last is not None else 1
-
-
-def create_thumbnail(clip: ClipRow) -> int:
-    clip_dir = os.path.join(cache, clip.id)
-    preview = os.path.join(clip_dir, "preview.png")
-    if os.path.isfile(preview) and not get_config().behavior.rebuild:
-        return 2
-    if SHUTDOWN_EVENT.is_set():
-        return 1
-    rc, err = run_proc_cancellable(
-        ffmpeg + " " + replace_vars(ffmpegCreateThumbnail, clip), prefer_shell=False
-    )
-    if rc != 0:
-        log("Thumbnail generation failed", 5)
-        log(err, 5)
-        return 1
-    try:
-        with Image.open(preview) as img:
-            img.thumbnail((128, 128))
-            img.save(preview, "PNG")
-    except (OSError, ValueError) as e:
-        log(f"Thumbnail resize error: {e}", 5)
-        return 1
-    return 0
 
 
 def process_clip(

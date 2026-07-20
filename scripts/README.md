@@ -47,7 +47,7 @@ Typical usage:
   - `python .\scripts\health_check.py`
 
 Notes:
-- The checker prefers local `bin/` and `assets/fonts/` paths when running from source.
+- The checker prefers local `bin/` paths when running from source; the overlay font ships as package data under `clippy/assets/fonts/`.
 - Coloring is minimal and safe for Windows consoles.
 
 ## Discord usage

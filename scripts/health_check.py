@@ -56,16 +56,6 @@ def _run(cmd: list[str] | str) -> tuple[int, str]:
         return 1, str(e)
 
 
-def _color_enabled() -> bool:
-    # Keep for compatibility with paint; theme handles chalk but we still want to avoid styling when redirected
-    if os.getenv("NO_COLOR") is not None:
-        return False
-    try:
-        return sys.stdout.isatty()
-    except Exception:
-        return False
-
-
 def check_binaries() -> tuple[bool, dict[str, str | None]]:
     results: dict[str, str | None] = {}
     ok = True
