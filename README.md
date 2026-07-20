@@ -1,4 +1,9 @@
-# Twitch Clip Compilation
+# Clippy — Twitch Clip Compilation
+
+[![CI](https://github.com/zebadrabbit/Clippy/actions/workflows/ci.yml/badge.svg)](https://github.com/zebadrabbit/Clippy/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/zebadrabbit/Clippy)](https://github.com/zebadrabbit/Clippy/releases/latest)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)](https://github.com/zebadrabbit/Clippy)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Create highlight compilations directly from Twitch clips. Audio is ON by default for intros, static, transitions, and outros. All non-clip assets are normalized to H.264 (yuv420p) with AAC 48 kHz stereo to keep concatenation stable.
 
@@ -20,11 +25,34 @@ Create highlight compilations directly from Twitch clips. Audio is ON by default
 - Save credentials to `.env` from the TUI or CLI (`--save-env`)
 - Summary screen with output paths, compilation lengths, and contributor credits
 
-## Setup (first time, PowerShell on Windows)
+## Install
+
+Clippy needs **Python 3.10+** and **ffmpeg** (which provides `ffprobe`) on your PATH.
+
+### From a release (quickest)
+
+Grab the wheel from the [latest release](https://github.com/zebadrabbit/Clippy/releases/latest):
 
 ```powershell
+pip install https://github.com/zebadrabbit/Clippy/releases/latest/download/clippy-0.6.0-py3-none-any.whl
+```
+
+Add the TUI with `pip install "clippy[tui] @ <url>"`, or install the extras separately
+with `pip install textual`.
+
+### From source
+
+```powershell
+# Windows (PowerShell)
 python -m venv .venv
-\.\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[tui]"
+```
+
+```bash
+# Linux / macOS
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e ".[tui]"
 ```
 
@@ -36,6 +64,10 @@ Then run the guided setup, which writes `clippy.yaml` and `.env` for you:
 ```powershell
 clippy setup
 ```
+
+> The examples below use PowerShell, since that is where Clippy gets the most use. Every
+> `clippy ...` command is identical on Linux and macOS — only the venv activation and
+> path separators differ. The pipeline is exercised on Linux by CI on every push.
 
 ## Quick Start
 
@@ -198,7 +230,8 @@ python .\scripts\test_transitions.py --normalize --concat-audio-check
 - **Seeing only a few clips?** Use `--auto-expand` or `--target-duration` to let Clippy gather more.
 - **Pixelation at cuts?** Try `--quality max` or `--bitrate 16M`.
 - **Concat AAC errors?** Run `python .\scripts\test_transitions.py --normalize`.
-- **No NVENC?** Nothing to do — Clippy probes ffmpeg and falls back to libx264 (CPU) on its own. `clippy doctor` warns when it does. Use `--preset cpu_only` to force it.
+- **No NVENC?** Nothing to do — Clippy runs a throwaway trial encode at startup and falls back to libx264 (CPU) if it fails. `clippy doctor` warns when it does. Use `--preset cpu_only` to force it.
+- **`Cannot load libcuda.so.1`?** Your ffmpeg was built with NVENC but there is no NVIDIA driver — common on packaged Linux ffmpeg and on AMD machines. Clippy detects this and uses libx264; if you see it, you are on a build before v0.6.0.
 - **Duplicate log messages in TUI?** Fixed in v0.5.0 — update to latest.
 
 ## Health Check
