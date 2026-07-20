@@ -1,4 +1,4 @@
-"""
+r"""
 Local smoke test for the processing pipeline without Twitch.
 
 What it does:

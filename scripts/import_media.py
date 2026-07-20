@@ -1,4 +1,4 @@
-"""
+r"""
 Import and normalize media into the transitions folder using Clipshow settings.
 
 Usage examples (PowerShell):

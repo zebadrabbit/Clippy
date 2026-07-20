@@ -24,6 +24,9 @@ dev = [
     "pytest-cov",
     "pytest-mock",
     "textual-dev",
+    # CI runs `ruff check .` and `black --check .` from this extra.
+    "ruff>=0.4",
+    "black>=24.0",
 ]
 
 # The `clippy` command: `clippy` (CLI), `clippy tui`, `clippy setup`.
