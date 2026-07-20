@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-07-20 — Unreleased (cleanup + hardening)
+
+- Fix — `--preset` and `--list-presets` now do something
+  - Both flags were declared and documented (with worked examples in the README) but
+    nothing read them: `--preset` was silently ignored and `--list-presets` built a
+    compilation instead of listing. A preset now replaces the encoding baseline, with
+    individual flags still winning on top, so `--preset discord_friendly --bitrate 20M`
+    keeps the preset's 720p/30 and takes your bitrate.
+
+- Fix — Automatic libx264 fallback when NVENC is missing
+  - `h264_nvenc` was hardcoded as the default codec, so a machine without an NVIDIA GPU
+    failed every encode. `detect_encoder()` had existed since the ffmpeg module landed
+    but was never called, while the README claimed auto-detection was already happening.
+    Clippy now probes ffmpeg when no codec was chosen explicitly, and `clippy doctor`
+    warns when it falls back. NVENC preset names (`p1`-`p7`) are normalized for x264.
+
+- Fix — `--start` / `--end` accept RFC3339 timestamps
+  - `clippy --start 2025-07-01T00:00:00Z`, the example in the tool's own quick-start,
+    died with "Invalid date format". The rejected format is the one Helix uses. Bare
+    dates behave exactly as before; an explicit time of day is now honoured.
+
+- Fix — The end-to-end smoke test runs again
+  - `scripts/smoke_local.py` had been broken since the ClipRow migration and, once
+    fixed, was compiling the transition assets *without* the clip. Both bugs are fixed
+    and CI now runs the real ffmpeg pipeline on every push, on a runner with no NVENC,
+    asserting the processed clip is actually in the compilation.
+
+- Housekeeping
+  - Removed ~500 lines of dead code: a stale parallel set of ffmpeg command builders
+    (still on pre-resolution-aware 1080p geometry), four unused ffmpeg templates in
+    `config.py`, `pipeline.run_proc`, `create_thumbnail`, two superseded `runtime`
+    helpers, the whole `clippy/ytdlp.py` module, and a duplicated copy of the font.
+  - Tests for the previously uncovered core: the Helix window resolver, clip selection
+    with auto-expand and nostalgia, and output naming. Each verified by mutation.
+  - CI lint steps could never have passed — `ruff` and `black` were not in the `dev`
+    extra. The `build-portable` workflow referenced a `build/` directory that has never
+    existed in this repo; replaced with a release workflow that builds and attaches a
+    wheel and sdist on a `v*` tag.
+  - Packaging metadata (readme, URLs, classifiers, keywords) filled in, and the version
+    is single-sourced from `clippy.__version__`.
+
 ## 2026-06-13 — Unreleased (v2 refinement)
 
 - Packaging — Bundle assets so an installed `clippy` works outside the repo
