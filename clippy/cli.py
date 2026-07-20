@@ -41,10 +41,12 @@ def parse_args() -> argparse.Namespace:
     # Window and selection
     g_window = p.add_argument_group("Window & selection")
     g_window.add_argument(
-        "--start", help="Start date (MM/DD/YYYY). Interpreted as 00:00:00Z of that day."
+        "--start",
+        help="Start date (MM/DD/YYYY, YYYY-MM-DD, or RFC3339). A bare date means 00:00:00Z.",
     )
     g_window.add_argument(
-        "--end", help="End date (MM/DD/YYYY). Interpreted as 23:59:59Z of that day."
+        "--end",
+        help="End date (MM/DD/YYYY, YYYY-MM-DD, or RFC3339). A bare date means 23:59:59Z.",
     )
     g_window.add_argument(
         "--min-views",
