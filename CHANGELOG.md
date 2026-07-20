@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-07-20 — Unreleased (cleanup + hardening)
+## 2026-07-20 — v0.6.0 (cleanup + hardening)
 
 - Fix — `--preset` and `--list-presets` now do something
   - Both flags were declared and documented (with worked examples in the README) but
