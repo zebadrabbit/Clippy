@@ -46,8 +46,10 @@ def main():
     os.environ["CLIPPY_DEBUG"] = os.environ.get("CLIPPY_DEBUG", "1")
 
     # Import after env tweaks
-    from clippy import config as _cfg
-    from clippy.config import cache
+    import dataclasses
+
+    from clippy.config import cache, get_config, set_config
+    from clippy.models import ClipRow
     from clippy.pipeline import process_clip, stage_two, write_concat_file
     from clippy.utils import log, resolve_transitions_dir
 
@@ -84,15 +86,28 @@ def main():
             # If Pillow is not available in this environment, skip overlay
             args.overlay = False
 
-    # Configure overlay toggle and rebuild behavior
-    try:
-        _cfg.enable_overlay = bool(args.overlay)
-        _cfg.rebuild = True
-    except Exception:
-        pass
+    # Configure the overlay toggle on the typed config, which is what the
+    # pipeline reads. rebuild stays off: the clip dir is wiped above, and
+    # forcing a rebuild makes write_concat_file re-download a clip that has no
+    # URL, which silently drops it from the compilation.
+    _live = get_config()
+    set_config(
+        dataclasses.replace(
+            _live,
+            behavior=dataclasses.replace(
+                _live.behavior, enable_overlay=bool(args.overlay), rebuild=False
+            ),
+        )
+    )
 
-    # Fabricate a ClipRow: (id, created_ts, author, avatar_url, views, url)
-    clip = (clip_id, 0.0, "Smoke Test", "", 9999, "")
+    clip = ClipRow(
+        id=clip_id,
+        created_ts=0.0,
+        author="Smoke Test",
+        avatar_url="",
+        view_count=9999,
+        url="",
+    )
 
     log("Running process_clip()", 1)
     rc = process_clip(clip, quiet=False)

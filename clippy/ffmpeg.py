@@ -75,10 +75,11 @@ class EncoderParams:
     def video_flags(self) -> str:
         """Return the video encoding flags as a single string."""
         if self.video_codec == "libx264":
+            # No -preset here: every caller appends it after these flags, and
+            # emitting it twice put a duplicate in every libx264 command.
             return (
                 f"-c:v libx264 -crf {self.cq} -maxrate {self.max_bitrate} "
-                f"-bufsize {self.buf_size} -profile:v {self.profile} "
-                f"-preset {self.preset}"
+                f"-bufsize {self.buf_size} -profile:v {self.profile}"
             )
         # NVENC (h264_nvenc)
         return (

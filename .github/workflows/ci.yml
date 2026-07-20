@@ -37,3 +37,46 @@ jobs:
 
       - name: Pytest
         run: pytest -q
+
+  smoke:
+    name: End-to-end pipeline smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      # No NVENC on a GitHub runner, so this also exercises the libx264
+      # fallback that clippy picks when it cannot find a GPU encoder.
+      - name: Run the pipeline against local assets (no Twitch)
+        run: python scripts/smoke_local.py --overlay -y
+
+      - name: Assert a playable compilation containing the clip was produced
+        run: |
+          echo "--- concat list ---"
+          cat cache/comp0
+          # The processed clip must actually be in the compilation. A failed
+          # clip is skipped with a warning, which still yields an output file
+          # built only from the transition assets - the regression this catches.
+          grep -q 'smoketest/smoketest.mp4' cache/comp0
+
+          out=$(ls cache/complete_*.mp4)
+          duration=$(ffprobe -v error -show_entries format=duration \
+            -of default=noprint_wrappers=1:nokey=1 "$out")
+          echo "Built $out (${duration}s)"
+          python -c "import sys; sys.exit(0 if float('$duration') > 0.75 else 1)"
