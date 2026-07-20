@@ -120,7 +120,6 @@ except Exception:
     DEFAULT_CLIPS = 12
     DEFAULT_COMPS = 2
     DEFAULT_MIN_VIEWS = 1
-    DEFAULT_BITRATE = "12M"
     DEFAULT_RES = "1920x1080"
     DEFAULT_FPS = "60"
     DEFAULT_AUDIO_BR = "192k"
@@ -130,8 +129,6 @@ except Exception:
     DEFAULT_OUTPUT = "./output"
     DEFAULT_CONC = 4
     DEFAULT_SILENCE_STATIC = False
-
-PS1_HEADER = """"""  # no longer used; keeping symbol to avoid NameError if referenced
 
 
 def _print_header():
