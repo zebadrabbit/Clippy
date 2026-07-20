@@ -14,23 +14,35 @@
 # Bypass for a single commit:  git commit --no-verify
 set -euo pipefail
 
+RUFF=(); BLACK=()
+
 # Collect staged Python files (Added/Copied/Modified/Renamed), NUL-safe.
 mapfile -d '' -t files < <(git diff --cached --name-only --diff-filter=ACMR -z -- '*.py')
 if [ ${#files[@]} -eq 0 ]; then
   exit 0
 fi
 
-# Prefer the project virtualenv's tools, then fall back to PATH.
+# Prefer the project virtualenv's tools, then PATH, then the tools as modules
+# under whichever python is available. The module fallback matters: `pip install`
+# outside a venv often puts ruff/black in a Scripts dir that is not on PATH,
+# which used to fail the hook even though the tools were installed.
 if [ -x ".venv/Scripts/ruff.exe" ]; then
-  RUFF=".venv/Scripts/ruff.exe"; BLACK=".venv/Scripts/black.exe"
+  RUFF=(".venv/Scripts/ruff.exe"); BLACK=(".venv/Scripts/black.exe")
 elif [ -x ".venv/bin/ruff" ]; then
-  RUFF=".venv/bin/ruff"; BLACK=".venv/bin/black"
+  RUFF=(".venv/bin/ruff"); BLACK=(".venv/bin/black")
+elif command -v ruff >/dev/null 2>&1 && command -v black >/dev/null 2>&1; then
+  RUFF=(ruff); BLACK=(black)
 else
-  RUFF="ruff"; BLACK="black"
+  for py in python python3 py; do
+    if command -v "$py" >/dev/null 2>&1 && "$py" -m ruff --version >/dev/null 2>&1; then
+      RUFF=("$py" -m ruff); BLACK=("$py" -m black)
+      break
+    fi
+  done
 fi
 
-if ! command -v "$RUFF" >/dev/null 2>&1 && [ ! -x "$RUFF" ]; then
-  echo "pre-commit: ruff not found — install dev deps:  pip install -e \".[dev]\"" >&2
+if [ "${#RUFF[@]}" -eq 0 ]; then
+  echo "pre-commit: ruff/black not found — install dev deps:  pip install -e \".[dev]\"" >&2
   exit 1
 fi
 
@@ -38,10 +50,10 @@ fi
 # whitespace/formatting before ruff checks, avoiding ruff flagging things black
 # would have fixed and aborting the hook under `set -e`.
 echo "pre-commit: black on ${#files[@]} file(s)"
-"$BLACK" "${files[@]}"
+"${BLACK[@]}" "${files[@]}"
 
 echo "pre-commit: ruff --fix on ${#files[@]} file(s)"
-"$RUFF" check --force-exclude --fix "${files[@]}"
+"${RUFF[@]}" check --force-exclude --fix "${files[@]}"
 
 # Re-stage anything the autofixers changed so the commit includes the fixes.
 git add -- "${files[@]}"
