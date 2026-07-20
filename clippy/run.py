@@ -84,6 +84,36 @@ except ImportError:  # pragma: no cover
         return
 
 
+def _apply_encoding_preset(encoding, preset_name: str):
+    """Fold a named encoding preset into an ``EncodingConfig`` baseline.
+
+    The codec lives on the config module rather than ``ClippyConfig`` (same channel
+    the TUI quality screen writes), so ``cpu_only`` sets it there.
+    """
+    import dataclasses as _dc
+
+    import clippy.config as _cfg
+    from clippy.presets import from_preset
+
+    try:
+        p = from_preset(preset_name)
+    except KeyError as exc:
+        log(str(exc), 5)
+        raise SystemExit(2) from exc
+
+    _cfg.video_codec = p.video_codec
+    return _dc.replace(
+        encoding,
+        bitrate=p.max_bitrate,
+        resolution=p.resolution,
+        fps=p.fps,
+        audio_bitrate=p.audio_bitrate,
+        container_ext=p.container_ext,
+        container_flags=p.container_flags,
+        nvenc=_dc.replace(encoding.nvenc, preset=p.preset, cq=str(p.cq), gop=str(p.gop)),
+    )
+
+
 def apply_cli_overrides(args):
     """Build the typed ClippyConfig from defaults + CLI args (the single writer).
 
@@ -112,18 +142,23 @@ def apply_cli_overrides(args):
     )
 
     # --- Encoding ---
+    # A --preset replaces the encoding baseline; individual flags below still win.
+    base_encoding = cfg.encoding
+    if getattr(args, "encoding_preset", None):
+        base_encoding = _apply_encoding_preset(base_encoding, args.encoding_preset)
+
     qmap = {"balanced": "10M", "high": "12M", "max": "16M"}
     chosen_bitrate = (
-        args.bitrate or (qmap.get(args.quality) if args.quality else None) or cfg.encoding.bitrate
+        args.bitrate or (qmap.get(args.quality) if args.quality else None) or base_encoding.bitrate
     )
-    container_ext = cfg.encoding.container_ext
-    container_flags = cfg.encoding.container_flags
+    container_ext = base_encoding.container_ext
+    container_flags = base_encoding.container_flags
     if args.format == "mp4":
         container_ext, container_flags = "mp4", "-movflags +faststart"
     elif args.format == "mkv":
         container_ext, container_flags = "mkv", ""
     nvenc = _dc.replace(
-        cfg.encoding.nvenc,
+        base_encoding.nvenc,
         **{
             k: str(v)
             for k, v in {
@@ -139,14 +174,14 @@ def apply_cli_overrides(args):
         },
     )
     encoding = _dc.replace(
-        cfg.encoding,
+        base_encoding,
         bitrate=chosen_bitrate,
-        resolution=args.resolution or cfg.encoding.resolution,
+        resolution=args.resolution or base_encoding.resolution,
         container_ext=container_ext,
         container_flags=container_flags,
-        fps=args.fps or cfg.encoding.fps,
-        audio_bitrate=args.audio_bitrate or cfg.encoding.audio_bitrate,
-        yt_format=args.yt_format or cfg.encoding.yt_format,
+        fps=args.fps or base_encoding.fps,
+        audio_bitrate=args.audio_bitrate or base_encoding.audio_bitrate,
+        yt_format=args.yt_format or base_encoding.yt_format,
         nvenc=nvenc,
     )
 
@@ -868,6 +903,16 @@ def console_main(argv: Optional[list[str]] = None) -> None:
 
     if cmd == "version":
         print(f"Clippy {CLIPPY_VERSION}")
+        return
+
+    if "--list-presets" in args:
+        from clippy.log import get_logger
+        from clippy.presets import list_presets
+
+        get_logger()  # reconfigures stdout to UTF-8 on Windows (descriptions use em dashes)
+        print("Available encoding presets (use --preset <name>):\n")
+        for name, desc in list_presets():
+            print(f"  {name:<18} {desc}")
         return
 
     # Friendly nudge on a fresh checkout: suggest the wizard, then continue

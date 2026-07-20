@@ -51,8 +51,11 @@ def _args(**overrides):
 
 @pytest.fixture(autouse=True)
 def _restore_config(monkeypatch):
-    """Snapshot/restore the config singleton between tests."""
+    """Snapshot/restore the config singleton (and the codec global) between tests."""
     monkeypatch.setattr(cfg, "_CONFIG", cfg.get_config(), raising=False)
+    monkeypatch.setattr(
+        cfg, "video_codec", getattr(cfg, "video_codec", "h264_nvenc"), raising=False
+    )
     yield
 
 
@@ -106,3 +109,35 @@ def test_explicit_bitrate_beats_quality():
 def test_transition_single_override_sets_pool():
     main_mod.apply_cli_overrides(_args(transition="my_transition.mp4"))
     assert cfg.get_config().assets.transitions == ["my_transition.mp4"]
+
+
+def test_preset_sets_encoding_baseline():
+    main_mod.apply_cli_overrides(_args(encoding_preset="discord_friendly"))
+    c = cfg.get_config()
+    assert c.encoding.resolution == "1280x720"
+    assert c.encoding.fps == "30"
+    assert c.encoding.bitrate == "8M"
+    assert c.encoding.audio_bitrate == "128k"
+    assert c.encoding.nvenc.cq == "23"
+
+
+def test_explicit_flags_beat_preset():
+    main_mod.apply_cli_overrides(
+        _args(encoding_preset="discord_friendly", resolution="1920x1080", bitrate="20M", cq="18")
+    )
+    c = cfg.get_config()
+    assert c.encoding.resolution == "1920x1080"
+    assert c.encoding.bitrate == "20M"
+    assert c.encoding.nvenc.cq == "18"
+    # Untouched preset values still apply.
+    assert c.encoding.fps == "30"
+
+
+def test_cpu_only_preset_switches_codec():
+    main_mod.apply_cli_overrides(_args(encoding_preset="cpu_only"))
+    assert cfg.video_codec == "libx264"
+
+
+def test_unknown_preset_exits():
+    with pytest.raises(SystemExit):
+        main_mod.apply_cli_overrides(_args(encoding_preset="does_not_exist"))
