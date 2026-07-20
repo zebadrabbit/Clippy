@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from clippy.ffmpeg import EncoderParams
+import subprocess
+
+import pytest
+
+from clippy.ffmpeg import EncoderParams, detect_encoder
 
 
 class TestEncoderParams:
@@ -77,3 +81,65 @@ class TestEncoderParams:
         assert "ffmpeg" in preview
         assert "<input>" in preview
         assert "<output>" in preview
+
+
+class TestDetectEncoder:
+    """NVENC detection must reflect what the machine can *do*, not what ffmpeg lists."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        detect_encoder.cache_clear()
+        yield
+        detect_encoder.cache_clear()
+
+    def _fake_run(self, monkeypatch, returncode=0, exc=None):
+        seen = {}
+
+        def fake(cmd, **kwargs):
+            seen["cmd"] = cmd
+            if exc is not None:
+                raise exc
+            return subprocess.CompletedProcess(cmd, returncode, b"", b"")
+
+        monkeypatch.setattr(subprocess, "run", fake)
+        return seen
+
+    def test_successful_trial_encode_selects_nvenc(self, monkeypatch):
+        self._fake_run(monkeypatch, returncode=0)
+        assert detect_encoder("ffmpeg") == "h264_nvenc"
+
+    def test_failed_trial_encode_falls_back_to_libx264(self, monkeypatch):
+        """The CI/distro case: ffmpeg is built with NVENC but there is no driver.
+
+        `ffmpeg -encoders` happily lists h264_nvenc on such a build, so checking
+        the listing picked NVENC and every encode then died on libcuda.so.1.
+        """
+        self._fake_run(monkeypatch, returncode=1)
+        assert detect_encoder("ffmpeg") == "libx264"
+
+    def test_missing_ffmpeg_falls_back(self, monkeypatch):
+        self._fake_run(monkeypatch, exc=FileNotFoundError())
+        assert detect_encoder("nope") == "libx264"
+
+    def test_timeout_falls_back(self, monkeypatch):
+        self._fake_run(monkeypatch, exc=subprocess.TimeoutExpired("ffmpeg", 30))
+        assert detect_encoder("ffmpeg") == "libx264"
+
+    def test_probe_runs_a_real_encode_not_a_listing(self, monkeypatch):
+        seen = self._fake_run(monkeypatch, returncode=0)
+        detect_encoder("ffmpeg")
+        cmd = seen["cmd"]
+        assert "-encoders" not in cmd, "listing an encoder does not prove it works"
+        assert "h264_nvenc" in cmd and "-f" in cmd
+
+    def test_result_is_cached_across_calls(self, monkeypatch):
+        calls = []
+
+        def fake(cmd, **kwargs):
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+        monkeypatch.setattr(subprocess, "run", fake)
+        for _ in range(5):
+            detect_encoder("ffmpeg")
+        assert len(calls) == 1, "detection is called per clip; it must not re-probe"

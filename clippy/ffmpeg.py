@@ -191,21 +191,40 @@ class EncoderParams:
 
 @lru_cache(maxsize=None)
 def detect_encoder(ffmpeg_bin: str = "ffmpeg") -> str:
-    """Probe ffmpeg for h264_nvenc support.
+    """Probe whether this machine can actually encode with h264_nvenc.
 
-    Returns ``"h264_nvenc"`` if NVENC is available, else ``"libx264"``.
+    Returns ``"h264_nvenc"`` if a real trial encode succeeds, else ``"libx264"``.
     Cached: the answer cannot change within a run, and this is called per clip.
+
+    This runs a throwaway encode rather than reading ``ffmpeg -encoders``. Distro
+    ffmpeg builds are routinely compiled with NVENC support and list the encoder
+    even with no NVIDIA driver installed, so the listing says nothing about
+    whether encoding will work -- it fails later with "Cannot load libcuda.so.1"
+    once every clip has already been downloaded.
     """
     import subprocess
 
     try:
         result = subprocess.run(
-            [ffmpeg_bin, "-hide_banner", "-encoders"],
+            [
+                ffmpeg_bin,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "nullsrc=s=256x256:d=0.1",
+                "-c:v",
+                "h264_nvenc",
+                "-f",
+                "null",
+                "-",
+            ],
             capture_output=True,
-            text=True,
-            timeout=10,
+            timeout=30,
         )
-        if "h264_nvenc" in result.stdout:
+        if result.returncode == 0:
             return "h264_nvenc"
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         pass
