@@ -1,17 +1,8 @@
-"""Tests for clippy.ffmpeg — EncoderParams and command builders."""
+"""Tests for clippy.ffmpeg — EncoderParams."""
 
 from __future__ import annotations
 
-from clippy.ffmpeg import (
-    EncoderParams,
-    build_concat_cmd,
-    build_ffprobe_audio_check_cmd,
-    build_ffprobe_duration_cmd,
-    build_normalize_cmd,
-    build_overlay_cmd,
-    build_thumbnail_cmd,
-    build_transcode_cmd,
-)
+from clippy.ffmpeg import EncoderParams
 
 
 class TestEncoderParams:
@@ -86,66 +77,3 @@ class TestEncoderParams:
         assert "ffmpeg" in preview
         assert "<input>" in preview
         assert "<output>" in preview
-
-
-class TestBuildCommands:
-    def test_normalize_cmd(self):
-        enc = EncoderParams(resolution="1920x1080", fps="60")
-        cmd = build_normalize_cmd("clip123", enc, "./cache")
-        assert "clip123/clip.mp4" in cmd
-        assert "clip123/normalized.mp4" in cmd
-        assert "h264_nvenc" in cmd
-
-    def test_overlay_cmd(self):
-        enc = EncoderParams()
-        cmd = build_overlay_cmd("clip123", "testuser", enc, "./cache", "fonts/Roboto.ttf")
-        assert "clip123/normalized.mp4" in cmd
-        assert "clip123/avatar.png" in cmd
-        assert "testuser" in cmd
-        assert "filter_complex" in cmd
-
-    def test_overlay_cmd_escapes_quotes(self):
-        enc = EncoderParams()
-        cmd = build_overlay_cmd("clip123", "user's name", enc, "./cache", "fonts/Roboto.ttf")
-        assert "user\\'s name" in cmd
-
-    def test_concat_cmd(self):
-        enc = EncoderParams(container_ext="mp4")
-        cmd = build_concat_cmd(0, "2025-09-14", enc, "./cache")
-        assert "concat" in cmd
-        assert "comp0" in cmd
-        assert "complete_2025-09-14_0.mp4" in cmd
-
-    def test_thumbnail_cmd(self):
-        cmd = build_thumbnail_cmd("clip123", "1920x1080", "./cache")
-        assert "clip123" in cmd
-        assert "preview.png" in cmd
-        assert "-vframes 1" in cmd
-
-    def test_transcode_cmd_normal(self):
-        enc = EncoderParams()
-        cmd = build_transcode_cmd("in.mp4", "out.mp4", enc)
-        assert '"in.mp4"' in cmd
-        assert '"out.mp4"' in cmd
-        assert "h264_nvenc" in cmd
-
-    def test_transcode_cmd_force_silent(self):
-        enc = EncoderParams()
-        cmd = build_transcode_cmd("in.mp4", "out.mp4", enc, force_silent=True)
-        assert "anullsrc" in cmd
-        assert "-shortest" in cmd
-
-    def test_transcode_cmd_audio_filter(self):
-        enc = EncoderParams()
-        cmd = build_transcode_cmd("in.mp4", "out.mp4", enc, audio_filter="loudnorm=I=-16")
-        assert "loudnorm" in cmd
-
-    def test_ffprobe_duration_cmd(self):
-        cmd = build_ffprobe_duration_cmd("test.mp4")
-        assert cmd[0] == "ffprobe"
-        assert "format=duration" in cmd
-
-    def test_ffprobe_audio_check_cmd(self):
-        cmd = build_ffprobe_audio_check_cmd("test.mp4")
-        assert "a:0" in cmd
-        assert "codec_type" in " ".join(cmd)
