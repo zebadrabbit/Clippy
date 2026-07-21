@@ -9,6 +9,11 @@ Turn your Twitch clips into highlight reels — automatically. Clippy pulls clip
 
 ## Features
 
+- **Profiles**: one install, any number of channels. Each keeps its own branding —
+  intro, outro, transitions — and its own defaults. Switch with a flag, a menu, or a
+  dropdown in the TUI
+- **Unattended**: `--headless` never prompts and `--json` reports what happened, so a
+  scheduled job can build every week without you
 - **Two interfaces**: Interactive Textual TUI (`clippy tui`) for beginners, full CLI for power users
 - Twitch Helix ingestion with date windows, auto-expand lookback, and nostalgia mode
 - Discord channel ingestion (optional): read clip links curated by your community
@@ -142,6 +147,141 @@ clippy --discord --discord-channel-id 123456789012345678 -y
 
 What happens: Clippy reads messages from the channel, extracts Twitch clip links, resolves them via Helix, and builds compilations. This lets your Twitch community curate clips collaboratively.
 
+## Profiles — one install, every channel
+
+If you cut compilations for more than one streamer, this is the part that saves you
+the most time. A profile bundles a channel with *its own* branding and defaults, so
+you stop editing config between runs.
+
+```powershell
+clippy profile               # create or edit one — seven fields, no credential prompts
+clippy profile use theflood  # make it the default for every run
+clippy --list-profiles       # what's defined
+```
+
+Then pick one per run, from anywhere:
+
+```powershell
+clippy --profile theflood       # CLI
+clippy --profile someoneelse    # a different channel, same install
+clippy --profile default        # ignore profiles entirely for this run
+```
+
+**In the TUI**, it's the first thing you choose. The Source step has a profile
+dropdown, and every step after it — channel, clip counts, transitions — prefills from
+that streamer's settings. The Review screen shows which profile is about to run.
+
+### Each channel gets its own look
+
+Drop a streamer's artwork in a folder named after their profile. Assets resolve from
+there first and fall back to the shared folder, so files everyone uses stay in one
+place:
+
+```
+transitions/
+  static.mp4              # shared by every profile
+  transition_01.mp4       # shared
+  theflood/
+    intro.mp4             # only when the theflood profile is active
+    outro.mp4
+    transition_01.mp4     # shadows the shared one of the same name
+  someoneelse/
+    intro.mp4
+```
+
+`clippy profile` offers to create the folder for you. **Nothing needs moving to adopt
+this** — a flat `transitions/` folder keeps working exactly as before.
+
+### What a profile can override
+
+Anything in `clippy.yaml`. A profile is a partial copy merged over the top, and
+whatever it doesn't mention falls back to your shared values:
+
+```yaml
+active_profile: theflood
+profiles:
+  theflood:
+    identity:
+      broadcaster: theflood
+    assets:
+      intro: [intro.mp4]
+      outro: [outro.mp4]
+    selection:
+      clips_per_compilation: 20
+  someoneelse:
+    identity:
+      broadcaster: someoneelse
+    encoding:
+      resolution: 1280x720
+```
+
+There's always a built-in `default` profile that applies no overrides at all — the
+plain `clippy.yaml` and the transitions root. `clippy profile use default` drops
+`active_profile` again.
+
+Precedence is `clippy.yaml` → profile → CLI flags, so `--clips 5` still wins over
+whatever the profile says.
+
+## Unattended runs — set it and forget it
+
+Point a scheduler at Clippy and it will keep producing compilations without you.
+
+```bash
+clippy --headless --profile theflood --json
+```
+
+`--headless` is the one flag that makes a run safe to leave alone: it implies `-y`,
+drops colour and the banner so logs stay readable, and **fails instead of waiting**
+if anything would have prompted. No half-finished job blocked on a question nobody
+is there to answer.
+
+### A weekly build per streamer
+
+Because profiles and headless compose, one scheduled entry per channel is all it
+takes:
+
+```bash
+# crontab — Monday mornings, one job per streamer
+0 6 * * 1  clippy --headless --profile theflood --json >> /var/log/clippy.log 2>&1
+0 7 * * 1  clippy --headless --profile someoneelse --json >> /var/log/clippy.log 2>&1
+```
+
+```powershell
+# Windows Task Scheduler — one weekly task per streamer
+schtasks /create /tn "Clippy theflood" /sc weekly /d MON /st 06:00 /tr "clippy --headless --profile theflood --json"
+```
+
+### Knowing what happened
+
+`--json` prints one result document, whatever the outcome — success or failure, the
+same shape every time:
+
+```json
+{
+  "status": "ok",
+  "exit_code": 0,
+  "files": ["theflood_2025-07-01_to_2025-07-07_part1.mp4"],
+  "broadcaster": "theflood",
+  "compilations": 1,
+  "version": "0.6.0"
+}
+```
+
+And the exit code tells a scheduler how to react without reading a single log line:
+
+| Code | Meaning | What a job should do |
+|---|---|---|
+| `0` | Built at least one compilation | Nothing — it worked |
+| `2` | Bad invocation or configuration | Fix the setup; it won't fix itself |
+| `3` | Ran fine, nothing matched | Shrug. A quiet week, or the min-views filter |
+| `4` | Credentials missing or rejected | Alert — the token needs attention |
+| `5` | ffmpeg or yt-dlp failed | Alert — check the tooling |
+| `1` | Unexpected failure | Alert |
+| `130` | Interrupted | Someone stopped it |
+
+`3` is deliberately separate from `1`: **a quiet week is not a failure**, and a
+nightly job shouldn't page you for one.
+
 ## Configuration
 
 - Precedence: CLI flags > Environment (`.env`) > profile > `clippy.yaml` > built-in defaults.
@@ -157,103 +297,6 @@ Key env vars:
 | `DISCORD_CHANNEL_ID` | Discord channel to read clip links from |
 | `TRANSITIONS_DIR` | Custom transitions folder path |
 
-## Profiles
-
-If you build compilations for more than one channel, a profile keeps each one's
-branding and defaults together:
-
-```powershell
-clippy profile              # create or edit a profile (short; no credentials)
-clippy profile use theflood # make it the default
-clippy --list-profiles      # what is defined
-clippy --profile someoneelse   # use another one for a single run
-clippy --profile default    # ignore all profiles for this run
-```
-
-There is always a built-in `default` profile. It applies no overrides at all:
-the plain `clippy.yaml` values and whatever sits in the transitions root. Use it
-to get back to the base setup — `clippy profile use default` simply drops
-`active_profile` from the file. Defining your own profile named `default`
-overrides the built-in.
-
-A profile is a partial `clippy.yaml` merged over the top level, so it can set
-anything: the channel, its own intro/outro clips, clip counts, encoding.
-Anything it does not mention falls back to the shared values.
-
-```yaml
-active_profile: theflood
-profiles:
-  theflood:
-    identity:
-      broadcaster: theflood
-    assets:
-      intro: [intro_theflood.mp4]
-      outro: [outro_theflood.mp4]
-    selection:
-      clips_per_compilation: 20
-```
-
-Precedence is `clippy.yaml` → profile → CLI flags, so `--clips 5` still wins
-over whatever the profile says.
-
-### Per-profile artwork
-
-Each profile can keep its own intro, outro and transitions in a subfolder named
-after it. Assets are looked up there first and fall back to the shared folder,
-so files everyone uses — `static.mp4` especially — stay exactly where they are:
-
-```
-transitions/
-  static.mp4              # shared by every profile
-  transition_01.mp4       # shared
-  theflood/               # only used when this profile is active
-    intro.mp4
-    outro.mp4
-    transition_01.mp4     # shadows the shared one of the same name
-  someoneelse/
-    intro.mp4
-```
-
-`clippy profile` offers to create the folder for you. Nothing needs moving to
-adopt this: a flat `transitions/` folder keeps working exactly as before.
-
-## Unattended runs
-
-For cron, a scheduler or CI:
-
-```bash
-clippy --headless --profile theflood --json
-```
-
-`--headless` never waits for input: it implies `-y`, drops colour and the
-banner, and fails rather than prompting. `--json` prints one result document,
-whatever the outcome:
-
-```json
-{
-  "status": "ok",
-  "exit_code": 0,
-  "files": ["theflood_2025-07-01_to_2025-07-07_part1.mp4"],
-  "broadcaster": "theflood",
-  "compilations": 1,
-  "version": "0.6.0"
-}
-```
-
-Exit codes let a job react without reading the log:
-
-| Code | Meaning |
-|---|---|
-| `0` | Built at least one compilation |
-| `1` | Unexpected failure |
-| `2` | Bad invocation or configuration (unknown channel, missing setup) |
-| `3` | Ran fine, nothing matched — an empty week, or the min-views filter |
-| `4` | Credentials missing or rejected |
-| `5` | ffmpeg or yt-dlp failed |
-| `130` | Interrupted |
-
-`3` is deliberately distinct from `1`: a nightly job should shrug at a quiet
-week and alert on everything else.
 
 ## CLI Reference
 

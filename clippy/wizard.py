@@ -795,6 +795,25 @@ def profile_wizard(argv: Optional[list[str]] = None) -> None:
     """
     _enable_windows_vt()
     argv = list(argv or [])
+
+    if any(a in ("-h", "--help", "help") for a in argv):
+        # Without this, "--help" is taken for a profile name and the wizard sits
+        # on a prompt -- hanging on a terminal, EOFError without one.
+        lines = [
+            "",
+            "  clippy profile              list profiles, then pick one to edit",
+            "  clippy profile new [NAME]   create one",
+            "  clippy profile edit [NAME]  change one",
+            "  clippy profile use NAME     make NAME the active profile",
+            "",
+            "Use a profile for a single run with:  clippy --profile NAME",
+            "List them from the CLI with:          clippy --list-profiles",
+        ]
+        print(THEME.title("clippy profile") + THEME.text(" — per-streamer defaults and branding"))
+        for line in lines:
+            print(THEME.text(line))
+        return
+
     path = Path("clippy.yaml")
     data = _read_yaml_config(path)
     profiles = dict(data.get("profiles") or {})
