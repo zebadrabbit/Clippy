@@ -117,6 +117,10 @@ discord:
 # so it can override anything above: the channel, intro/outro clips, clip
 # counts, encoding. Anything a profile does not mention keeps the value above.
 #
+# There is always a built-in "default" profile meaning "no overrides": the
+# values in this file and the transitions root. `clippy profile use default`
+# drops active_profile again.
+#
 #   clippy profile            create or edit one (short, no credentials)
 #   clippy profile use NAME   make NAME the default
 #   clippy --list-profiles    show what is defined

@@ -923,13 +923,15 @@ def console_main(argv: Optional[list[str]] = None) -> None:
         from clippy.log import get_logger
 
         get_logger()
+        from clippy.config_loader import DEFAULT_PROFILE
+
         names = list_profiles()
-        if not names:
-            print("No profiles defined. Run 'clippy profile' to create one.")
-        else:
-            print("Profiles in clippy.yaml (use --profile <name>):\n")
-            for name in names:
-                print(f"  {name}")
+        print("Profiles (use --profile <name>):\n")
+        for name in names:
+            note = "   base config, transitions root" if name == DEFAULT_PROFILE else ""
+            print(f"  {name}{note}")
+        if names == [DEFAULT_PROFILE]:
+            print("\nRun 'clippy profile' to add one per streamer.")
         return
 
     if cmd in ("profile", "profiles"):

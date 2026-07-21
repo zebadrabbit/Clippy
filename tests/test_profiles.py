@@ -110,11 +110,14 @@ class TestLoadMergedConfig:
         assert load_merged_config()["default_broadcaster"] == "ninja"
 
     def test_list_profiles_preserves_file_order(self, config_file):
-        assert list_profiles() == ["theflood", "ninja"]
+        # The built-in "default" leads; the file's own follow in declaration order.
+        assert list_profiles() == ["default", "theflood", "ninja"]
+        assert list_profiles(include_default=False) == ["theflood", "ninja"]
 
-    def test_list_profiles_is_empty_without_a_config(self, tmp_path, monkeypatch):
+    def test_only_the_builtin_is_listed_without_a_config(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        assert list_profiles() == []
+        assert list_profiles() == ["default"]
+        assert list_profiles(include_default=False) == []
 
     def test_a_config_without_profiles_still_loads(self, tmp_path, monkeypatch):
         path = tmp_path / "clippy.yaml"
@@ -275,3 +278,59 @@ class TestFontSurvivesReload:
 
         resolved = cfg.resolve_fontfile("assets/fonts/Roboto-Medium.ttf")
         assert os.path.exists(resolved)
+
+
+class TestBuiltInDefaultProfile:
+    """ "default" always exists and means "no overrides"."""
+
+    def test_it_is_listed_even_with_no_profiles_section(self, tmp_path, monkeypatch):
+        path = tmp_path / "clippy.yaml"
+        path.write_text(yaml.safe_dump({"identity": {"broadcaster": "solo"}}), encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        assert list_profiles() == ["default"]
+
+    def test_it_is_listed_first(self, config_file):
+        assert list_profiles()[0] == "default"
+
+    def test_it_can_be_excluded(self, config_file):
+        assert "default" not in list_profiles(include_default=False)
+
+    def test_applying_it_changes_nothing(self):
+        assert apply_profile(CONFIG, "default") == CONFIG
+
+    def test_it_yields_the_base_config(self, config_file):
+        merged = load_merged_config(profile="default")
+        assert merged["default_broadcaster"] == "basechannel"
+        assert merged["intro"] == ["generic.mp4"]
+        assert merged["amountOfClips"] == 12
+
+    def test_it_overrides_an_active_profile(self, config_file):
+        """active_profile is theflood; --profile default must still give the base."""
+        assert load_merged_config()["default_broadcaster"] == "theflood"
+        assert load_merged_config(profile="default")["default_broadcaster"] == "basechannel"
+
+    def test_a_user_defined_default_wins(self, tmp_path, monkeypatch):
+        """Someone who writes their own 'default' profile gets theirs, not the built-in."""
+        data = dict(CONFIG)
+        data["profiles"] = dict(CONFIG["profiles"])
+        data["profiles"]["default"] = {"identity": {"broadcaster": "mine"}}
+        path = tmp_path / "clippy.yaml"
+        path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv(PROFILE_ENV, raising=False)
+        assert load_merged_config(profile="default")["default_broadcaster"] == "mine"
+        # and it is not duplicated in the listing
+        assert list_profiles().count("default") == 1
+
+    def test_default_uses_the_transitions_root(self, tmp_path, monkeypatch):
+        """No profile folder lookup when the built-in default is active."""
+        from clippy.utils import asset_search_dirs
+
+        root = tmp_path / "transitions"
+        (root / "theflood").mkdir(parents=True)
+        monkeypatch.setenv("TRANSITIONS_DIR", str(root))
+        import clippy.config as cfg
+
+        monkeypatch.setattr(cfg, "active_profile", "default", raising=False)
+        dirs = asset_search_dirs()
+        assert len(dirs) == 1 and dirs[0].endswith("transitions")

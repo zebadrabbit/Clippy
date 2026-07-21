@@ -148,7 +148,14 @@ clippy profile              # create or edit a profile (short; no credentials)
 clippy profile use theflood # make it the default
 clippy --list-profiles      # what is defined
 clippy --profile someoneelse   # use another one for a single run
+clippy --profile default    # ignore all profiles for this run
 ```
+
+There is always a built-in `default` profile. It applies no overrides at all:
+the plain `clippy.yaml` values and whatever sits in the transitions root. Use it
+to get back to the base setup — `clippy profile use default` simply drops
+`active_profile` from the file. Defining your own profile named `default`
+overrides the built-in.
 
 A profile is a partial `clippy.yaml` merged over the top level, so it can set
 anything: the channel, its own intro/outro clips, clip counts, encoding.

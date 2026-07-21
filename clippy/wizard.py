@@ -805,7 +805,15 @@ def profile_wizard(argv: Optional[list[str]] = None) -> None:
 
     # clippy profile use NAME
     if sub == "use":
-        name = target or _prompt_str("Profile to activate", active)
+        from clippy.config_loader import DEFAULT_PROFILE
+
+        name = target or _prompt_str("Profile to activate", active or DEFAULT_PROFILE)
+        if name == DEFAULT_PROFILE and name not in profiles:
+            # Built-in: drop the key rather than writing a profile that does nothing.
+            data.pop("active_profile", None)
+            if _write_yaml_config(path, data):
+                print(THEME.success("Back to the base config and the transitions root."))
+            return
         if name not in profiles:
             print(THEME.error(f"No profile named {name!r}. Known: {', '.join(profiles) or 'none'}"))
             return

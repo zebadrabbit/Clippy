@@ -147,6 +147,12 @@ def _coerce_dict_float(v: Any, default: dict[str, float]) -> dict[str, float]:
 #: Env var that selects a profile, so the choice survives into a subprocess.
 PROFILE_ENV = "CLIPPY_PROFILE"
 
+#: Always-available profile meaning "no overrides": the plain clippy.yaml values
+#: and whatever sits in the transitions root. It is how you get back to the base
+#: setup without deleting active_profile by hand. A user-defined profile of the
+#: same name takes precedence.
+DEFAULT_PROFILE = "default"
+
 
 def _deep_merge(base: dict, overlay: dict) -> dict:
     """Overlay wins, but nested sections merge rather than replace wholesale.
@@ -162,11 +168,14 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
     return out
 
 
-def list_profiles(file_path: str | None = None) -> list[str]:
-    """Names of the profiles defined in clippy.yaml, in file order."""
+def list_profiles(file_path: str | None = None, include_default: bool = True) -> list[str]:
+    """Profile names, built-in first, then the file's own in declaration order."""
     data = _load_yaml(Path(file_path or DEFAULT_CONFIG_FILE))
     profiles = data.get("profiles") if isinstance(data, dict) else None
-    return [str(k) for k in profiles] if isinstance(profiles, dict) else []
+    names = [str(k) for k in profiles] if isinstance(profiles, dict) else []
+    if include_default and DEFAULT_PROFILE not in names:
+        names.insert(0, DEFAULT_PROFILE)
+    return names
 
 
 def resolve_profile_name(
@@ -189,7 +198,9 @@ def apply_profile(data: dict, name: str | None) -> dict:
     if not name or not isinstance(data, dict):
         return data
     profiles = data.get("profiles")
-    if not isinstance(profiles, dict) or name not in profiles:
+    if not (isinstance(profiles, dict) and name in profiles):
+        # Nothing to apply: either the built-in "default", or a name that is not
+        # in the file. Both mean "use the base config as written".
         return data
     overlay = profiles.get(name)
     return _deep_merge(data, overlay) if isinstance(overlay, dict) else data
