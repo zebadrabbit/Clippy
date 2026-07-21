@@ -7,6 +7,8 @@ base file -> profile -> CLI flags.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 import yaml
 
@@ -218,3 +220,58 @@ class TestProfileAssetFolders:
 
         self._with_profile(monkeypatch, "")
         assert discover_transition_files() == ["transition_01.mp4", "transition_02.mp4"]
+
+
+class TestFontSurvivesReload:
+    """Re-merging the config must not un-resolve the overlay font.
+
+    reload_with_profile() re-reads clippy.yaml, which puts the raw relative
+    "assets/fonts/Roboto-Medium.ttf" back into the globals. The resolution to an
+    absolute path only ran at import, so preflight then reported the overlay font
+    as missing on any run that switched profile.
+    """
+
+    def test_font_stays_resolved_across_a_reload(self, config_file):
+        import clippy.config as cfg
+
+        original = cfg._merged
+        try:
+            before = cfg.fontfile
+            assert os.path.isabs(before) and os.path.exists(before)
+            cfg.reload_with_profile("ninja")
+            assert cfg.fontfile == before
+            assert cfg.get_config().assets.fontfile == before
+        finally:
+            cfg._merged = original
+            cfg.refresh_from_globals()
+
+    def test_preflight_is_clean_after_a_reload(self, config_file):
+        import clippy.config as cfg
+        from clippy.preflight import _check_overlay_font
+
+        original = cfg._merged
+        try:
+            cfg.reload_with_profile("ninja")
+            assert _check_overlay_font() == []
+        finally:
+            cfg._merged = original
+            cfg.refresh_from_globals()
+
+    def test_an_existing_absolute_font_is_left_alone(self, tmp_path):
+        import clippy.config as cfg
+
+        custom = tmp_path / "Custom.ttf"
+        custom.write_bytes(b"font")
+        assert cfg.resolve_fontfile(str(custom)) == str(custom)
+
+    def test_an_unknown_font_is_returned_unchanged(self):
+        """So preflight can still report it rather than silently substituting."""
+        import clippy.config as cfg
+
+        assert cfg.resolve_fontfile("nope/missing.ttf") == "nope/missing.ttf"
+
+    def test_the_packaged_font_is_the_fallback(self):
+        import clippy.config as cfg
+
+        resolved = cfg.resolve_fontfile("assets/fonts/Roboto-Medium.ttf")
+        assert os.path.exists(resolved)

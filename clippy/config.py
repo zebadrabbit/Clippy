@@ -14,6 +14,7 @@ assumed repo root is adjusted accordingly.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import sys
 from typing import Any, Optional
@@ -73,25 +74,39 @@ elif os.path.exists(_bin_youtubedl):
 else:
     YTDL_BIN = "yt-dlp"
 
-# Resolve fontfile for both source checkouts and installed wheels.
 # The font ships as package data under clippy/assets/fonts/, so an installed
 # ``clippy`` finds it even outside the repo directory.
 _PACKAGED_FONT = os.path.join(_PKG_DIR, "assets", "fonts", "Roboto-Medium.ttf")
-try:
-    _ff = globals().get("fontfile", "assets/fonts/Roboto-Medium.ttf")
-    if not isinstance(_ff, str):
-        _ff = "assets/fonts/Roboto-Medium.ttf"
-    if os.path.isabs(_ff) and os.path.exists(_ff):
-        fontfile = _ff
-    else:
-        # Search order: configured path under repo root, then the packaged font.
-        _candidates = [
-            os.path.join(_REPO_DIR, _ff),
-            _PACKAGED_FONT,
-        ]
-        fontfile = next((c for c in _candidates if os.path.exists(c)), _ff)
-except OSError:
-    fontfile = "assets/fonts/Roboto-Medium.ttf"
+_DEFAULT_FONT = "assets/fonts/Roboto-Medium.ttf"
+
+
+def resolve_fontfile(value: Any = None) -> str:
+    """Turn a configured font path into one that exists on this machine.
+
+    Must run after *every* merge, not just at import: re-reading the config
+    (switching profiles, for instance) puts the raw relative path back, and
+    preflight then reports the overlay font as missing.
+    """
+    try:
+        candidate = value if isinstance(value, str) and value else _DEFAULT_FONT
+        if os.path.isabs(candidate) and os.path.exists(candidate):
+            return candidate
+        # A relative path is tried against the repo root first.
+        under_repo = os.path.join(_REPO_DIR, candidate)
+        if os.path.exists(under_repo):
+            return under_repo
+        # The packaged font only stands in for the default. A custom path that
+        # does not exist is returned as-is so preflight can say so, rather than
+        # silently swapping in Roboto and rendering the wrong typeface.
+        if os.path.basename(candidate) == os.path.basename(_DEFAULT_FONT):
+            if os.path.exists(_PACKAGED_FONT):
+                return _PACKAGED_FONT
+        return candidate
+    except OSError:
+        return _DEFAULT_FONT
+
+
+fontfile = resolve_fontfile(globals().get("fontfile"))
 
 container_ext = globals().get("container_ext", "mp4")
 container_flags = globals().get("container_flags", "-movflags +faststart")
@@ -129,7 +144,15 @@ def set_config(cfg: ClippyConfig) -> None:
     global _CONFIG
     _CONFIG = cfg
     # Keep module-level globals in sync for code that still reads them
-    globals().update(cfg.to_flat_dict())
+    flat = cfg.to_flat_dict()
+    # A config built from a fresh merge carries the unresolved font path; never
+    # let it overwrite a working one.
+    flat["fontfile"] = resolve_fontfile(flat.get("fontfile"))
+    globals().update(flat)
+    if flat["fontfile"] != cfg.assets.fontfile:
+        _CONFIG = dataclasses.replace(
+            cfg, assets=dataclasses.replace(cfg.assets, fontfile=flat["fontfile"])
+        )
 
 
 def reload_with_profile(name: Optional[str]) -> ClippyConfig:
@@ -144,6 +167,9 @@ def reload_with_profile(name: Optional[str]) -> ClippyConfig:
 
     _merged = load_merged_config(profile=name)
     globals().update(_merged)
+    # The merge restores the raw relative font path; resolve it again.
+    _merged["fontfile"] = resolve_fontfile(_merged.get("fontfile"))
+    globals()["fontfile"] = _merged["fontfile"]
     cfg = ClippyConfig.from_merged_dict(_merged)
     set_config(cfg)
     return cfg
