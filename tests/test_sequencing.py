@@ -252,3 +252,39 @@ class TestPolicyInvariant:
             assert not (is_static(a) and is_static(b)), "duplicate separator"
         assert lines[0] == "file _trans/intro.mp4"
         assert lines[-1] == "file _trans/outro.mp4"
+
+
+class TestEmptyPoolIsAnnounced:
+    """An empty pool yields statics only, which looks like a broken build."""
+
+    def test_warns_when_transitions_are_wanted_but_none_are_available(
+        self, sequencing, monkeypatch
+    ):
+        monkeypatch.setattr(pipeline, "resolve_transition_pool", lambda **kw: [])
+        sequencing(transition_probability=0.35)
+        messages = []
+        monkeypatch.setattr(pipeline, "log", lambda msg, level=0: messages.append(str(msg)))
+
+        _build([(_clip(1), True)])
+
+        assert any("No transitions in the pool" in m for m in messages)
+
+    def test_silent_when_random_transitions_are_switched_off(self, sequencing, monkeypatch):
+        monkeypatch.setattr(pipeline, "resolve_transition_pool", lambda **kw: [])
+        sequencing(transition_probability=0.35, no_random_transitions=True)
+        messages = []
+        monkeypatch.setattr(pipeline, "log", lambda msg, level=0: messages.append(str(msg)))
+
+        _build([(_clip(1), True)])
+
+        assert not any("No transitions in the pool" in m for m in messages)
+
+    def test_silent_when_probability_is_zero(self, sequencing, monkeypatch):
+        monkeypatch.setattr(pipeline, "resolve_transition_pool", lambda **kw: [])
+        sequencing(transition_probability=0.0)
+        messages = []
+        monkeypatch.setattr(pipeline, "log", lambda msg, level=0: messages.append(str(msg)))
+
+        _build([(_clip(1), True)])
+
+        assert not any("No transitions in the pool" in m for m in messages)

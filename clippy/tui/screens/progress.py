@@ -60,35 +60,48 @@ class _TuiLogHandler(logging.Handler):
 
 
 class _StdoutCapture(io.TextIOBase):
-    """File-like object that captures writes and sends them to a RichLog."""
+    """Captures writes, splitting permanent log lines from transient status.
 
-    def __init__(self, log_widget: RichLog):
-        self._log_widget = log_widget
+    ffmpeg progress is drawn with a carriage return and no newline, so on a
+    real terminal it overwrites itself in place. Captured naively that becomes
+    one new log line per tick, and the concat stage alone buries the scrollback
+    in near-identical "Concatenating ...: 45%" lines. A carriage-return fragment
+    is treated the way a terminal treats it: it replaces the status line instead
+    of being appended to the log.
+    """
+
+    def __init__(self, on_line, on_status):
+        self._on_line = on_line
+        self._on_status = on_status
         self._buf = ""
+
+    def _emit(self, sink, raw: str) -> None:
+        clean = _ANSI_RE.sub("", raw).strip()
+        if clean:
+            try:
+                sink(clean)
+            except Exception:
+                pass
 
     def write(self, s: str) -> int:
         if not s:
             return 0
         self._buf += s
+        # Newline-terminated content is permanent; whatever follows the last
+        # carriage return is a live status line that keeps being redrawn.
         while "\n" in self._buf:
             line, self._buf = self._buf.split("\n", 1)
-            clean = _ANSI_RE.sub("", line).strip()
-            if clean:
-                try:
-                    self._log_widget.write(clean)
-                except Exception:
-                    pass
+            self._emit(self._on_line, line.rsplit("\r", 1)[-1])
+        if "\r" in self._buf:
+            self._buf = self._buf.rsplit("\r", 1)[-1]
+            self._emit(self._on_status, self._buf)
         return len(s)
 
     def flush(self) -> None:
+        # A partial line is still status: keep it out of the log until a
+        # newline says it is finished.
         if self._buf.strip():
-            clean = _ANSI_RE.sub("", self._buf).strip()
-            if clean:
-                try:
-                    self._log_widget.write(clean)
-                except Exception:
-                    pass
-            self._buf = ""
+            self._emit(self._on_status, self._buf)
 
     def isatty(self) -> bool:
         return False
@@ -140,21 +153,25 @@ class ProgressScreen(Screen):
                 " CLIPPY ── BUILDING ──────────────────────────────────", classes="bbs-titlebar"
             )
 
-            with Vertical(classes="progress-section"):
-                yield Label("Overall Progress")
+            # One row per bar instead of label-above-bar: the log is the part
+            # worth the vertical space.
+            with Horizontal(classes="bbs-row"):
+                yield Label("Overall ")
                 yield ProgressBar(total=100, id="overall-progress")
-
-            yield Label("Stage: Initializing...", id="stage-label")
-
-            with Vertical(classes="progress-section"):
-                yield Label("Compilation Progress")
+            with Horizontal(classes="bbs-row"):
+                yield Label("Compile ")
                 yield ProgressBar(total=100, id="concat-progress")
 
-            yield Label("Log")
+            yield Label("Stage: Initializing...", id="stage-label")
+            # Live ffmpeg progress: redrawn in place, never appended to the log.
+            yield Static("", id="activity", classes="bbs-dim")
             yield RichLog(id="log-panel", classes="log-panel", markup=True)
 
             with Horizontal(classes="button-bar"):
                 yield Button("Cancel", variant="error", id="cancel-btn")
+
+    _last_line: str | None = None
+    _repeat_count: int = 0
 
     def on_mount(self) -> None:
         self._log("[bold cyan]Pipeline starting...[/]")
@@ -163,8 +180,33 @@ class ProgressScreen(Screen):
         self.run_worker(self._run_pipeline, thread=True)
 
     def _log(self, msg: str) -> None:
+        """Append a line, collapsing an unbroken run of identical messages.
+
+        The pipeline repeats itself a lot across many clips; without this the
+        useful lines scroll away behind twenty copies of the same one.
+        """
+        if msg == self._last_line:
+            self._repeat_count += 1
+            return
+        self._flush_repeats()
+        self._last_line = msg
+        self._write(msg)
+
+    def _flush_repeats(self) -> None:
+        if self._repeat_count:
+            self._write(f"[dim]  ... repeated {self._repeat_count} more times[/]")
+            self._repeat_count = 0
+
+    def _write(self, msg: str) -> None:
         try:
             self.query_one("#log-panel", RichLog).write(msg)
+        except Exception:
+            pass
+
+    def _set_activity(self, msg: str) -> None:
+        """Transient in-place status (ffmpeg progress), not part of the log."""
+        try:
+            self.query_one("#activity", Static).update(msg)
         except Exception:
             pass
 
@@ -213,9 +255,10 @@ class ProgressScreen(Screen):
                         h.setLevel(logging.CRITICAL + 1)
                         self_ctx._disabled_handlers.append(h)
 
-                # Redirect stdout so print() calls land in the log
+                # Redirect stdout: finished lines go to the log, carriage-return
+                # redraws go to the activity line.
                 self_ctx._old_stdout = sys.stdout
-                sys.stdout = _StdoutCapture(log_widget)
+                sys.stdout = _StdoutCapture(screen._log, screen._set_activity)
 
                 return self_ctx
 

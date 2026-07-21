@@ -1018,6 +1018,19 @@ def build_concat_list(
         if _append_trans_file(_in_choice):
             _append_trans_file(_static_name)
 
+    # An empty pool silently produces a compilation with nothing but static
+    # separators, which looks like transitions are broken rather than unset.
+    # Say so once, here, where the truth is known.
+    if not _no_rand and float(_trans_prob or 0) > 0 and not _transitions_list:
+        try:
+            log(
+                "WARN No transitions in the pool — only static separators will be inserted. "
+                "Check the transitions folder and your selection.",
+                2,
+            )
+        except Exception:  # broad catch: log safety
+            pass
+
     # recent transitions for simple cooldown avoidance
     _recent_transitions: list[str] = []
 

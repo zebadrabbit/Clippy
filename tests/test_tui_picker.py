@@ -257,3 +257,38 @@ class TestDateRange:
 
         saved = self._clip_settings(steps)
         assert resolve_date_window(saved["start"], None)[0] == "2026-07-01T00:00:00Z"
+
+
+class TestBulkButtons:
+    def test_add_all_button_fills_the_pool(self):
+        async def steps(screen, pilot, app):
+            screen.query_one("#add-all-btn").press()
+            await pilot.pause()
+
+        screen, _ = _drive(steps)
+        assert sorted(screen._selected) == sorted(CLIPS)
+        assert screen._available == []
+
+    def test_clear_all_button_empties_the_pool(self):
+        async def steps(screen, pilot, app):
+            screen.action_select_all()
+            await pilot.pause()
+            screen.query_one("#clear-all-btn").press()
+            await pilot.pause()
+
+        screen, _ = _drive(steps)
+        assert screen._selected == []
+        assert sorted(screen._available) == sorted(CLIPS)
+
+    def test_clearing_all_is_recorded_as_an_empty_pool(self):
+        """An empty pool is a legitimate choice; it just must be the user's."""
+
+        async def steps(screen, pilot, app):
+            screen.query_one("#clear-all-btn").press()
+            await pilot.pause()
+            screen.query_one("#next-btn").press()
+            await pilot.pause()
+            await pilot.pause()
+
+        _, app = _drive(steps)
+        assert app.workflow["transitions"]["selected_transitions"] == []

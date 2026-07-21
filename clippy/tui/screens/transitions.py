@@ -85,6 +85,8 @@ class TransitionsScreen(BBSScreen):
         "transitions-dir": "folder holding your transition clips and static.mp4",
         "available-list": "clips found on disk that will NOT be used",
         "selected-list": "the pool random transitions are drawn from",
+        "add-all-btn": "move every available clip into the pool",
+        "clear-all-btn": "empty the pool; no random transitions will be inserted",
         "transition-prob": "chance of a transition between clips: 0.0 never, 1.0 always",
         "transition-cooldown": "do not repeat a transition within the last N picks (0 = off)",
     }
@@ -123,9 +125,11 @@ class TransitionsScreen(BBSScreen):
                 with Vertical(classes="pane"):
                     yield Static("AVAILABLE", classes="bbs-section")
                     yield OptionList(id="available-list", classes="pane-list")
+                    yield Button("Add all >>", id="add-all-btn", classes="pane-btn")
                 with Vertical(classes="pane"):
                     yield Static("SELECTED", classes="bbs-section")
                     yield OptionList(id="selected-list", classes="pane-list")
+                    yield Button("<< Clear all", id="clear-all-btn", classes="pane-btn")
 
             with Horizontal(classes="bbs-row"):
                 yield Label("Prob ")
@@ -238,6 +242,12 @@ class TransitionsScreen(BBSScreen):
             self._load(event.value.strip() or _resolve_transitions_path())
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "add-all-btn":
+            self.action_select_all()
+            return
+        if event.button.id == "clear-all-btn":
+            self.action_select_none()
+            return
         if event.button.id == "back-btn":
             self.app.pop_screen()
         elif event.button.id == "next-btn":
