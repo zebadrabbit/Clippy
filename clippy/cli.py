@@ -40,6 +40,19 @@ def parse_args() -> argparse.Namespace:
 
     # Window and selection
     g_window = p.add_argument_group("Window & selection")
+    g_headless = p.add_argument_group("Automation")
+    g_headless.add_argument(
+        "--headless",
+        action="store_true",
+        help="Unattended run: implies -y, no colour, no banner, never prompts",
+    )
+    g_headless.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Print a machine-readable result document instead of a summary",
+    )
+
     p.add_argument(
         "--profile",
         help="Use a named profile from clippy.yaml (see `clippy profile`)",
@@ -320,4 +333,8 @@ def parse_args() -> argparse.Namespace:
     )
     g_misc.add_argument("--version", action="version", version=f"Clippy {__version__}")
 
-    return p.parse_args()
+    args = p.parse_args()
+    if getattr(args, "headless", False):
+        # Nothing may block waiting for a human.
+        args.yes = True
+    return args

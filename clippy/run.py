@@ -49,6 +49,7 @@ import requests
 # Note on optional Discord dependency: we only import discord-related helpers when
 # --discord mode is requested, so Twitch-only flows don't need discord.py installed.
 from clippy import __version__ as CLIPPY_VERSION
+from clippy import exits
 from clippy.banner import show_banner
 from clippy.cli import parse_args
 from clippy.naming import (
@@ -84,6 +85,16 @@ except ImportError:  # pragma: no cover
 
     def enable_windows_vt():  # type: ignore
         return
+
+
+def _fail(message: str, code: int):
+    """Report *message* and exit with a code a scheduler can act on.
+
+    SystemExit(str) prints the message but always exits 1, which makes "nothing
+    matched this week" indistinguishable from "ffmpeg died".
+    """
+    log(message, 5)
+    raise SystemExit(code)
 
 
 def _apply_encoding_preset(encoding, preset_name: str):
@@ -377,10 +388,13 @@ def display_confirmation(args, window):
         # Prompt
         ans = input("Proceed? [Y/n]: ").strip().lower()
         if ans in ("n", "no"):
-            raise SystemExit("Aborted by user")
+            _fail("Aborted by user", exits.ERROR)
     except EOFError:
         # If input is not available, fail safe unless --yes provided
-        raise SystemExit("Confirmation required but no TTY available. Re-run with -y/--yes.")
+        _fail(
+            "Confirmation required but no TTY available. Re-run with -y/--yes " "(or --headless).",
+            exits.USAGE,
+        )
 
 
 def ingest_clips(args, cid, token, window):
@@ -396,7 +410,7 @@ def ingest_clips(args, cid, token, window):
         except ImportError as _imp_err:
             log("Discord mode requires the optional dependency 'discord.py'", 5)
             log("Install it with: pip install discord.py", 1)
-            raise SystemExit(_imp_err)
+            _fail(str(_imp_err), exits.USAGE)
         try:
             import clippy.config as _cfg
 
@@ -407,8 +421,9 @@ def ingest_clips(args, cid, token, window):
             _discord_limit = 200
         ch_id = args.discord_channel_id or _discord_channel_id
         if not ch_id:
-            raise SystemExit(
-                "Discord mode requires --discord-channel-id or clippy.yaml discord.channel_id"
+            _fail(
+                "Discord mode requires --discord-channel-id or clippy.yaml discord.channel_id",
+                exits.USAGE,
             )
         d_token = load_discord_token(args.discord_token if hasattr(args, "discord_token") else None)
         import asyncio as _asyncio
@@ -427,7 +442,7 @@ def ingest_clips(args, cid, token, window):
         # Dedupe and limit to max_clips
         clip_ids = list(dict.fromkeys(clip_ids))[: args.max_clips]
         if not clip_ids:
-            raise SystemExit("No clip links found in the specified Discord channel")
+            _fail("No clip links found in the specified Discord channel", exits.NO_CLIPS)
         try:
             log("Found " + str(len(clip_ids)) + " clip links", 2)
         except Exception:  # logging; non-fatal
@@ -449,7 +464,7 @@ def ingest_clips(args, cid, token, window):
     else:
         user = resolve_user(args.broadcaster, cid, token)
         if not user:
-            raise SystemExit("Broadcaster not found")
+            _fail("Broadcaster not found", exits.USAGE)
         broadcaster_id = user["id"]
         log("Resolved broadcaster id: " + str(broadcaster_id), 2)
         log("Fetching clips from Helix", 1)
@@ -491,7 +506,7 @@ def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
     if not filtered:
         # If auto-expand is off and we got none, stop here early.
         if not do_auto_expand:
-            raise SystemExit("No clips meet criteria")
+            _fail("No clips meet criteria", exits.NO_CLIPS)
 
     # Auto-expand: extend the start date backwards until we reach target clips or max lookback
     if do_auto_expand and len(filtered) < target_total:
@@ -656,7 +671,7 @@ def run_pipeline(comps, args, window):
             # Filter out missing comps in order
             comps = [c for idx, c in enumerate(comps) if idx in present]
             if not comps:
-                raise SystemExit("No compilations available after concat list generation")
+                _fail("No compilations available after concat list generation", exits.TOOL)
     except Exception:
         # Non-fatal: continue and let stage_two handle any missing files
         pass
@@ -734,7 +749,14 @@ def run_pipeline(comps, args, window):
         log("Wrote manifest: " + _disp_path, 1)
     except (OSError, TypeError, ValueError) as e:
         log("WARN Failed to write manifest: " + str(e), 2)
+        manifest = {
+            "broadcaster": args.broadcaster,
+            "window": {"start": window[0], "end": window[1]},
+            "version": CLIPPY_VERSION,
+            "files": finals,
+        }
     log("Done", 2)
+    return manifest
 
 
 def main():  # noqa: C901
@@ -744,7 +766,8 @@ def main():  # noqa: C901
     # Show banner unless help is requested or non-interactive
     # Peek at argv for -h/--help to avoid printing above help output
     _argv = [a.lower() for a in sys.argv[1:]]
-    if not any(a in ("-h", "--help", "--version") for a in _argv):
+    _quiet = any(a in ("-h", "--help", "--version", "--headless", "--json") for a in _argv)
+    if not _quiet:
         try:
             show_banner()
         except Exception:  # cosmetic; non-fatal
@@ -821,7 +844,12 @@ def main():  # noqa: C901
         display_confirmation(args, window)
 
     cid, secret = load_credentials(args.client_id, args.client_secret)
-    token = get_app_access_token(cid, secret)
+    try:
+        token = get_app_access_token(cid, secret)
+    except RuntimeError as exc:
+        # Wrong or revoked client id/secret: worth waking someone for, unlike an
+        # empty week.
+        _fail(str(exc), exits.AUTH)
 
     # Save credentials to .env if requested
     if getattr(args, "save_env", False):
@@ -851,13 +879,17 @@ def main():  # noqa: C901
     target_duration_secs = target_duration_min * 60 if target_duration_min > 0 else 0
     comps = create_compilations_from(rows, target_duration_secs=target_duration_secs)
 
-    run_pipeline(comps, args, window)
+    return run_pipeline(comps, args, window)
 
 
-def _run_with_shutdown(fn) -> None:
-    """Run *fn*, converting Ctrl-C into a cooperative pipeline shutdown."""
+def _run_with_shutdown(fn):
+    """Run *fn*, converting Ctrl-C into a cooperative pipeline shutdown.
+
+    Returns whatever *fn* returned, or raises SystemExit(INTERRUPTED) so an
+    unattended caller can tell a cancelled run from a finished one.
+    """
     try:
-        fn()
+        return fn()
     except KeyboardInterrupt:
         try:
             from clippy.pipeline import request_shutdown
@@ -871,6 +903,36 @@ def _run_with_shutdown(fn) -> None:
             _log("Interrupted by user. Exiting.")
         except ImportError:
             print("Interrupted by user. Exiting.")
+        raise SystemExit(exits.INTERRUPTED) from None
+
+
+def _headless_requested(argv: list[str]) -> bool:
+    """True if this invocation must never wait for a human.
+
+    Checked before argparse runs, because the banner and colour setup happen
+    first and both want to know.
+    """
+    return "--headless" in argv
+
+
+def _emit_json(result: Optional[dict], code: int) -> None:
+    """Print the machine-readable result document.
+
+    Always a complete document, even on failure: a scheduler should be able to
+    parse one shape regardless of outcome.
+    """
+    import json as _json
+
+    payload = {
+        "status": exits.name(code),
+        "exit_code": code,
+        "files": (result or {}).get("files", []),
+        "broadcaster": (result or {}).get("broadcaster"),
+        "window": (result or {}).get("window"),
+        "compilations": len((result or {}).get("files", []) or []),
+        "version": CLIPPY_VERSION,
+    }
+    print(_json.dumps(payload, indent=2))
 
 
 def _is_first_run() -> bool:
@@ -958,7 +1020,26 @@ def console_main(argv: Optional[list[str]] = None) -> None:
         except Exception:
             pass
 
-    _run_with_shutdown(main)
+    headless = _headless_requested(args)
+    want_json = "--json" in args
+    if headless:
+        # Colour codes and the banner are noise in a log file or a mail body.
+        os.environ.setdefault("NO_COLOR", "1")
+
+    result: Optional[dict] = None
+    code = exits.OK
+    try:
+        result = _run_with_shutdown(main)
+    except SystemExit as exc:
+        raw = exc.code
+        code = raw if isinstance(raw, int) else (exits.OK if raw is None else exits.ERROR)
+        if isinstance(raw, str):
+            # A message-only exit from somewhere not yet converted to a code.
+            print(raw, file=sys.stderr)
+    if want_json:
+        _emit_json(result, code)
+    if code:
+        raise SystemExit(code)
 
 
 if __name__ == "__main__":  # pragma: no cover

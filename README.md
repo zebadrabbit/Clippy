@@ -217,6 +217,44 @@ transitions/
 `clippy profile` offers to create the folder for you. Nothing needs moving to
 adopt this: a flat `transitions/` folder keeps working exactly as before.
 
+## Unattended runs
+
+For cron, a scheduler or CI:
+
+```bash
+clippy --headless --profile theflood --json
+```
+
+`--headless` never waits for input: it implies `-y`, drops colour and the
+banner, and fails rather than prompting. `--json` prints one result document,
+whatever the outcome:
+
+```json
+{
+  "status": "ok",
+  "exit_code": 0,
+  "files": ["theflood_2025-07-01_to_2025-07-07_part1.mp4"],
+  "broadcaster": "theflood",
+  "compilations": 1,
+  "version": "0.6.0"
+}
+```
+
+Exit codes let a job react without reading the log:
+
+| Code | Meaning |
+|---|---|
+| `0` | Built at least one compilation |
+| `1` | Unexpected failure |
+| `2` | Bad invocation or configuration (unknown channel, missing setup) |
+| `3` | Ran fine, nothing matched — an empty week, or the min-views filter |
+| `4` | Credentials missing or rejected |
+| `5` | ffmpeg or yt-dlp failed |
+| `130` | Interrupted |
+
+`3` is deliberately distinct from `1`: a nightly job should shrug at a quiet
+week and alert on everything else.
+
 ## CLI Reference
 
 Help is grouped into logical sections:
@@ -242,6 +280,8 @@ Key flags:
 | `--nvenc-preset` | NVENC encoder preset (slow, medium, fast, etc.) |
 | `--quality` | Quality tier (low, medium, high, max) |
 | `--format` | Container format (mp4, mkv) |
+| `--headless` | Unattended: implies `-y`, no colour, no banner, never prompts |
+| `--json` | Print a machine-readable result document |
 | `--profile` | Use a named profile from `clippy.yaml` |
 | `--list-profiles` | List defined profiles and exit |
 | `--save-env` | Save credentials to `.env` for future runs |

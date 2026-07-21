@@ -17,6 +17,15 @@
     way back to the base config without editing the file by hand.
   - Precedence: `clippy.yaml` → profile → CLI flags.
 
+- Feature — Unattended runs: `--headless` and `--json`
+  - `--headless` implies `-y`, drops colour and the banner, and never waits for input.
+    `--json` prints one result document regardless of outcome, so a scheduler always has
+    the same shape to parse.
+  - Exit codes now distinguish outcomes instead of every failure being 1: nothing matched
+    (3) is separate from bad configuration (2), rejected credentials (4), an ffmpeg or
+    yt-dlp failure (5), and an interrupt (130). A nightly job can shrug at a quiet week
+    and alert on the rest.
+
 - Feature — Profile selection in the TUI
   - The Source step now picks the profile for the run. It applies before anything else
     reads config, so Clip Settings, Transitions and the rest prefill from that
