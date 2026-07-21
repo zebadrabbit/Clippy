@@ -109,3 +109,34 @@ discord:
 # Notes:
 # - Use TRANSITIONS_DIR env var to point to a custom transitions folder.
 # - Set TRANSITIONS_DIR to a custom directory if your transitions are not under ./transitions.
+
+# ---------------------------------------------------------------------------
+# Profiles (optional) — per-streamer defaults and branding
+# ---------------------------------------------------------------------------
+# A profile is a partial copy of this file that is merged over the top level,
+# so it can override anything above: the channel, intro/outro clips, clip
+# counts, encoding. Anything a profile does not mention keeps the value above.
+#
+#   clippy profile            create or edit one (short, no credentials)
+#   clippy profile use NAME   make NAME the default
+#   clippy --list-profiles    show what is defined
+#   clippy --profile NAME     use NAME for a single run
+#
+# Precedence: this file  ->  profile  ->  CLI flags.
+#
+# active_profile: theflood
+#
+# profiles:
+#   theflood:
+#     identity:
+#       broadcaster: theflood
+#     assets:
+#       intro: [intro_theflood.mp4]
+#       outro: [outro_theflood.mp4]
+#     selection:
+#       clips_per_compilation: 20
+#   someoneelse:
+#     identity:
+#       broadcaster: someoneelse
+#     assets:
+#       intro: [other_intro.mp4]

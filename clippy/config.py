@@ -132,6 +132,23 @@ def set_config(cfg: ClippyConfig) -> None:
     globals().update(cfg.to_flat_dict())
 
 
+def reload_with_profile(name: Optional[str]) -> ClippyConfig:
+    """Re-read clippy.yaml with *name* applied and rebuild the typed config.
+
+    The config module is imported long before argv is parsed, so ``--profile``
+    cannot be honoured at import time. Re-running the merge is simpler and more
+    predictable than trying to patch the already-built config section by section.
+    """
+    global _merged
+    from .config_loader import load_merged_config
+
+    _merged = load_merged_config(profile=name)
+    globals().update(_merged)
+    cfg = ClippyConfig.from_merged_dict(_merged)
+    set_config(cfg)
+    return cfg
+
+
 def refresh_from_globals() -> ClippyConfig:
     """Rebuild the typed config singleton from the current module-level globals.
 

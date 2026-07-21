@@ -128,6 +128,14 @@ def apply_cli_overrides(args):
 
     import clippy.config as _cfg
 
+    # A profile is a layer under the CLI flags: re-read the file with it applied
+    # first, then let the explicit flags below win over whatever it set.
+    if getattr(args, "profile", None):
+        try:
+            _cfg.reload_with_profile(args.profile)
+        except Exception as exc:  # a bad profile must not end the run
+            log(f"Could not apply profile {args.profile!r}: {exc}", 5)
+
     cfg = _cfg.get_config()
 
     # Discord prefill: borrow the configured broadcaster for nicer summaries.
@@ -908,6 +916,26 @@ def console_main(argv: Optional[list[str]] = None) -> None:
 
     if cmd == "version":
         print(f"Clippy {CLIPPY_VERSION}")
+        return
+
+    if "--list-profiles" in args:
+        from clippy.config_loader import list_profiles
+        from clippy.log import get_logger
+
+        get_logger()
+        names = list_profiles()
+        if not names:
+            print("No profiles defined. Run 'clippy profile' to create one.")
+        else:
+            print("Profiles in clippy.yaml (use --profile <name>):\n")
+            for name in names:
+                print(f"  {name}")
+        return
+
+    if cmd in ("profile", "profiles"):
+        from clippy.wizard import profile_wizard
+
+        profile_wizard(args[1:])
         return
 
     if "--list-presets" in args:

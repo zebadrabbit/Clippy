@@ -75,6 +75,7 @@ The `clippy` command has three entry points:
 
 ```powershell
 clippy setup     # guided first-time setup (credentials + defaults)
+clippy profile   # per-streamer defaults and branding (short; no credentials)
 clippy doctor    # check your setup (ffmpeg, credentials, transitions, ...)
 clippy tui       # interactive TUI
 clippy           # the CLI (see clippy --help)
@@ -124,7 +125,7 @@ What happens: Clippy reads messages from the channel, extracts Twitch clip links
 
 ## Configuration
 
-- Precedence: CLI flags > Environment (`.env`) > `clippy.yaml` > built-in defaults.
+- Precedence: CLI flags > Environment (`.env`) > profile > `clippy.yaml` > built-in defaults.
 - The TUI and setup wizard create `clippy.yaml` and `.env` for you. A commented example remains in `clippy.yaml.example`.
 
 Key env vars:
@@ -136,6 +137,38 @@ Key env vars:
 | `DISCORD_TOKEN` | Discord bot token (for Discord mode) |
 | `DISCORD_CHANNEL_ID` | Discord channel to read clip links from |
 | `TRANSITIONS_DIR` | Custom transitions folder path |
+
+## Profiles
+
+If you build compilations for more than one channel, a profile keeps each one's
+branding and defaults together:
+
+```powershell
+clippy profile              # create or edit a profile (short; no credentials)
+clippy profile use theflood # make it the default
+clippy --list-profiles      # what is defined
+clippy --profile someoneelse   # use another one for a single run
+```
+
+A profile is a partial `clippy.yaml` merged over the top level, so it can set
+anything: the channel, its own intro/outro clips, clip counts, encoding.
+Anything it does not mention falls back to the shared values.
+
+```yaml
+active_profile: theflood
+profiles:
+  theflood:
+    identity:
+      broadcaster: theflood
+    assets:
+      intro: [intro_theflood.mp4]
+      outro: [outro_theflood.mp4]
+    selection:
+      clips_per_compilation: 20
+```
+
+Precedence is `clippy.yaml` → profile → CLI flags, so `--clips 5` still wins
+over whatever the profile says.
 
 ## CLI Reference
 
@@ -162,6 +195,8 @@ Key flags:
 | `--nvenc-preset` | NVENC encoder preset (slow, medium, fast, etc.) |
 | `--quality` | Quality tier (low, medium, high, max) |
 | `--format` | Container format (mp4, mkv) |
+| `--profile` | Use a named profile from `clippy.yaml` |
+| `--list-profiles` | List defined profiles and exit |
 | `--save-env` | Save credentials to `.env` for future runs |
 | `-y` / `--yes` | Auto-confirm settings |
 

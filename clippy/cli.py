@@ -40,6 +40,16 @@ def parse_args() -> argparse.Namespace:
 
     # Window and selection
     g_window = p.add_argument_group("Window & selection")
+    p.add_argument(
+        "--profile",
+        help="Use a named profile from clippy.yaml (see `clippy profile`)",
+    )
+    p.add_argument(
+        "--list-profiles",
+        action="store_true",
+        help="List the profiles defined in clippy.yaml and exit",
+    )
+
     g_window.add_argument(
         "--start",
         help="Start date (MM/DD/YYYY, YYYY-MM-DD, or RFC3339). A bare date means 00:00:00Z.",

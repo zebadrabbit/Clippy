@@ -703,3 +703,148 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("\nSetup cancelled by user.")
+
+
+# ---------------------------------------------------------------------------
+# Profile wizard — per-streamer defaults and branding
+# ---------------------------------------------------------------------------
+
+
+def _read_yaml_config(path: Path) -> dict:
+    """Load clippy.yaml, or an empty document if it is missing/unreadable."""
+    if not path.is_file():
+        return {}
+    try:
+        import yaml
+
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        print(THEME.error(f"Could not read {path}: {exc}"))
+        return {}
+
+
+def _write_yaml_config(path: Path, data: dict) -> bool:
+    try:
+        import yaml
+
+        path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        return True
+    except Exception as exc:
+        print(THEME.error(f"Could not write {path}: {exc}"))
+        return False
+
+
+def _edit_profile(existing: dict) -> dict:
+    """Ask only the things that differ per streamer. Enter keeps the current value."""
+    identity = dict(existing.get("identity") or {})
+    assets = dict(existing.get("assets") or {})
+    selection = dict(existing.get("selection") or {})
+
+    print("\n" + THEME.section("Channel"))
+    broadcaster = _prompt_str("Broadcaster login", identity.get("broadcaster") or None)
+    identity["broadcaster"] = broadcaster
+
+    print("\n" + THEME.section("Branding") + THEME.text("  (filenames inside transitions/)"))
+    changed, intro = _prompt_list_csv("Intro clip(s)", assets.get("intro"))
+    if changed or intro:
+        assets["intro"] = intro
+    changed, outro = _prompt_list_csv("Outro clip(s)", assets.get("outro"))
+    if changed or outro:
+        assets["outro"] = outro
+    changed, transitions = _prompt_list_csv("Transition clip(s)", assets.get("transitions"))
+    if changed or transitions:
+        assets["transitions"] = transitions
+
+    print("\n" + THEME.section("Defaults"))
+    selection["clips_per_compilation"] = _prompt_int(
+        "Clips per compilation", int(selection.get("clips_per_compilation") or 12), 1
+    )
+    selection["compilations"] = _prompt_int(
+        "Compilations per run", int(selection.get("compilations") or 2), 1
+    )
+    selection["min_views"] = _prompt_int("Minimum views", int(selection.get("min_views") or 0), 0)
+
+    out = dict(existing)
+    out["identity"] = identity
+    if assets:
+        out["assets"] = assets
+    out["selection"] = selection
+    return out
+
+
+def _print_profiles(profiles: dict, active: Optional[str]) -> list[str]:
+    names = list(profiles)
+    print("\n" + THEME.section("Profiles in clippy.yaml"))
+    if not names:
+        print(THEME.text("  (none yet)"))
+        return names
+    for i, name in enumerate(names, 1):
+        who = (profiles[name].get("identity") or {}).get("broadcaster", "?")
+        mark = THEME.success("  * active") if name == active else ""
+        print(THEME.text(f"  [{i}] {name}  ({who}){mark}"))
+    return names
+
+
+def profile_wizard(argv: Optional[list[str]] = None) -> None:
+    """Create, edit and switch profiles without the full setup march.
+
+    Usage:
+        clippy profile            list, then pick one to edit
+        clippy profile new        create one
+        clippy profile use NAME   make NAME the active profile
+    """
+    _enable_windows_vt()
+    argv = list(argv or [])
+    path = Path("clippy.yaml")
+    data = _read_yaml_config(path)
+    profiles = dict(data.get("profiles") or {})
+    active = data.get("active_profile")
+
+    sub = argv[0].lower() if argv else ""
+    target = argv[1] if len(argv) > 1 else None
+
+    # clippy profile use NAME
+    if sub == "use":
+        name = target or _prompt_str("Profile to activate", active)
+        if name not in profiles:
+            print(THEME.error(f"No profile named {name!r}. Known: {', '.join(profiles) or 'none'}"))
+            return
+        data["active_profile"] = name
+        if _write_yaml_config(path, data):
+            print(THEME.success(f"Active profile is now {name}."))
+        return
+
+    names = _print_profiles(profiles, active)
+
+    if sub in ("new", "add"):
+        name = target or _prompt_str("New profile name")
+    elif sub in ("edit", "") and names:
+        choice = _prompt_str(
+            "Number to edit, or a new name (Enter to cancel)", "" if len(names) != 1 else names[0]
+        )
+        if not choice:
+            return
+        name = (
+            names[int(choice) - 1]
+            if choice.isdigit() and 1 <= int(choice) <= len(names)
+            else choice
+        )
+    else:
+        name = target or _prompt_str("New profile name")
+
+    if not name:
+        return
+
+    print("\n" + THEME.section(f"Editing profile: {name}"))
+    print(THEME.text("Press Enter to keep the current value. '-' clears a list.\n"))
+    profiles[name] = _edit_profile(profiles.get(name) or {})
+    data["profiles"] = profiles
+
+    if active != name and _prompt_yes_no(
+        f"Make {name} the active profile?", default_yes=not active
+    ):
+        data["active_profile"] = name
+
+    if _write_yaml_config(path, data):
+        print(THEME.success(f"\nSaved profile {name} to {path}."))
+        print(THEME.text(f"Use it for one run with:  clippy --profile {name}"))

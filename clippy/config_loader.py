@@ -144,10 +144,62 @@ def _coerce_dict_float(v: Any, default: dict[str, float]) -> dict[str, float]:
     return default
 
 
+#: Env var that selects a profile, so the choice survives into a subprocess.
+PROFILE_ENV = "CLIPPY_PROFILE"
+
+
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Overlay wins, but nested sections merge rather than replace wholesale.
+
+    A profile that only sets ``assets.intro`` must not wipe ``assets.static``.
+    """
+    out = dict(base)
+    for key, value in (overlay or {}).items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def list_profiles(file_path: str | None = None) -> list[str]:
+    """Names of the profiles defined in clippy.yaml, in file order."""
+    data = _load_yaml(Path(file_path or DEFAULT_CONFIG_FILE))
+    profiles = data.get("profiles") if isinstance(data, dict) else None
+    return [str(k) for k in profiles] if isinstance(profiles, dict) else []
+
+
+def resolve_profile_name(
+    data: dict, explicit: str | None = None, env: dict[str, str] | None = None
+) -> str | None:
+    """Which profile applies: explicit argument, then env, then the file's default."""
+    env = env if env is not None else os.environ
+    for candidate in (explicit, env.get(PROFILE_ENV), data.get("active_profile")):
+        if candidate:
+            return str(candidate)
+    return None
+
+
+def apply_profile(data: dict, name: str | None) -> dict:
+    """Merge ``profiles[name]`` over the top-level config.
+
+    A profile is just a partial clippy.yaml, so per-streamer branding is written
+    exactly the way the main config is.
+    """
+    if not name or not isinstance(data, dict):
+        return data
+    profiles = data.get("profiles")
+    if not isinstance(profiles, dict) or name not in profiles:
+        return data
+    overlay = profiles.get(name)
+    return _deep_merge(data, overlay) if isinstance(overlay, dict) else data
+
+
 def load_merged_config(
     defaults: dict[str, Any] | None = None,
     env: dict[str, str] | None = None,
     file_path: str | None = None,
+    profile: str | None = None,
 ) -> dict[str, Any]:
     """Merge config from YAML (if exists) and environment onto defaults.
 
@@ -158,6 +210,9 @@ def load_merged_config(
     env = env or os.environ
     cfg_path = Path(file_path or DEFAULT_CONFIG_FILE)
     data = _load_yaml(cfg_path)
+    # Profile overrides sit between the file and the environment.
+    _profile = resolve_profile_name(data if isinstance(data, dict) else {}, profile, env)
+    data = apply_profile(data, _profile)
 
     # Decompose structured sections to flat keys matching existing config module globals
     base = defaults if defaults is not None else DEFAULTS
