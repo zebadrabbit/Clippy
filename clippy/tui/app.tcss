@@ -1,7 +1,9 @@
-/* Clippy TUI — 90s BBS.
+/* Clippy TUI — 90s BBS, dark mode.
  *
  * Palette is the 16 ANSI colours only, so the board inherits whatever theme the
- * user's terminal already uses instead of fighting it.
+ * user's terminal already uses instead of fighting it. Background stays black:
+ * a full-screen ansi_blue wash renders as a retina-searing purple on plenty of
+ * terminal themes, so colour is carried by the text and the bars, not the page.
  *
  * Density rule: nothing here may add vertical space that is not load-bearing.
  * Every screen has to fit in 80x24, so margins are 0, inputs are 1 row with no
@@ -9,7 +11,7 @@
  */
 
 Screen {
-    background: ansi_blue;
+    background: ansi_black;
     color: ansi_bright_white;
     scrollbar-size: 0 0;
 }
@@ -38,16 +40,18 @@ Header, Footer {
     dock: bottom;
     height: 1;
     offset: 0 -1;
-    background: ansi_blue;
+    background: ansi_black;
     color: ansi_bright_yellow;
     padding: 0 1;
 }
 
+/* The title bar is the one bright band. The key bar stays dark so the screen
+ * has a single accent instead of glowing top and bottom. */
 .bbs-keys {
     dock: bottom;
     height: 1;
-    background: ansi_cyan;
-    color: ansi_black;
+    background: ansi_black;
+    color: ansi_cyan;
     padding: 0 1;
 }
 
@@ -102,25 +106,28 @@ Label {
 
 /* Inputs default to 1fr, which makes the first field on a row swallow the
  * whole line and push its neighbours off screen. Width is always explicit. */
+/* On a black page an ansi_black field is invisible, so entry fields sit on the
+ * grey and brighten on focus. */
 Input {
     height: 1;
     width: 18;
     border: none;
-    background: ansi_black;
-    color: ansi_bright_green;
+    background: ansi_bright_black;
+    color: ansi_bright_white;
     padding: 0 1;
 }
 
 Input:focus {
-    background: ansi_bright_black;
-    color: ansi_bright_white;
+    background: ansi_cyan;
+    color: ansi_black;
+    text-style: bold;
 }
 
 /* BBS checkboxes: [X] label, one row, no chrome. */
 Checkbox {
     height: 1;
     border: none;
-    background: ansi_blue;
+    background: ansi_black;
     padding: 0;
 }
 
@@ -132,13 +139,13 @@ Checkbox:focus {
 RadioSet {
     height: auto;
     border: none;
-    background: ansi_blue;
+    background: ansi_black;
     padding: 0;
 }
 
 RadioButton {
     height: 1;
-    background: ansi_blue;
+    background: ansi_black;
     padding: 0 2 0 0;
 }
 
@@ -147,13 +154,14 @@ RadioButton {
 Select {
     height: 1;
     border: none;
-    background: ansi_black;
-    color: ansi_bright_green;
+    background: ansi_bright_black;
+    color: ansi_bright_white;
 }
 
 Select:focus {
-    background: ansi_bright_black;
-    color: ansi_bright_white;
+    background: ansi_cyan;
+    color: ansi_black;
+    text-style: bold;
 }
 
 SelectCurrent {
