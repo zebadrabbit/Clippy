@@ -17,6 +17,21 @@
     way back to the base config without editing the file by hand.
   - Precedence: `clippy.yaml` → profile → CLI flags.
 
+- Fix — Discord ingestion dropped clips it should have collected
+  - Links shared from a phone (`m.twitch.tv/...`) matched nothing and were silently
+    skipped, as were embedded-player links (`clips.twitch.tv/embed?clip=...`), whose ID
+    was read as the literal word "embed".
+  - Clip IDs came back in pattern order rather than the order they appear in the
+    channel, so a curated list was silently reordered before the top N were taken.
+  - A message whose link is only in an embed — how a reposting bot usually posts —
+    contributed nothing, because only message text and attachments were scanned.
+  - A failure inside the reader (unreachable channel, missing permissions, a dropped
+    connection mid-scan) was reported by discord.py to its own error handler and then
+    lost, so the run said "No clip links found" instead of what actually went wrong.
+    Failures now propagate.
+  - The module no longer imports discord.py at module scope, so the URL parser works
+    (and is tested) without the optional dependency. Coverage 0% -> 94%.
+
 - Feature — Windows executable and `clippy deps`
   - Releases now carry a single `clippy.exe`, built by CI and smoke-tested before it is
     attached. No Python install required; the TUI and packaged assets are inside it.

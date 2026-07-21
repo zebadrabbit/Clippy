@@ -14,28 +14,74 @@ from __future__ import annotations
 
 import os
 import re
-from typing import List, Tuple
+from typing import Iterable, List, Optional, Tuple
 
-import discord
+# discord is imported lazily inside fetch_recent_clip_ids: extracting clip IDs
+# from text has no business requiring the library, and keeping it out of module
+# scope means the parser can be used (and tested) without the optional extra.
 
-_TWITCH_CLIP_RE = re.compile(r"https?://clips\.twitch\.tv/([\w-]+)", re.IGNORECASE)
-_TWITCH_URL_ID_RE = re.compile(r"https?://(?:www\.)?twitch\.tv/[^/]+/clip/([\w-]+)", re.IGNORECASE)
+#: One pattern, scanned in document order, covering the forms people actually
+#: paste into a channel:
+#:   https://clips.twitch.tv/SomeClip
+#:   https://clips.twitch.tv/embed?clip=SomeClip
+#:   https://www.twitch.tv/someone/clip/SomeClip
+#:   https://m.twitch.tv/someone/clip/SomeClip      <- phone shares
+#: The embed branch comes first, or the plain branch would capture "embed" as
+#: the clip ID.
+_CLIP_RE = re.compile(
+    r"https?://clips\.twitch\.tv/embed\?clip=(?P<embed>[\w-]+)"
+    r"|https?://clips\.twitch\.tv/(?P<direct>[\w-]+)"
+    r"|https?://(?:[\w-]+\.)?twitch\.tv/[^/\s]+/clip/(?P<channel>[\w-]+)",
+    re.IGNORECASE,
+)
+
+
+def _dedupe(ids: Iterable[str]) -> List[str]:
+    """Unique IDs, first occurrence wins."""
+    seen: set[str] = set()
+    out: List[str] = []
+    for value in ids:
+        if value and value not in seen:
+            seen.add(value)
+            out.append(value)
+    return out
 
 
 def extract_clip_ids_from_text(text: str) -> List[str]:
-    ids: List[str] = []
-    for m in _TWITCH_CLIP_RE.finditer(text or ""):
-        ids.append(m.group(1))
-    for m in _TWITCH_URL_ID_RE.finditer(text or ""):
-        ids.append(m.group(1))
-    # Deduplicate preserving order
-    seen = set()
-    out: List[str] = []
-    for i in ids:
-        if i and i not in seen:
-            seen.add(i)
-            out.append(i)
-    return out
+    """Clip IDs found in *text*, in the order they appear.
+
+    Document order matters: the channel is a curated list, and when it holds
+    more clips than a compilation needs, the ones nearest the top win.
+    """
+    found = (
+        match.group("embed") or match.group("direct") or match.group("channel")
+        for match in _CLIP_RE.finditer(text or "")
+    )
+    return _dedupe(found)
+
+
+def _ids_in_message(message) -> List[str]:
+    """Every clip ID a single message contributes.
+
+    Covers the message text, any attachment URLs, and embeds -- a bot that
+    reposts clips often puts the link only in an embed, leaving ``content``
+    empty, so scanning text alone would silently miss those.
+    """
+    found: List[str] = []
+    found.extend(extract_clip_ids_from_text(getattr(message, "content", "") or ""))
+
+    for attachment in getattr(message, "attachments", None) or []:
+        url = getattr(attachment, "url", None)
+        if url:
+            found.extend(extract_clip_ids_from_text(url))
+
+    for embed in getattr(message, "embeds", None) or []:
+        for part in ("url", "title", "description"):
+            value = getattr(embed, part, None)
+            if isinstance(value, str):
+                found.extend(extract_clip_ids_from_text(value))
+
+    return found
 
 
 async def fetch_recent_clip_ids(
@@ -50,6 +96,8 @@ async def fetch_recent_clip_ids(
     - channel_id: numeric ID of the channel to read
     - limit: number of messages to scan
     """
+    import discord
+
     intents = discord.Intents.default()
     intents.message_content = True  # Required to read message content
 
@@ -60,6 +108,11 @@ async def fetch_recent_clip_ids(
             self._limit = limit
             self.ids: List[str] = []
             self.channel_display: str = f"channel:{channel_id}"
+            # discord.py routes exceptions raised in an event handler to
+            # on_error, which logs and carries on -- so a failure in on_ready
+            # would otherwise surface as "no clips found" rather than the real
+            # reason. Stash it and re-raise once start() returns.
+            self.failure: Optional[BaseException] = None
 
         async def on_ready(self):
             channel = self.get_channel(self._channel_id)
@@ -67,8 +120,9 @@ async def fetch_recent_clip_ids(
                 try:
                     channel = await self.fetch_channel(self._channel_id)
                 except Exception as e:  # wrap any discord/network error
+                    self.failure = RuntimeError(f"Failed to fetch channel: {e}")
                     await self.close()
-                    raise RuntimeError(f"Failed to fetch channel: {e}")
+                    return
             # Build a friendly display name for logs
             try:
                 name = getattr(channel, "name", None) or str(self._channel_id)
@@ -80,29 +134,24 @@ async def fetch_recent_clip_ids(
             except AttributeError:
                 self.channel_display = f"channel:{self._channel_id}"
             if not hasattr(channel, "history"):
+                self.failure = RuntimeError(
+                    "Channel does not support history() (must be a text channel)"
+                )
                 await self.close()
-                raise RuntimeError("Channel does not support history() (must be TextChannel)")
+                return
             try:
                 async for message in channel.history(limit=self._limit):
-                    self.ids.extend(
-                        extract_clip_ids_from_text(getattr(message, "content", "") or "")
-                    )
-                    for att in getattr(message, "attachments", []) or []:
-                        if getattr(att, "url", None):
-                            self.ids.extend(extract_clip_ids_from_text(att.url))
+                    self.ids.extend(_ids_in_message(message))
+            except Exception as e:  # network drop mid-scan, permissions, ...
+                self.failure = RuntimeError(f"Failed to read channel history: {e}")
             finally:
                 await self.close()
 
     client = _Collector(intents=intents, channel_id=channel_id, limit=limit)
     await client.start(token, reconnect=False)
-    # Deduplicate preserving order
-    seen = set()
-    out: List[str] = []
-    for i in client.ids:
-        if i and i not in seen:
-            seen.add(i)
-            out.append(i)
-    return out, client.channel_display
+    if client.failure is not None:
+        raise client.failure
+    return _dedupe(client.ids), client.channel_display
 
 
 def load_discord_token(arg_token: str | None = None) -> str:
@@ -128,6 +177,8 @@ def load_discord_token(arg_token: str | None = None) -> str:
                         return v.strip().strip('"').strip("'")
         except OSError:
             pass
-    raise SystemExit(
-        "Missing Discord token: set DISCORD_TOKEN in env or .env, or provide --discord-token"
-    )
+    from clippy import exits
+    from clippy.utils import log
+
+    log("Missing Discord token: set DISCORD_TOKEN in env or .env, or provide --discord-token", 5)
+    raise SystemExit(exits.AUTH)
