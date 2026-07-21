@@ -95,6 +95,8 @@ It is styled as a 90s BBS and fits an 80x24 terminal — no maximizing required.
 Per-field guidance appears on the status line at the bottom for whichever field
 has focus, rather than as paragraphs under every input.
 
+- **Source** also picks the profile for the run, so the steps that follow prefill
+  from that streamer's defaults and branding.
 - **Clip Settings** picks the date range from presets (Today, This week, Last
   month, Last year, Everything, ...) with a *Custom dates* option for an exact
   window.

@@ -36,6 +36,10 @@ class ReviewScreen(BBSScreen):
         source = wf.get("source", "twitch")
         table.add_row("Source", source.title())
 
+        # Profile: worth showing, since it silently changes the channel and branding.
+        profile = wf.get("profile") or "default"
+        table.add_row("Profile", profile)
+
         # Credentials — show Discord channel if applicable
         creds = wf.get("credentials", {})
         if source == "discord":

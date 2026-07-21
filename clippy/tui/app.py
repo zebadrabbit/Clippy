@@ -50,6 +50,24 @@ class ClippyApp(App):
         if len(self.screen_stack) > 1:
             self.pop_screen()
 
+    def apply_profile(self, name: str | None) -> None:
+        """Switch the config to *name* before any screen prefills from it.
+
+        Four screens read ``app.config`` when they compose, so the swap has to
+        happen on step 1 and ``app.config`` has to be replaced -- it is captured
+        once at construction and would otherwise still describe the old profile.
+        """
+        import clippy.config as cfg
+
+        if name:
+            try:
+                cfg.reload_with_profile(name)
+            except Exception:
+                # A bad profile should not strand someone in the wizard.
+                pass
+        self.config = cfg.get_config()
+        self.workflow["profile"] = name or ""
+
     def advance_to(self, screen_name: str, **kwargs) -> None:
         """Navigate to the next screen in the workflow."""
         from clippy.tui.screens.audio import AudioScreen

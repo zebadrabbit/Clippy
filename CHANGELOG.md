@@ -17,6 +17,11 @@
     way back to the base config without editing the file by hand.
   - Precedence: `clippy.yaml` → profile → CLI flags.
 
+- Feature — Profile selection in the TUI
+  - The Source step now picks the profile for the run. It applies before anything else
+    reads config, so Clip Settings, Transitions and the rest prefill from that
+    streamer's defaults and branding. The Review step shows which profile is in effect.
+
 - Feature — TUI redesigned as a 90s BBS that fits 80x24
   - The screens previously needed a maximized window: Clip Settings and Credentials each
     wanted 37 rows of content in a 24-row viewport because every field carried a help

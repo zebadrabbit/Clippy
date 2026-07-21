@@ -133,16 +133,11 @@ class TestReloadWithProfile:
     def test_switching_rebuilds_the_typed_config(self, config_file, monkeypatch):
         import clippy.config as cfg
 
-        original = cfg._merged
-        try:
-            typed = cfg.reload_with_profile("ninja")
-            assert typed.identity.broadcaster == "ninja"
-            assert typed.assets.intro == ["ninja_intro.mp4"]
-            # The legacy module globals track it too.
-            assert cfg.get_config().identity.broadcaster == "ninja"
-        finally:
-            cfg._merged = original
-            cfg.refresh_from_globals()
+        typed = cfg.reload_with_profile("ninja")
+        assert typed.identity.broadcaster == "ninja"
+        assert typed.assets.intro == ["ninja_intro.mp4"]
+        # The legacy module globals track it too.
+        assert cfg.get_config().identity.broadcaster == "ninja"
 
 
 class TestProfileAssetFolders:
@@ -237,28 +232,18 @@ class TestFontSurvivesReload:
     def test_font_stays_resolved_across_a_reload(self, config_file):
         import clippy.config as cfg
 
-        original = cfg._merged
-        try:
-            before = cfg.fontfile
-            assert os.path.isabs(before) and os.path.exists(before)
-            cfg.reload_with_profile("ninja")
-            assert cfg.fontfile == before
-            assert cfg.get_config().assets.fontfile == before
-        finally:
-            cfg._merged = original
-            cfg.refresh_from_globals()
+        before = cfg.fontfile
+        assert os.path.isabs(before) and os.path.exists(before)
+        cfg.reload_with_profile("ninja")
+        assert cfg.fontfile == before
+        assert cfg.get_config().assets.fontfile == before
 
     def test_preflight_is_clean_after_a_reload(self, config_file):
         import clippy.config as cfg
         from clippy.preflight import _check_overlay_font
 
-        original = cfg._merged
-        try:
-            cfg.reload_with_profile("ninja")
-            assert _check_overlay_font() == []
-        finally:
-            cfg._merged = original
-            cfg.refresh_from_globals()
+        cfg.reload_with_profile("ninja")
+        assert _check_overlay_font() == []
 
     def test_an_existing_absolute_font_is_left_alone(self, tmp_path):
         import clippy.config as cfg

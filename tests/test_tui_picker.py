@@ -292,3 +292,129 @@ class TestBulkButtons:
 
         _, app = _drive(steps)
         assert app.workflow["transitions"]["selected_transitions"] == []
+
+
+class TestProfileSelector:
+    """Picking a profile on step 1 must reach every later screen.
+
+    The wizard screens prefill from ``app.config`` when they compose, and the app
+    captures that once at construction -- so the switch has to happen on step 1
+    and has to replace app.config, not just the module singleton.
+    """
+
+    PROFILES = {
+        "identity": {"broadcaster": "basechannel"},
+        "selection": {"clips_per_compilation": 12, "compilations": 2, "min_views": 0},
+        "profiles": {
+            "ninja": {
+                "identity": {"broadcaster": "ninja"},
+                "selection": {"clips_per_compilation": 7},
+            },
+        },
+    }
+
+    @pytest.fixture(autouse=True)
+    def _config(self, tmp_path, monkeypatch):
+        import yaml
+
+        from clippy.config_loader import PROFILE_ENV
+
+        (tmp_path / "clippy.yaml").write_text(
+            yaml.safe_dump(self.PROFILES, sort_keys=False), encoding="utf-8"
+        )
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv(PROFILE_ENV, raising=False)
+        # conftest's _isolate_config_module puts clippy.config back afterwards.
+        yield
+
+    def _run(self, steps):
+        from clippy.tui.app import ClippyApp
+        from clippy.tui.screens.source import SourceScreen
+
+        async def run():
+            app = ClippyApp()
+            async with app.run_test(size=(80, 24)) as pilot:
+                await pilot.pause()
+                screen = SourceScreen()
+                app.push_screen(screen)
+                await pilot.pause()
+                await pilot.pause()
+                return await steps(screen, pilot, app)
+
+        return asyncio.run(run())
+
+    def test_the_builtin_default_is_offered(self):
+        from textual.widgets import Select
+
+        async def steps(screen, pilot, app):
+            return screen.query_one("#profile-select", Select).value
+
+        assert self._run(steps) == "default"
+
+    def test_choosing_one_switches_the_config(self):
+        from textual.widgets import Select
+
+        seen = {}
+
+        async def steps(screen, pilot, app):
+            screen.query_one("#profile-select", Select).value = "ninja"
+            await pilot.pause()
+            screen.query_one("#next-btn").press()
+            await pilot.pause()
+            await pilot.pause()
+            seen["broadcaster"] = app.config.identity.broadcaster
+            seen["clips"] = app.config.selection.clips_per_compilation
+            seen["workflow"] = app.workflow.get("profile")
+
+        self._run(steps)
+        assert seen["broadcaster"] == "ninja"
+        assert seen["clips"] == 7
+        assert seen["workflow"] == "ninja"
+
+    def test_a_later_screen_prefills_from_the_chosen_profile(self):
+        """The whole point: Clip Settings must show the profile's values."""
+        from textual.widgets import Input, Select
+
+        from clippy.tui.screens.clip_settings import ClipSettingsScreen
+
+        seen = {}
+
+        async def steps(screen, pilot, app):
+            screen.query_one("#profile-select", Select).value = "ninja"
+            await pilot.pause()
+            screen.query_one("#next-btn").press()
+            await pilot.pause()
+            await pilot.pause()
+            later = ClipSettingsScreen()
+            app.push_screen(later)
+            await pilot.pause()
+            await pilot.pause()
+            seen["broadcaster"] = later.query_one("#broadcaster", Input).value
+            seen["clips"] = later.query_one("#clips-per-comp", Input).value
+
+        self._run(steps)
+        assert seen["broadcaster"] == "ninja"
+        assert seen["clips"] == "7"
+
+    def test_default_leaves_the_base_config_alone(self):
+        seen = {}
+
+        async def steps(screen, pilot, app):
+            screen.query_one("#next-btn").press()
+            await pilot.pause()
+            await pilot.pause()
+            seen["broadcaster"] = app.config.identity.broadcaster
+
+        self._run(steps)
+        assert seen["broadcaster"] == "basechannel"
+
+    def test_an_unknown_profile_does_not_strand_the_wizard(self):
+        seen = {}
+
+        async def steps(screen, pilot, app):
+            app.apply_profile("no-such-profile")
+            await pilot.pause()
+            seen["config"] = app.config is not None
+
+        self._run(steps)
+        assert seen["config"]
