@@ -996,6 +996,26 @@ def console_main(argv: Optional[list[str]] = None) -> None:
             print("\nRun 'clippy profile' to add one per streamer.")
         return
 
+    if cmd in ("deps", "install-deps"):
+        from clippy.deps import advice, install, is_windows, missing_tools
+
+        _load_env_if_present()
+        if not is_windows():
+            log("Automatic download is Windows-only.", 2)
+            log(advice(), 1)
+            return
+        wanted = [a for a in args[1:] if not a.startswith("-")] or missing_tools()
+        if not wanted:
+            log("ffmpeg and yt-dlp are already available.", 1)
+            return
+        try:
+            install(wanted, log=lambda m: log(m, 1))
+        except Exception as exc:
+            log(str(exc), 5)
+            raise SystemExit(exits.TOOL) from exc
+        log("Done. Run 'clippy doctor' to confirm.", 2)
+        return
+
     if cmd in ("profile", "profiles"):
         from clippy.wizard import profile_wizard
 

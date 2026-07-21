@@ -42,8 +42,8 @@ def _check_binaries() -> List[Issue]:
                 Issue(
                     "error",
                     f"{name} not found ({path!r})",
-                    f"Install ffmpeg (which includes {name}) and make sure it is on your PATH, "
-                    "or drop the executable in ./bin/. Download: https://ffmpeg.org/download.html",
+                    f"Run 'clippy deps' to download {name} into ./bin, or install it yourself "
+                    "and put it on your PATH. Source: https://ffmpeg.org/download.html",
                 )
             )
     if not issues and _cfg.ffmpeg:

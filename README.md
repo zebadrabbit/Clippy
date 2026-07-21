@@ -32,9 +32,28 @@ Turn your Twitch clips into highlight reels — automatically. Clippy pulls clip
 
 ## Install
 
-Clippy needs **Python 3.10+** and **ffmpeg** (which provides `ffprobe`) on your PATH.
+Clippy drives **ffmpeg** (which provides `ffprobe`) and **yt-dlp**. On Windows it can
+fetch both for you; elsewhere, install them with your package manager. The pip install
+also needs **Python 3.10+**.
 
-### From a release (quickest)
+### Windows, no Python needed
+
+Download `clippy.exe` from the [latest release](https://github.com/zebadrabbit/Clippy/releases/latest)
+and run it. Everything — the CLI, the TUI, the overlay font — is inside the one file.
+
+Then let Clippy fetch the two external tools it drives:
+
+```powershell
+clippy deps      # downloads ffmpeg and yt-dlp into .in
+clippy doctor    # confirms the setup
+```
+
+`clippy deps` downloads each tool from its own publisher and checks it against the
+checksum they publish, so a truncated or tampered file is rejected rather than
+half-installed. Clippy itself ships neither: common Windows ffmpeg builds are GPL,
+and bundling one would push that licence onto this otherwise-MIT project.
+
+### With pip
 
 Grab the wheel from the [latest release](https://github.com/zebadrabbit/Clippy/releases/latest):
 

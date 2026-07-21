@@ -17,6 +17,14 @@
     way back to the base config without editing the file by hand.
   - Precedence: `clippy.yaml` → profile → CLI flags.
 
+- Feature — Windows executable and `clippy deps`
+  - Releases now carry a single `clippy.exe`, built by CI and smoke-tested before it is
+    attached. No Python install required; the TUI and packaged assets are inside it.
+  - `clippy deps` downloads ffmpeg and yt-dlp into `./bin`, each verified against the
+    checksum its publisher publishes. Clippy ships neither: the usual Windows ffmpeg
+    builds are GPL, and bundling one would push that licence onto this MIT project.
+    Fetching on request keeps them separate. `clippy doctor` now points at it.
+
 - Feature — Unattended runs: `--headless` and `--json`
   - `--headless` implies `-y`, drops colour and the banner, and never waits for input.
     `--json` prints one result document regardless of outcome, so a scheduler always has

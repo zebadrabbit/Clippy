@@ -77,3 +77,7 @@ ffmpeg2pass*.log
 # Windows specific
 *.exe
 # Comment the above line if you actually want ffmpeg.exe & youtube-dl.exe committed.
+
+# PyInstaller build output
+*.spec.bak
+build/
