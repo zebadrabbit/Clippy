@@ -104,20 +104,23 @@ def _current_encoder_params() -> EncoderParams:
 
 
 # Creator-credit timing, in seconds. The credit slides in from the left edge,
-# holds, then slides back out. Easy to retune: only these three numbers decide
-# the motion.
+# holds, then slides back out. Retuning the motion means changing these numbers.
 OVERLAY_IN = 3.0  # when the credit starts sliding in
 OVERLAY_OUT = 10.0  # when it has finished sliding out
-OVERLAY_SLIDE = 0.45  # how long each slide takes
+OVERLAY_SLIDE = 0.28  # how long each slide takes
+# Easing exponent. 1 is linear; higher decelerates harder into place. A cubic
+# spends half the time crawling through the last eighth of the distance, which
+# reads as sluggish, so this stays quadratic.
+OVERLAY_EASE = 2
 
 
 def _overlay_motion(distance: int) -> tuple[str, str]:
     """Return ``(x_offset, fade)`` expressions for the credit's entrance and exit.
 
     ffmpeg evaluates these per frame, so the animation is done by the filter
-    rather than by generating frames ourselves. The offset eases with a cubic so
-    it decelerates into place instead of arriving at a constant speed, and the
-    fade follows the same envelope so the text lands with the panel.
+    rather than by generating frames ourselves. The offset decelerates into
+    place; the fade runs over the same window so the text reaches full strength
+    exactly as the panel settles rather than well before it.
 
     Both are single-quoted where they are used: they contain commas, which would
     otherwise be read as filtergraph separators.
@@ -129,8 +132,8 @@ def _overlay_motion(distance: int) -> tuple[str, str]:
     # -distance at the start, 0 once in place, back to -distance on the way out.
     offset = (
         f"if(lt(t,{in_end}),"
-        f"-{distance}*pow(1-(t-{OVERLAY_IN})/{d},3),"
-        f"if(lt(t,{out_start}),0,-{distance}*pow((t-{out_start})/{d},3)))"
+        f"-{distance}*pow(1-(t-{OVERLAY_IN})/{d},{OVERLAY_EASE}),"
+        f"if(lt(t,{out_start}),0,-{distance}*pow((t-{out_start})/{d},{OVERLAY_EASE})))"
     )
     # 0 -> 1 -> 0 over the same windows, clamped so rounding cannot overshoot.
     fade = (
@@ -161,10 +164,17 @@ def _overlay_filter(author: str, fontfile: str, resolution: str = "1920x1080") -
     def px(v: float) -> int:
         return max(1, int(round(v * s)))
 
-    box_off, box_h, box_w = px(238), px(157), px(1000)
+    box_off, box_h = px(238), px(157)
     cb_x, cb_off, cb_fs = px(198), px(190), max(10, px(28))
     au_x, au_off, au_fs = px(198), px(160), max(12, px(48))
     av_x, av_off, av_h = px(50), px(223), px(128)
+
+    # Width follows the credit text rather than being a fixed slab: a short name
+    # got a panel stretching halfway across the frame. 0.58em is a workable mean
+    # advance for Roboto Medium; the clamp keeps very short and very long names
+    # inside sensible bounds.
+    text_w = max(len(author) * au_fs, len("clip by") * cb_fs) * 0.58
+    box_w = int(min(px(1000), max(px(430), au_x + text_w + px(40))))
 
     # Travel far enough that the panel is fully clear of the left edge.
     offset, fade = _overlay_motion(box_w)

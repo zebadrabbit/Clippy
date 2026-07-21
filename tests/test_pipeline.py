@@ -189,6 +189,63 @@ class TestCreditAnimation:
 
     def test_every_element_shares_one_offset(self):
         """Panel, both text lines and the avatar must move as a single object."""
+        import re
+
         f = pipeline._overlay_filter("Bob", "/f.ttf", "1920x1080")
-        offset, _ = pipeline._overlay_motion(1000)
+        # The slide distance is the panel width, which now follows the name.
+        width = int(re.search(r"s=(\d+)x", f).group(1))
+        offset, _ = pipeline._overlay_motion(width)
         assert f.count(offset) == 4
+
+
+class TestPanelWidth:
+    """The panel used to be a fixed 1000px slab whatever the name was."""
+
+    def _width(self, author: str, resolution: str = "1920x1080") -> int:
+        import re
+
+        f = pipeline._overlay_filter(author, "/f.ttf", resolution)
+        return int(re.search(r"s=(\d+)x", f).group(1))
+
+    def test_a_short_name_gets_a_short_panel(self):
+        assert self._width("Bo") < 600
+
+    def test_a_longer_name_gets_a_wider_panel(self):
+        assert self._width("AVeryLongStreamerName") > self._width("Bo")
+
+    def test_width_is_clamped_at_both_ends(self):
+        assert self._width("") >= 400
+        assert self._width("x" * 200) <= 1000
+
+    def test_width_scales_with_resolution(self):
+        assert self._width("SomeStreamer", "1280x720") < self._width("SomeStreamer", "1920x1080")
+
+    def test_the_slide_covers_the_whole_panel(self):
+        """Otherwise a sliver of the panel stays parked on screen."""
+        import re
+
+        f = pipeline._overlay_filter("SomeStreamer", "/f.ttf", "1920x1080")
+        width = int(re.search(r"s=(\d+)x", f).group(1))
+        offset, _ = pipeline._overlay_motion(width)
+        assert _eval_ffmpeg_expr(offset, pipeline.OVERLAY_IN) == pytest.approx(-width)
+
+
+class TestMotionFeel:
+    """Regressions in how the entrance reads, not just whether it happens."""
+
+    def test_the_slide_is_brisk(self):
+        assert pipeline.OVERLAY_SLIDE <= 0.35, "a long slide reads as sluggish"
+
+    def test_easing_is_not_so_steep_it_crawls(self):
+        """A cubic spends half the slide covering the last eighth of the way."""
+        offset, _ = pipeline._overlay_motion(1000)
+        halfway = pipeline.OVERLAY_IN + pipeline.OVERLAY_SLIDE / 2
+        remaining = abs(_eval_ffmpeg_expr(offset, halfway))
+        assert remaining >= 150, "at the halfway point it should still have visible travel left"
+
+    def test_fade_completes_with_the_slide_not_before(self):
+        """The complaint: the text was fully lit long before the panel landed."""
+        offset, fade = pipeline._overlay_motion(1000)
+        three_quarters = pipeline.OVERLAY_IN + pipeline.OVERLAY_SLIDE * 0.75
+        assert _eval_ffmpeg_expr(fade, three_quarters) < 1.0
+        assert _eval_ffmpeg_expr(offset, three_quarters) != 0
