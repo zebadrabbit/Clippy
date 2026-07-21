@@ -168,3 +168,25 @@ class TestFinalizeOutputs:
         names = finalize_outputs("chan", (None, None), 1, keep_cache=True)
         assert names[0].endswith(".mkv")
         assert (output / names[0]).exists()
+
+
+class TestFinalizeErrorsAreNotSwallowed:
+    def test_missing_cache_directory_is_reported_not_raised(self, workspace, monkeypatch):
+        cache, _ = workspace
+        import shutil as _sh
+
+        _sh.rmtree(cache)
+        assert finalize_outputs("chan", (None, None), 1, keep_cache=True) == []
+
+    def test_a_programming_error_propagates(self, workspace, monkeypatch):
+        """A bug must not be downgraded to "Finalize failed", stranding the videos."""
+        cache, _ = workspace
+        _compiled(cache, 0)
+        import clippy.naming as naming
+
+        def buggy(*a, **kw):
+            raise AttributeError("'str' object has no attribute 'name'")
+
+        monkeypatch.setattr(naming.shutil, "move", buggy)
+        with pytest.raises(AttributeError):
+            finalize_outputs("chan", (None, None), 1, keep_cache=True)

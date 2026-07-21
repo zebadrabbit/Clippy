@@ -151,7 +151,10 @@ def finalize_outputs(
                 )
             except Exception:  # fallback for log formatting
                 pass
-    except Exception as e:  # pragma: no cover — broad safety net for finalize
+    # Narrow on purpose: a missing directory or a locked file is a real runtime
+    # condition worth reporting, but anything else is a bug. Swallowing those is
+    # how a broken finalize silently leaves finished videos stranded in the cache.
+    except (OSError, IndexError) as e:
         log("Finalize failed: " + str(e), 5)
         return []
 

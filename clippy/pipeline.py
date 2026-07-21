@@ -960,7 +960,12 @@ def prepare_clips_concurrent(compilation, max_workers):
             idx = futs[fut]
             try:
                 results[idx] = fut.result()
-            except Exception:  # broad catch: thread worker safety
+            except Exception as e:
+                # Stays broad: one bad clip must not abort the whole batch. But the
+                # reason is logged rather than discarded -- a silent False here is
+                # indistinguishable from a clip that legitimately failed to download.
+                logger.exception("Clip preparation raised for %s", compilation[idx].id)
+                log(f"WARN Clip {compilation[idx].id} failed: {type(e).__name__}: {e}", 2)
                 results[idx] = (compilation[idx], False)
     return results
 

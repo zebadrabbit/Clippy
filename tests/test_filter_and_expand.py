@@ -160,9 +160,52 @@ class TestNostalgia:
         assert [c["id"] for c in filtered] == ["n0"]
 
     def test_fetch_failure_is_not_fatal(self, monkeypatch):
+        """A Helix outage must not lose the clips we already have."""
+        import requests
+
         def boom(**_kw):
-            raise RuntimeError("helix is down")
+            raise requests.RequestException("helix is down")
 
         monkeypatch.setattr(run_mod, "fetch_clips", boom)
         filtered, _ = _call([_clip("a")], _args(nostalgia=True))
         assert [c["id"] for c in filtered] == ["a"]
+
+
+class TestErrorsAreNotSwallowed:
+    """Recoverable conditions are logged; bugs must surface.
+
+    filter_and_expand used to catch bare Exception, so an AttributeError from a
+    refactor looked identical to "the window held no clips" -- the same failure
+    mode that let the broken smoke test pass for months.
+    """
+
+    def test_network_failure_is_recoverable(self, monkeypatch):
+        import requests
+
+        def flaky(**_kw):
+            raise requests.RequestException("helix timeout")
+
+        monkeypatch.setattr(run_mod, "fetch_clips", flaky)
+        filtered, _ = _call([_clip("a")], _args(auto_expand=True, amountOfClips=10))
+        assert [c["id"] for c in filtered] == ["a"], "keeps what it already had"
+
+    def test_malformed_clip_data_is_recoverable(self, monkeypatch):
+        monkeypatch.setattr(run_mod, "fetch_clips", lambda **_kw: [{"id": "x", "view_count": "??"}])
+        filtered, _ = _call([_clip("a")], _args(auto_expand=True, amountOfClips=10))
+        assert [c["id"] for c in filtered] == ["a"]
+
+    def test_a_programming_error_propagates(self, monkeypatch):
+        def buggy(**_kw):
+            raise AttributeError("'tuple' object has no attribute 'id'")
+
+        monkeypatch.setattr(run_mod, "fetch_clips", buggy)
+        with pytest.raises(AttributeError):
+            _call([_clip("a")], _args(auto_expand=True, amountOfClips=10))
+
+    def test_a_programming_error_in_nostalgia_propagates(self, monkeypatch):
+        def buggy(**_kw):
+            raise AttributeError("boom")
+
+        monkeypatch.setattr(run_mod, "fetch_clips", buggy)
+        with pytest.raises(AttributeError):
+            _call([_clip("a")], _args(nostalgia=True))

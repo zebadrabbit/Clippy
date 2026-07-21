@@ -44,6 +44,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import requests
+
 # Note on optional Discord dependency: we only import discord-related helpers when
 # --discord mode is requested, so Twitch-only flows don't need discord.py installed.
 from clippy import __version__ as CLIPPY_VERSION
@@ -570,7 +572,10 @@ def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
                 + ")",
                 2,
             )
-        except Exception as e:  # auto-expand is best-effort
+        # Narrow on purpose: a flaky Helix call or malformed clip data is
+        # expected and recoverable, but a TypeError/AttributeError here is a bug
+        # and must not be downgraded to a log line that looks like "found nothing".
+        except (requests.RequestException, ValueError, KeyError) as e:
             log("Auto-expand failed: " + str(e), 5)
 
     # Nostalgia mode: mix in random older clips (>6 months old)
@@ -604,7 +609,7 @@ def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
                 filtered = result
             else:
                 log("No unique nostalgia clips found (>6 months old)", 2)
-        except Exception as e:  # nostalgia is best-effort
+        except (requests.RequestException, ValueError, KeyError) as e:
             log(f"Nostalgia fetch failed: {e}", 5)
 
     return filtered, window
