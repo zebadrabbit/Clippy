@@ -1,5 +1,74 @@
 # Changelog
 
+## Unreleased
+
+- Feature — Profiles: one install, several streamers
+  - `clippy profile` creates and edits a named profile in eight questions, with no
+    credentials march. `clippy profile use NAME` switches, `--profile NAME` applies one
+    for a single run, `--list-profiles` shows what exists.
+  - A profile is a partial `clippy.yaml` deep-merged over the top level, so it can
+    override the channel, branding, clip counts or encoding. Anything it does not
+    mention keeps the shared value — a profile that sets only `assets.intro` will not
+    wipe `assets.static`.
+  - Per-profile artwork: assets resolve from `transitions/<profile>/` first and fall
+    back to `transitions/`, so shared files like `static.mp4` stay in one place. The
+    wizard offers to create the folder. Existing flat layouts keep working unchanged.
+  - A built-in `default` profile always exists and applies no overrides, so there is a
+    way back to the base config without editing the file by hand.
+  - Precedence: `clippy.yaml` → profile → CLI flags.
+
+- Feature — TUI redesigned as a 90s BBS that fits 80x24
+  - The screens previously needed a maximized window: Clip Settings and Credentials each
+    wanted 37 rows of content in a 24-row viewport because every field carried a help
+    paragraph. That guidance now lives on a single status line describing the focused
+    field. All seven steps fit in 23 rows.
+  - Full ANSI 16-colour palette on a black background, so it follows the terminal's own
+    theme.
+  - Transitions is now a two-pane transfer list with keyboard and button bulk actions,
+    and it became its own step; audio and overlay toggles moved to a new step.
+  - Date entry is a range picker (Today / This week / Last month / Everything / ...)
+    with a Custom option, instead of free-text dates.
+
+- Fix — `07/01/26` crashed a run
+  - Two-digit years were rejected, and the `ValueError` escaped out of the pipeline
+    worker rather than being reported. Short year formats are now accepted, and an
+    unparseable date is reported with a fallback to the default window instead of taking
+    down the screen.
+
+- Fix — The build log flooded itself
+  - ffmpeg draws progress with a carriage return and no newline; captured naively every
+    redraw became a new log line. Redraws now update a live activity line and never enter
+    the scrollback.
+  - Separately, every message was written twice: the `clippy` logger builds its handlers
+    lazily, so the first call inside the capture block created one bound to the already
+    replaced stdout. The logger is now initialised before stdout is swapped.
+  - Runs of identical lines collapse to a single tally instead of repeating.
+
+- Fix — Compilations could be built with no transitions at all
+  - An empty `selected_transitions` list was treated as a deliberate choice and written
+    over the configured pool; combined with `explicit` mode that leaves nothing to choose
+    from, and the build quietly produced statics only. The pipeline now says so when
+    transitions are wanted but the pool is empty.
+
+- Fix — Overlay font reported missing after a config reload
+  - The path is resolved at import; re-reading the config (switching profiles) put the
+    raw relative path back. Resolution now runs after every merge. A custom
+    `assets.fontfile` that does not exist is no longer silently replaced by the packaged
+    font, so preflight can report it.
+
+- Fix — Real errors were being swallowed
+  - `filter_and_expand` and `finalize_outputs` caught bare `Exception`, making a bug
+    indistinguishable from "found nothing". Narrowed to the conditions that are actually
+    recoverable; anything else propagates.
+
+- Testing — 315 tests
+  - The Twitch Helix layer went from 16% to 97%: pagination, rate limits, expired tokens,
+    credential precedence, and that the client secret never reaches an error message.
+  - The compilation sequencing policy is pinned as a grammar, replacing a manual
+    validation script.
+  - New suites for the TUI layout (every screen must fit 80x24), the transition picker,
+    the build log, profiles, and date handling.
+
 ## 2026-07-20 — v0.6.0 (cleanup + hardening)
 
 - Fix — `--preset` and `--list-presets` now do something

@@ -87,7 +87,24 @@ clippy           # the CLI (see clippy --help)
 clippy tui
 ```
 
-The TUI walks you through 6 steps: Source > Credentials > Clip Settings > Quality > Transitions > Review & Start. It saves credentials to `.env` on request so subsequent runs auto-fill.
+The TUI walks you through 7 steps: Source > Credentials > Clip Settings > Quality >
+Transitions > Audio & Overlay > Review & Start. It saves credentials to `.env` on
+request so subsequent runs auto-fill.
+
+It is styled as a 90s BBS and fits an 80x24 terminal — no maximizing required.
+Per-field guidance appears on the status line at the bottom for whichever field
+has focus, rather than as paragraphs under every input.
+
+- **Clip Settings** picks the date range from presets (Today, This week, Last
+  month, Last year, Everything, ...) with a *Custom dates* option for an exact
+  window.
+- **Transitions** is a two-pane transfer list: AVAILABLE on the left, SELECTED on
+  the right. Move clips with the arrow keys or SPACE, `A` for all, `N` for none,
+  or the *Add all* / *Clear all* buttons. The right pane is the pool the build
+  draws from.
+- **Building** shows overall and per-compilation progress, a live ffmpeg activity
+  line, and a log that stays readable — progress redraws update in place instead
+  of filling the scrollback.
 
 ### CLI
 
