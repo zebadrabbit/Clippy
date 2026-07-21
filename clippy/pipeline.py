@@ -117,6 +117,20 @@ OVERLAY_EASE = 2
 # than half spent before the text is even visible, and what is left happens
 # while it is still moving. Fading after it lands is the part you can see.
 OVERLAY_FADE = 0.22
+# Frame rate synthesised for the avatar still so it has a timeline to fade
+# along. Only affects fade smoothness, not the output rate.
+OVERLAY_AVATAR_FPS = 60
+
+
+def _overlay_fade_window() -> tuple[float, float, float, float]:
+    """``(in_start, in_end, out_start, out_end)`` for the credit's fade.
+
+    Shared by the text (an alpha expression) and the avatar (the fade filter) so
+    they come up and go down together.
+    """
+    in_start = OVERLAY_IN + OVERLAY_SLIDE * 0.6
+    out_end = OVERLAY_OUT - OVERLAY_SLIDE
+    return in_start, in_start + OVERLAY_FADE, out_end - OVERLAY_FADE, out_end
 
 
 def _overlay_motion(distance: int) -> tuple[str, str]:
@@ -145,10 +159,7 @@ def _overlay_motion(distance: int) -> tuple[str, str]:
 
     # Fade window: begins partway through the slide, once the text is on screen,
     # and ends after the panel has settled. Reversed for the exit.
-    fi0 = OVERLAY_IN + d * 0.6
-    fi1 = fi0 + OVERLAY_FADE
-    fo1 = out_start
-    fo0 = fo1 - OVERLAY_FADE
+    fi0, fi1, fo0, fo1 = _overlay_fade_window()
     fade = (
         f"min(1,max(0,"
         f"if(lt(t,{fi0}),0,"
@@ -199,17 +210,32 @@ def _overlay_filter(author: str, fontfile: str, resolution: str = "1920x1080") -
     # The panel is an overlaid colour source rather than drawbox: ffmpeg 4.4's
     # drawbox accepts arithmetic in x but silently ignores the `t` variable, so
     # a drawbox panel cannot move and simply fails to draw. overlay honours `t`.
-    # shortest=1 belongs only here -- the colour source never ends, and putting
-    # it on the avatar overlay would truncate the clip to that single frame.
+    #
+    # Both secondary inputs are endless -- the colour source by nature, the
+    # avatar because it is looped to give `fade` a timeline -- so both overlays
+    # need shortest=1. Without it the graph never terminates and the encode
+    # hangs. (This was safe to omit while the avatar was a lone still frame;
+    # then shortest=1 would have truncated the clip to that one frame instead.)
+    fi0, _fi1, fo0, _fo1 = _overlay_fade_window()
+    # The avatar is a single still, so it has no timeline for `fade` to work
+    # along -- without looping it, it pops in at full strength while the text
+    # fades and ends up looking detached. loop+setpts synthesise the frames.
+    avatar = (
+        f"[1:v]scale=-2:{av_h},loop=loop=-1:size=1:start=0,"
+        f"setpts=N/{OVERLAY_AVATAR_FPS}/TB,format=yuva420p,"
+        f"fade=t=in:st={fi0}:d={OVERLAY_FADE}:alpha=1,"
+        f"fade=t=out:st={fo0}:d={OVERLAY_FADE}:alpha=1[av];"
+    )
+
     return (
-        f'"[1:v]scale=-2:{av_h}[av];'
+        f'"{avatar}'
         f"color=c=black@0.7:s={box_w}x{box_h},format=yuva420p[panel];"
         f"[0:v][panel]overlay={en}:x='{offset}':y=H-{box_off}:shortest=1[bg];"
         f"[bg]drawtext={en}:x='{cb_x}+{offset}':y=(h)-{cb_off}:fontfile='{safe_font}':fontsize={cb_fs}"
         f":fontcolor=white:alpha='0.4*{fade}':text='clip by',"
         f"drawtext={en}:x='{au_x}+{offset}':y=(h)-{au_off}:fontfile='{safe_font}':fontsize={au_fs}"
         f":fontcolor=white:alpha='0.9*{fade}':text='{safe_author}'[base];"
-        f"[base][av]overlay={en}:x='{av_x}+{offset}':y=H-{av_off}[overlay]\""
+        f"[base][av]overlay={en}:x='{av_x}+{offset}':y=H-{av_off}:shortest=1[overlay]\""
     )
 
 

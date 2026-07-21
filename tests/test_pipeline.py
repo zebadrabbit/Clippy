@@ -181,11 +181,17 @@ class TestCreditAnimation:
         # Defined once and consumed once: a dangling label is an invalid graph.
         assert f.count("[panel]") == 2
 
-    def test_shortest_is_only_on_the_panel_overlay(self):
-        """On the avatar overlay it would truncate the clip to one frame."""
+    def test_both_overlays_end_with_the_clip(self):
+        """Both secondary inputs are endless, so both overlays need shortest=1.
+
+        The colour source never ends by nature; the avatar is looped so `fade`
+        has a timeline. Omitting it on either one leaves the graph without a
+        stopping condition and the encode hangs rather than failing.
+        """
         f = pipeline._overlay_filter("Bob", "/f.ttf", "1920x1080")
-        assert f.count("shortest=1") == 1
+        assert f.count("shortest=1") == 2
         assert "shortest=1[bg]" in f
+        assert "shortest=1[overlay]" in f
 
     def test_every_element_shares_one_offset(self):
         """Panel, both text lines and the avatar must move as a single object."""
@@ -291,3 +297,36 @@ class TestFadeIsVisible:
 
     def test_the_fade_is_long_enough_to_perceive(self):
         assert pipeline.OVERLAY_FADE >= 0.15, "a shorter fade reads as a pop"
+
+
+class TestAvatarFade:
+    """The avatar is a still, so it needs a synthesised timeline to fade along.
+
+    Without one it popped in at full strength while the text faded, which left
+    it looking detached from the rest of the credit.
+    """
+
+    def _filter(self):
+        return pipeline._overlay_filter("Bob", "/f.ttf", "1920x1080")
+
+    def test_the_still_is_looped_into_a_stream(self):
+        f = self._filter()
+        assert "loop=loop=-1:size=1" in f
+        assert f"setpts=N/{pipeline.OVERLAY_AVATAR_FPS}/TB" in f
+
+    def test_it_fades_both_ways_on_alpha(self):
+        f = self._filter()
+        assert "fade=t=in:" in f and "fade=t=out:" in f
+        assert f.count("alpha=1") == 2
+
+    def test_it_shares_the_text_fade_window(self):
+        """Avatar and text must come up and go down together."""
+        f = self._filter()
+        in_start, _, out_start, _ = pipeline._overlay_fade_window()
+        assert f"fade=t=in:st={in_start}:d={pipeline.OVERLAY_FADE}:alpha=1" in f
+        assert f"fade=t=out:st={out_start}:d={pipeline.OVERLAY_FADE}:alpha=1" in f
+
+    def test_alpha_format_is_requested_before_fading(self):
+        """fade cannot touch alpha on a format that has none."""
+        f = self._filter()
+        assert f.index("format=yuva420p") < f.index("fade=t=in:")
