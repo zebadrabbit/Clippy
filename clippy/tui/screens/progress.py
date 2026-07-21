@@ -42,19 +42,22 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 class _TuiLogHandler(logging.Handler):
-    """Logging handler that writes records into a Textual RichLog widget."""
+    """Routes log records through the screen's ``_log``.
 
-    def __init__(self, log_widget: RichLog):
+    Not straight to the widget: the screen is what collapses repeated lines, and
+    a direct write would sidestep that and reintroduce the duplicates.
+    """
+
+    def __init__(self, on_line):
         super().__init__()
-        self._log_widget = log_widget
+        self._on_line = on_line
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            msg = self.format(record)
             # Strip ANSI escape codes — RichLog uses Rich markup, not ANSI
-            clean = _ANSI_RE.sub("", msg)
+            clean = _ANSI_RE.sub("", self.format(record))
             if clean.strip():
-                self._log_widget.write(clean)
+                self._on_line(clean)
         except Exception:
             pass
 
@@ -170,8 +173,10 @@ class ProgressScreen(Screen):
             with Horizontal(classes="button-bar"):
                 yield Button("Cancel", variant="error", id="cancel-btn")
 
-    _last_line: str | None = None
-    _repeat_count: int = 0
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._last_line: str | None = None
+        self._repeat_count = 0
 
     def on_mount(self) -> None:
         self._log("[bold cyan]Pipeline starting...[/]")
@@ -180,10 +185,13 @@ class ProgressScreen(Screen):
         self.run_worker(self._run_pipeline, thread=True)
 
     def _log(self, msg: str) -> None:
-        """Append a line, collapsing an unbroken run of identical messages.
+        """Append a line, swallowing an unbroken run of identical messages.
 
-        The pipeline repeats itself a lot across many clips; without this the
-        useful lines scroll away behind twenty copies of the same one.
+        Repeats are dropped rather than annotated. A "repeated N times" line
+        costs exactly as many rows as the duplicates it claims to save, and
+        RichLog cannot edit a line already written, so the only way to spend
+        zero rows is to not write them. A run of three or more is worth one
+        short tally line; a lone duplicate is simply not shown twice.
         """
         if msg == self._last_line:
             self._repeat_count += 1
@@ -193,9 +201,10 @@ class ProgressScreen(Screen):
         self._write(msg)
 
     def _flush_repeats(self) -> None:
-        if self._repeat_count:
-            self._write(f"[dim]  ... repeated {self._repeat_count} more times[/]")
-            self._repeat_count = 0
+        # Two occurrences read fine as one line; only a real run earns a tally.
+        if self._repeat_count >= 2:
+            self._write(f"[dim]   x{self._repeat_count + 1}[/]")
+        self._repeat_count = 0
 
     def _write(self, msg: str) -> None:
         try:
@@ -238,10 +247,19 @@ class ProgressScreen(Screen):
 
         class _Capture:
             def __enter__(self_ctx):
-                log_widget = screen.query_one("#log-panel", RichLog)
+                # Force the clippy logger to build its handlers *before* we mute
+                # them and swap stdout. They are created lazily on the first
+                # log() call; if that happened inside this block the new
+                # StreamHandler would bind to the replaced stdout and every
+                # message would arrive twice -- once through the handler, once
+                # through the capture.
+                from clippy.log import get_logger
 
-                # Add TUI handler to the clippy logger
-                self_ctx._handler = _TuiLogHandler(log_widget)
+                get_logger()
+
+                # Everything goes through screen._log so the scrollback stays in
+                # one place and repeated lines can be collapsed.
+                self_ctx._handler = _TuiLogHandler(screen._log)
                 self_ctx._handler.setFormatter(logging.Formatter("%(message)s"))
                 clippy_logger = logging.getLogger("clippy")
                 clippy_logger.addHandler(self_ctx._handler)

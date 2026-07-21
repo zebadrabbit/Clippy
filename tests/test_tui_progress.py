@@ -97,34 +97,64 @@ def _on_progress_screen(probe):
 
 
 class TestRepeatCollapsing:
-    def test_identical_lines_collapse_into_a_count(self):
-        def written(screen):
-            return [str(seg) for seg in screen._log_calls]
+    """A repeat must cost zero extra rows -- that was the whole complaint."""
+
+    def _logged(self, probe):
+        async def run(screen, pilot):
+            screen._written = []
+            screen._write = screen._written.append
+            await probe(screen, pilot)
+            screen._flush_repeats()
+            return list(screen._written)
+
+        return _on_progress_screen(run)
+
+    def test_a_long_run_costs_one_line_plus_a_tally(self):
+        async def probe(screen, pilot):
+            for _ in range(20):
+                screen._log("Skipping failed clip")
+
+        written = self._logged(probe)
+        assert written == ["Skipping failed clip", "[dim]   x20[/]"]
+
+    def test_a_lone_duplicate_costs_nothing(self):
+        """This was the complaint: "repeated 1 times" took the row it saved."""
 
         async def probe(screen, pilot):
-            screen._log_calls = []
-            screen._write = lambda msg: screen._log_calls.append(msg)
-            for _ in range(5):
-                screen._log("Skipping failed clip")
-            screen._log("Something else")
-            await pilot.pause()
-            return list(screen._log_calls)
+            screen._log("same")
+            screen._log("same")
 
-        calls = _on_progress_screen(probe)
-        assert calls[0] == "Skipping failed clip"
-        assert any("repeated 4 more times" in c for c in calls)
-        assert calls[-1] == "Something else"
+        assert self._logged(probe) == ["same"]
 
     def test_distinct_lines_are_never_collapsed(self):
         async def probe(screen, pilot):
-            screen._log_calls = []
-            screen._write = lambda msg: screen._log_calls.append(msg)
             for i in range(3):
                 screen._log(f"clip {i}")
-            await pilot.pause()
-            return list(screen._log_calls)
 
-        assert _on_progress_screen(probe) == ["clip 0", "clip 1", "clip 2"]
+        assert self._logged(probe) == ["clip 0", "clip 1", "clip 2"]
+
+    def test_the_counter_resets_after_a_different_line(self):
+        async def probe(screen, pilot):
+            for _ in range(3):
+                screen._log("a")
+            screen._log("b")
+            screen._log("a")
+
+        assert self._logged(probe) == ["a", "[dim]   x3[/]", "b", "a"]
+
+    def test_alternating_pairs_do_not_double_the_output(self):
+        """A,A,B,B,... is the pattern that produced a wall of tally lines."""
+
+        async def probe(screen, pilot):
+            for _ in range(5):
+                screen._log("A")
+                screen._log("A")
+                screen._log("B")
+                screen._log("B")
+
+        written = self._logged(probe)
+        assert written == ["A", "B"] * 5
+        assert not any("x" in w for w in written), "no tally lines for lone duplicates"
 
     def test_activity_line_is_separate_from_the_log(self):
         async def probe(screen, pilot):
@@ -135,3 +165,30 @@ class TestRepeatCollapsing:
             return str(screen.query_one("#activity", Static).content)
 
         assert "50%" in _on_progress_screen(probe)
+
+
+class TestNoDoubleEmission:
+    """Every message must reach the log exactly once.
+
+    The clippy logger builds its handlers lazily on the first log() call. If
+    that happened inside the capture block, the new StreamHandler bound to the
+    already-replaced stdout and each message arrived twice -- which is what
+    produced a "repeated" tally under every single line.
+    """
+
+    def test_a_logged_message_appears_once(self):
+        async def probe(screen, pilot):
+            import logging
+
+            written = []
+            screen._write = written.append
+            # Handlers do not exist yet, exactly as on a fresh run.
+            logging.getLogger("clippy").handlers.clear()
+            with screen._capture_output():
+                from clippy.utils import log as clippy_log
+
+                clippy_log("a distinctive message")
+            screen._flush_repeats()
+            return [w for w in written if "distinctive" in w]
+
+        assert len(_on_progress_screen(probe)) == 1
