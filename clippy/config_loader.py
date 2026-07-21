@@ -347,4 +347,7 @@ def load_merged_config(
         merged["transitions_dir"] = env.get("TRANSITIONS_DIR")
     # Deprecated: CLIPPY_USE_INTERNAL support removed; prefer explicit TRANSITIONS_DIR
 
+    # Expose the resolved profile so asset lookup can prefer transitions/<profile>/.
+    merged["active_profile"] = _profile or ""
+
     return merged

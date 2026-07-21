@@ -845,6 +845,37 @@ def profile_wizard(argv: Optional[list[str]] = None) -> None:
     ):
         data["active_profile"] = name
 
-    if _write_yaml_config(path, data):
-        print(THEME.success(f"\nSaved profile {name} to {path}."))
-        print(THEME.text(f"Use it for one run with:  clippy --profile {name}"))
+    if not _write_yaml_config(path, data):
+        return
+
+    print(THEME.success(f"\nSaved profile {name} to {path}."))
+    _offer_asset_dir(name)
+    print(THEME.text(f"\nUse it for one run with:  clippy --profile {name}"))
+
+
+def _offer_asset_dir(name: str) -> None:
+    """Offer a folder for this streamer's own artwork.
+
+    Assets are looked up in ``transitions/<profile>/`` first and fall back to
+    ``transitions/``, so shared files like static.mp4 stay where they are and
+    only the per-streamer branding needs to move.
+    """
+    try:
+        from clippy.utils import resolve_transitions_dir
+
+        asset_dir = Path(resolve_transitions_dir()) / name
+    except Exception:
+        asset_dir = Path("transitions") / name
+
+    if asset_dir.is_dir():
+        print(THEME.text(f"Branding folder: {asset_dir}"))
+        return
+    if not _prompt_yes_no(f"Create a branding folder at {asset_dir}?", default_yes=True):
+        return
+    try:
+        asset_dir.mkdir(parents=True, exist_ok=True)
+        print(THEME.success(f"Created {asset_dir}"))
+        print(THEME.text("  Put this streamer's intro/outro/transitions in there."))
+        print(THEME.text("  Anything missing falls back to the shared transitions folder."))
+    except OSError as exc:
+        print(THEME.error(f"Could not create {asset_dir}: {exc}"))

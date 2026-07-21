@@ -170,6 +170,27 @@ profiles:
 Precedence is `clippy.yaml` → profile → CLI flags, so `--clips 5` still wins
 over whatever the profile says.
 
+### Per-profile artwork
+
+Each profile can keep its own intro, outro and transitions in a subfolder named
+after it. Assets are looked up there first and fall back to the shared folder,
+so files everyone uses — `static.mp4` especially — stay exactly where they are:
+
+```
+transitions/
+  static.mp4              # shared by every profile
+  transition_01.mp4       # shared
+  theflood/               # only used when this profile is active
+    intro.mp4
+    outro.mp4
+    transition_01.mp4     # shadows the shared one of the same name
+  someoneelse/
+    intro.mp4
+```
+
+`clippy profile` offers to create the folder for you. Nothing needs moving to
+adopt this: a flat `transitions/` folder keeps working exactly as before.
+
 ## CLI Reference
 
 Help is grouped into logical sections:

@@ -217,6 +217,45 @@ def resolve_transitions_dir() -> str:
         return os.path.abspath("transitions")
 
 
+def active_profile_name() -> str:
+    """Name of the profile in effect, or "" when none is selected."""
+    try:
+        import clippy.config as _cfg  # type: ignore
+
+        return str(getattr(_cfg, "active_profile", "") or "").strip()
+    except (ImportError, OSError):
+        return ""
+
+
+def profile_asset_dir(root: str | None = None, profile: str | None = None) -> str | None:
+    """``<transitions>/<profile>`` when that folder exists, else None.
+
+    Per-streamer branding lives in its own folder so one install can hold several
+    sets of intros and outros; shared assets like static.mp4 stay in the root and
+    are still found by the fallback below.
+    """
+    name = profile if profile is not None else active_profile_name()
+    if not name:
+        return None
+    try:
+        base = os.path.abspath(root or resolve_transitions_dir())
+        candidate = os.path.join(base, name)
+        return candidate if os.path.isdir(candidate) else None
+    except OSError:
+        return None
+
+
+def asset_search_dirs(root: str | None = None) -> list[str]:
+    """Where to look for an asset, most specific first."""
+    base = os.path.abspath(root or resolve_transitions_dir())
+    dirs = []
+    profile_dir = profile_asset_dir(base)
+    if profile_dir:
+        dirs.append(profile_dir)
+    dirs.append(base)
+    return dirs
+
+
 def find_transition_file(name: str) -> str | None:
     """Find a transition asset by name across all known roots.
 
@@ -258,14 +297,17 @@ def find_transition_file(name: str) -> str | None:
             _add(cwd)
         except OSError:
             pass
-        # Now test each candidate
+        # Search <root>/<profile>/ before <root>/ so a profile's own intro wins
+        # over a same-named shared one.
+        profile = active_profile_name()
         for root in candidates:
-            try:
-                p = os.path.join(root, name)
-                if os.path.exists(p):
-                    return os.path.abspath(p)
-            except OSError:
-                continue
+            for base in ([os.path.join(root, profile)] if profile else []) + [root]:
+                try:
+                    p = os.path.join(base, name)
+                    if os.path.exists(p):
+                        return os.path.abspath(p)
+                except OSError:
+                    continue
         return None
     except (OSError, TypeError, ValueError):
         return None
@@ -293,20 +335,22 @@ def discover_transition_files(transitions_dir: str | None = None) -> list[str]:
     Only files matching the traditional `transition_*` naming pattern are included
     when discovery is used.
     """
-    root = os.path.abspath(transitions_dir or resolve_transitions_dir())
     found: list[str] = []
-    try:
-        for entry in sorted(os.listdir(root)):
-            full = os.path.join(root, entry)
-            if not os.path.isfile(full):
-                continue
-            _stem, ext = os.path.splitext(entry)
-            if ext.lower() not in {".mp4", ".mov", ".mkv", ".webm", ".m4v"}:
-                continue
-            if entry.lower().startswith("transition_"):
-                found.append(entry)
-    except OSError:
-        return []
+    # Profile folder first: _dedupe_names_keep_order keeps the first of a
+    # duplicate basename, so a profile's transition_01.mp4 shadows the shared one.
+    for root in asset_search_dirs(transitions_dir):
+        try:
+            for entry in sorted(os.listdir(root)):
+                full = os.path.join(root, entry)
+                if not os.path.isfile(full):
+                    continue
+                _stem, ext = os.path.splitext(entry)
+                if ext.lower() not in {".mp4", ".mov", ".mkv", ".webm", ".m4v"}:
+                    continue
+                if entry.lower().startswith("transition_"):
+                    found.append(entry)
+        except OSError:
+            continue
     return _dedupe_names_keep_order(found)
 
 

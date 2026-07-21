@@ -138,3 +138,83 @@ class TestReloadWithProfile:
         finally:
             cfg._merged = original
             cfg.refresh_from_globals()
+
+
+class TestProfileAssetFolders:
+    """Per-streamer branding lives in transitions/<profile>/, shared files stay put."""
+
+    @pytest.fixture
+    def assets(self, tmp_path, monkeypatch):
+        root = tmp_path / "transitions"
+        (root / "theflood").mkdir(parents=True)
+        for name in ("static.mp4", "intro.mp4", "transition_01.mp4", "transition_02.mp4"):
+            (root / name).write_text("shared", encoding="utf-8")
+        for name in ("intro.mp4", "outro.mp4", "transition_01.mp4"):
+            (root / "theflood" / name).write_text("profile", encoding="utf-8")
+        monkeypatch.setenv("TRANSITIONS_DIR", str(root))
+        monkeypatch.chdir(tmp_path)
+        return root
+
+    def _with_profile(self, monkeypatch, name):
+        import clippy.config as cfg
+
+        monkeypatch.setattr(cfg, "active_profile", name, raising=False)
+
+    def test_profile_asset_wins_over_the_shared_one(self, assets, monkeypatch):
+        from clippy.utils import find_transition_file
+
+        self._with_profile(monkeypatch, "theflood")
+        found = find_transition_file("intro.mp4")
+        assert found is not None
+        assert (assets / "theflood" / "intro.mp4").samefile(found)
+
+    def test_shared_asset_is_still_found(self, assets, monkeypatch):
+        """static.mp4 is not per-streamer; it must resolve from the root."""
+        from clippy.utils import find_transition_file
+
+        self._with_profile(monkeypatch, "theflood")
+        found = find_transition_file("static.mp4")
+        assert found is not None
+        assert (assets / "static.mp4").samefile(found)
+
+    def test_profile_only_asset_resolves(self, assets, monkeypatch):
+        from clippy.utils import find_transition_file
+
+        self._with_profile(monkeypatch, "theflood")
+        assert find_transition_file("outro.mp4") is not None
+
+    def test_without_a_profile_only_shared_assets_resolve(self, assets, monkeypatch):
+        from clippy.utils import find_transition_file
+
+        self._with_profile(monkeypatch, "")
+        found = find_transition_file("intro.mp4")
+        assert found is not None
+        assert (assets / "intro.mp4").samefile(found)
+
+    def test_search_order_is_profile_then_shared(self, assets, monkeypatch):
+        from clippy.utils import asset_search_dirs
+
+        self._with_profile(monkeypatch, "theflood")
+        dirs = asset_search_dirs()
+        assert dirs[0].endswith("theflood")
+        assert len(dirs) == 2
+
+    def test_a_missing_profile_folder_is_skipped(self, assets, monkeypatch):
+        from clippy.utils import asset_search_dirs
+
+        self._with_profile(monkeypatch, "nobody")
+        assert len(asset_search_dirs()) == 1
+
+    def test_discovery_merges_both_folders_profile_first(self, assets, monkeypatch):
+        from clippy.utils import discover_transition_files
+
+        self._with_profile(monkeypatch, "theflood")
+        found = discover_transition_files()
+        # transition_01 exists in both; the profile's copy shadows the shared one.
+        assert found == ["transition_01.mp4", "transition_02.mp4"]
+
+    def test_discovery_without_a_profile_sees_only_shared(self, assets, monkeypatch):
+        from clippy.utils import discover_transition_files
+
+        self._with_profile(monkeypatch, "")
+        assert discover_transition_files() == ["transition_01.mp4", "transition_02.mp4"]

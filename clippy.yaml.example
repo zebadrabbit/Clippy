@@ -140,3 +140,13 @@ discord:
 #       broadcaster: someoneelse
 #     assets:
 #       intro: [other_intro.mp4]
+#
+# Per-profile artwork: put a profile's own clips in transitions/<profile>/.
+# Assets resolve from there first and fall back to transitions/, so shared
+# files like static.mp4 stay in the root and need no duplication.
+#
+#   transitions/
+#     static.mp4            <- shared
+#     theflood/
+#       intro.mp4           <- only when the theflood profile is active
+#       outro.mp4
