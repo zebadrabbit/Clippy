@@ -52,6 +52,7 @@ class ClippyApp(App):
 
     def advance_to(self, screen_name: str, **kwargs) -> None:
         """Navigate to the next screen in the workflow."""
+        from clippy.tui.screens.audio import AudioScreen
         from clippy.tui.screens.clip_settings import ClipSettingsScreen
         from clippy.tui.screens.credentials import CredentialsScreen
         from clippy.tui.screens.progress import ProgressScreen
@@ -71,6 +72,7 @@ class ClippyApp(App):
             "clip_settings": ClipSettingsScreen,
             "quality": QualityScreen,
             "transitions": TransitionsScreen,
+            "audio": AudioScreen,
             "review": ReviewScreen,
             "progress": ProgressScreen,
         }

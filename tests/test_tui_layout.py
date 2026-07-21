@@ -18,6 +18,7 @@ import pytest
 pytest.importorskip("textual")
 
 from clippy.tui.app import ClippyApp  # noqa: E402
+from clippy.tui.screens.audio import AudioScreen  # noqa: E402
 from clippy.tui.screens.clip_settings import ClipSettingsScreen  # noqa: E402
 from clippy.tui.screens.credentials import CredentialsScreen  # noqa: E402
 from clippy.tui.screens.quality import QualityScreen  # noqa: E402
@@ -34,6 +35,7 @@ WIZARD_SCREENS = [
     ClipSettingsScreen,
     QualityScreen,
     TransitionsScreen,
+    AudioScreen,
     ReviewScreen,
 ]
 
@@ -129,3 +131,13 @@ def test_every_hint_targets_a_real_widget(screen_cls):
     optional = {"discord-token", "discord-channel-id"}
     missing = set(hints) - present - optional
     assert not missing, f"{screen_cls.__name__} hints target no widget: {missing}"
+
+
+def test_wizard_steps_are_numbered_consistently():
+    """Every screen's STEP must be unique, in order, and within TOTAL_STEPS."""
+    from clippy.tui.bbs import TOTAL_STEPS
+
+    steps = [s.STEP for s in WIZARD_SCREENS]
+    assert steps == sorted(steps), f"screens out of order: {steps}"
+    assert len(set(steps)) == len(steps), f"duplicate step numbers: {steps}"
+    assert max(steps) == TOTAL_STEPS, f"last step {max(steps)} != TOTAL_STEPS {TOTAL_STEPS}"

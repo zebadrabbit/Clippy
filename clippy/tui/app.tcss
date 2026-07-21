@@ -247,7 +247,7 @@ Button:focus {
 }
 
 .log-panel {
-    height: 1fr;
+    height: 8;
     border: none;
     background: ansi_black;
     color: ansi_bright_white;
@@ -289,6 +289,40 @@ Button:focus {
 
 #select-bar Button {
     margin-right: 2;
+}
+
+/* -- two-pane transfer list -------------------------------------------- */
+
+/* Fixed, not 1fr: a flexible picker swallows the rows below it. The lists
+ * scroll, so a taller pool costs nothing. */
+#picker {
+    height: 9;
+}
+
+.pane {
+    width: 1fr;
+    height: 100%;
+}
+
+.pane-list {
+    height: 8;
+    border: none;
+    background: ansi_black;
+    color: ansi_bright_white;
+    padding: 0 1;
+}
+
+/* The focused pane gets the cyan cursor; the idle one stays grey so it is
+ * obvious which side the arrow keys will act on. */
+.pane-list > .option-list--option-highlighted {
+    background: ansi_bright_black;
+    color: ansi_bright_white;
+}
+
+.pane-list:focus > .option-list--option-highlighted {
+    background: ansi_cyan;
+    color: ansi_black;
+    text-style: bold;
 }
 
 /* Utility */

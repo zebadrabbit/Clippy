@@ -13,7 +13,7 @@ from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import Static
 
-TOTAL_STEPS = 6
+TOTAL_STEPS = 7
 
 
 def rule(width: int = 78, char: str = "─") -> str:

@@ -12,7 +12,7 @@ from clippy.tui.bbs import BBSScreen
 class ReviewScreen(BBSScreen):
     """Step 6: Review all settings and start processing."""
 
-    STEP = 6
+    STEP = 7
     STEP_TITLE = "Review & Start"
     KEYS = "[ENTER] start   [ESC] back   [Q] quit"
     DEFAULT_HINT = "Check the settings, then start the build."
