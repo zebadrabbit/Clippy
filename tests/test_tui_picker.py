@@ -190,3 +190,70 @@ class TestSavedResult:
         saved = app.workflow["transitions"]
         assert saved["transition_probability"] == 1.0
         assert saved["transition_cooldown"] == 0
+
+
+class TestDateRange:
+    """The date field crashed a run when given 07/01/26; it is a picker now."""
+
+    def _clip_settings(self, steps):
+        from clippy.tui.screens.clip_settings import ClipSettingsScreen
+
+        async def run():
+            app = ClippyApp()
+            async with app.run_test(size=(80, 24)) as pilot:
+                await pilot.pause()
+                screen = ClipSettingsScreen()
+                app.push_screen(screen)
+                await pilot.pause()
+                await pilot.pause()
+                screen.query_one("#broadcaster").value = "chan"
+                await steps(screen, pilot, app)
+                return dict(app.workflow.get("clip_settings", {}))
+
+        return asyncio.run(run())
+
+    def test_custom_fields_are_hidden_until_asked_for(self):
+        seen = {}
+
+        async def steps(screen, pilot, app):
+            seen["hidden"] = screen.query_one("#custom-dates").has_class("hidden")
+            screen.query_one("#date-range").value = "custom"
+            await pilot.pause()
+            seen["shown"] = not screen.query_one("#custom-dates").has_class("hidden")
+
+        self._clip_settings(steps)
+        assert seen["hidden"] and seen["shown"]
+
+    def test_preset_is_resolved_to_rfc3339_before_saving(self):
+        """The pipeline should never receive a hand-typed date from a preset."""
+
+        async def steps(screen, pilot, app):
+            screen.query_one("#date-range").value = "month"
+            await pilot.pause()
+            screen._save_and_advance()
+
+        saved = self._clip_settings(steps)
+        assert saved["start"].endswith("Z")
+        assert saved["end"].endswith("Z")
+
+    def test_everything_leaves_the_start_open(self):
+        async def steps(screen, pilot, app):
+            screen.query_one("#date-range").value = "everything"
+            await pilot.pause()
+            screen._save_and_advance()
+
+        saved = self._clip_settings(steps)
+        assert saved["start"] == ""
+
+    def test_custom_two_digit_year_survives_the_round_trip(self):
+        from clippy.window import resolve_date_window
+
+        async def steps(screen, pilot, app):
+            screen.query_one("#date-range").value = "custom"
+            await pilot.pause()
+            screen.query_one("#start-date").value = "07/01/26"
+            await pilot.pause()
+            screen._save_and_advance()
+
+        saved = self._clip_settings(steps)
+        assert resolve_date_window(saved["start"], None)[0] == "2026-07-01T00:00:00Z"

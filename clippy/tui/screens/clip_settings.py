@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Checkbox, Input, Label, RadioButton, RadioSet, Static
+from textual.widgets import Button, Checkbox, Input, Label, RadioButton, RadioSet, Select, Static
 
 from clippy.tui.bbs import BBSScreen
+from clippy.window import RANGE_CHOICES, window_from_preset
 
 
 def _safe_int(value: str, default: int, minimum: int | None = None) -> int:
@@ -37,8 +38,9 @@ class ClipSettingsScreen(BBSScreen):
 
     HINTS = {
         "broadcaster": "broadcaster: the Twitch channel to pull clips from",
-        "start-date": "start date: MM/DD/YYYY, YYYY-MM-DD or RFC3339; blank = last 3 days",
-        "end-date": "end date: blank = now",
+        "date-range": "how far back to search; the clip count trims it down anyway",
+        "start-date": "from: MM/DD/YY, MM/DD/YYYY, YYYY-MM-DD or RFC3339",
+        "end-date": "to: blank = now",
         "min-views": "min views: only clips with at least this many views (0 = all)",
         "clips-per-comp": "clips per compilation",
         "compilations": "how many compilation videos to produce",
@@ -66,9 +68,19 @@ class ClipSettingsScreen(BBSScreen):
                 )
 
             with Horizontal(classes="bbs-row"):
-                yield Label("Start date   ")
-                yield Input(placeholder="blank=last 3d", id="start-date", classes="w-med")
-                yield Label("  End date ")
+                yield Label("Date range   ")
+                yield Select(
+                    [(label, key) for key, label in RANGE_CHOICES] + [("Custom dates", "custom")],
+                    value="week",
+                    id="date-range",
+                    classes="w-med",
+                )
+
+            # Only shown for "Custom dates"; presets cover the common cases.
+            with Horizontal(id="custom-dates", classes="bbs-row hidden"):
+                yield Label("From ")
+                yield Input(placeholder="MM/DD/YY", id="start-date", classes="w-med")
+                yield Label("  To ")
                 yield Input(placeholder="blank=now", id="end-date", classes="w-med")
 
             with Horizontal(classes="bbs-row"):
@@ -122,6 +134,10 @@ class ClipSettingsScreen(BBSScreen):
 
         yield from self.status_bar()
 
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id == "date-range":
+            self.query_one("#custom-dates").set_class(event.value != "custom", "hidden")
+
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         if event.radio_set.id != "sizing-mode":
             return
@@ -139,10 +155,20 @@ class ClipSettingsScreen(BBSScreen):
         radio_set = self.query_one("#sizing-mode", RadioSet)
         by_duration = radio_set.pressed_button.id == "mode-duration"
 
+        date_range = self.query_one("#date-range", Select).value
+        if date_range == "custom":
+            start = self.query_one("#start-date", Input).value.strip()
+            end = self.query_one("#end-date", Input).value.strip()
+        else:
+            # Resolve to RFC3339 now, so the pipeline never has to parse a
+            # human-entered date and cannot fail on one mid-run.
+            start, end = window_from_preset(str(date_range))
+            start, end = start or "", end or ""
+
         settings: dict = {
             "broadcaster": self.query_one("#broadcaster", Input).value.strip(),
-            "start": self.query_one("#start-date", Input).value.strip(),
-            "end": self.query_one("#end-date", Input).value.strip(),
+            "start": start,
+            "end": end,
             "min_views": _safe_int(self.query_one("#min-views", Input).value or "0", 0, 0),
             "auto_expand": self.query_one("#auto-expand", Checkbox).value,
             "nostalgia_mode": self.query_one("#nostalgia-mode", Checkbox).value,

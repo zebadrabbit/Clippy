@@ -384,7 +384,14 @@ class ProgressScreen(Screen):
                 prep_work()
 
             # ---- Resolve date window ----
-            window = resolve_date_window(start_date or None, end_date or None)
+            # A hand-typed date must never kill the run: report it and fall back
+            # to the default window instead of raising out of the worker.
+            try:
+                window = resolve_date_window(start_date or None, end_date or None)
+            except ValueError as exc:
+                self._log(f"[bold red]{exc}[/]")
+                self._log("[yellow]Falling back to the default window (last 3 days).[/]")
+                window = resolve_date_window(None, None)
 
             # ---- Fetch clips ----
             self._set_stage("Fetching clips")

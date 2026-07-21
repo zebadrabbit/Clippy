@@ -9,8 +9,10 @@ from clippy.utils import log
 def _parse_date_input(s: str) -> Tuple[datetime, bool]:
     """Parse a date, or a full RFC3339 timestamp as Helix itself returns.
 
-    Accepted: MM/DD/YYYY, MM-DD-YYYY, YYYY-MM-DD, and ISO8601/RFC3339
-    (``2025-07-01T00:00:00Z``).
+    Accepted: MM/DD/YYYY, MM/DD/YY, MM-DD-YYYY, MM-DD-YY, YYYY-MM-DD, YYYY/MM/DD,
+    and ISO8601/RFC3339 (``2025-07-01T00:00:00Z``).
+
+    Two-digit years follow the C convention: 00-68 are 2000s, 69-99 are 1900s.
 
     Returns ``(utc_datetime, has_time)``. ``has_time`` is True when the caller
     supplied a time of day, so the day-boundary defaults are left alone.
@@ -19,7 +21,14 @@ def _parse_date_input(s: str) -> Tuple[datetime, bool]:
     try:
         dt = datetime.fromisoformat(s.replace("Z", "+00:00").replace("z", "+00:00"))
     except ValueError:
-        for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%Y-%m-%d"):
+        for fmt in (
+            "%m/%d/%Y",
+            "%m/%d/%y",
+            "%m-%d-%Y",
+            "%m-%d-%y",
+            "%Y-%m-%d",
+            "%Y/%m/%d",
+        ):
             try:
                 dt = datetime.strptime(s, fmt)
                 break
@@ -27,7 +36,7 @@ def _parse_date_input(s: str) -> Tuple[datetime, bool]:
                 continue
         else:
             raise ValueError(
-                f"Invalid date format: {s}. Use MM/DD/YYYY, YYYY-MM-DD, "
+                f"Invalid date format: {s}. Use MM/DD/YYYY, MM/DD/YY, YYYY-MM-DD, "
                 "or an RFC3339 timestamp like 2025-07-01T00:00:00Z."
             ) from None
     # Naive input is read as UTC; an explicit offset is converted to UTC.
@@ -36,8 +45,53 @@ def _parse_date_input(s: str) -> Tuple[datetime, bool]:
 
 
 def _iso_z(dt: datetime) -> str:
-    """Render a UTC datetime the way Helix expects it."""
-    return dt.isoformat().replace("+00:00", "Z")
+    """Render a UTC datetime the way Helix expects it (whole seconds)."""
+    return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+#: Named lookback ranges, in days back from now. ``None`` means no lower bound.
+#: These are deliberately approximate -- a "month" is 30 days -- because the
+#: clip count and min-views filters decide the final selection anyway.
+RANGE_PRESETS: dict[str, Optional[int]] = {
+    "today": 0,
+    "week": 7,
+    "two_weeks": 14,
+    "month": 30,
+    "six_months": 180,
+    "year": 365,
+    "everything": None,
+}
+
+#: Display order and labels for pickers.
+RANGE_CHOICES: list[Tuple[str, str]] = [
+    ("today", "Today"),
+    ("week", "This week"),
+    ("two_weeks", "Last two weeks"),
+    ("month", "Last month"),
+    ("six_months", "Last 6 months"),
+    ("year", "Last year"),
+    ("everything", "Everything"),
+]
+
+
+def window_from_preset(
+    name: str, now: Optional[datetime] = None
+) -> Tuple[Optional[str], Optional[str]]:
+    """Turn a named range like ``"month"`` into ``(start_iso, end_iso)``.
+
+    ``"today"`` runs from midnight; the rest count back whole days from now.
+    ``"everything"`` returns no start bound, so Helix searches all time.
+    Unknown names fall back to a week rather than raising -- this feeds a
+    picker, and a bad value should not be able to take down a run.
+    """
+    now = now or datetime.now(timezone.utc)
+    days = RANGE_PRESETS.get(name, 7)
+    if days is None:
+        return None, _iso_z(now)
+    if days == 0:
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return _iso_z(midnight), _iso_z(now)
+    return _iso_z(now - timedelta(days=days)), _iso_z(now)
 
 
 def resolve_date_window(
