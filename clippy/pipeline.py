@@ -103,12 +103,52 @@ def _current_encoder_params() -> EncoderParams:
     )
 
 
+# Creator-credit timing, in seconds. The credit slides in from the left edge,
+# holds, then slides back out. Easy to retune: only these three numbers decide
+# the motion.
+OVERLAY_IN = 3.0  # when the credit starts sliding in
+OVERLAY_OUT = 10.0  # when it has finished sliding out
+OVERLAY_SLIDE = 0.45  # how long each slide takes
+
+
+def _overlay_motion(distance: int) -> tuple[str, str]:
+    """Return ``(x_offset, fade)`` expressions for the credit's entrance and exit.
+
+    ffmpeg evaluates these per frame, so the animation is done by the filter
+    rather than by generating frames ourselves. The offset eases with a cubic so
+    it decelerates into place instead of arriving at a constant speed, and the
+    fade follows the same envelope so the text lands with the panel.
+
+    Both are single-quoted where they are used: they contain commas, which would
+    otherwise be read as filtergraph separators.
+    """
+    d = OVERLAY_SLIDE
+    in_end = OVERLAY_IN + d
+    out_start = OVERLAY_OUT - d
+
+    # -distance at the start, 0 once in place, back to -distance on the way out.
+    offset = (
+        f"if(lt(t,{in_end}),"
+        f"-{distance}*pow(1-(t-{OVERLAY_IN})/{d},3),"
+        f"if(lt(t,{out_start}),0,-{distance}*pow((t-{out_start})/{d},3)))"
+    )
+    # 0 -> 1 -> 0 over the same windows, clamped so rounding cannot overshoot.
+    fade = (
+        f"min(1,max(0,if(lt(t,{in_end}),(t-{OVERLAY_IN})/{d},"
+        f"if(lt(t,{out_start}),1,({OVERLAY_OUT}-t)/{d}))))"
+    )
+    return offset, fade
+
+
 def _overlay_filter(author: str, fontfile: str, resolution: str = "1920x1080") -> str:
     """Build the drawtext/overlay filter graph for a clip.
 
     The original coordinates were hand-tuned for 1080p; they are now scaled by
     ``height / 1080`` so the credit banner, text, and avatar keep their proportions
     at other resolutions (e.g. 720p ``discord_friendly``).
+
+    The whole credit — panel, both lines of text and the avatar — shares one
+    offset expression, so it moves as a single object.
     """
     safe_author = author.replace("'", "\\'")
     safe_font = fontfile.replace("\\", "/")
@@ -125,13 +165,25 @@ def _overlay_filter(author: str, fontfile: str, resolution: str = "1920x1080") -
     cb_x, cb_off, cb_fs = px(198), px(190), max(10, px(28))
     au_x, au_off, au_fs = px(198), px(160), max(12, px(48))
     av_x, av_off, av_h = px(50), px(223), px(128)
-    en = "enable='between(t,3,10)'"
+
+    # Travel far enough that the panel is fully clear of the left edge.
+    offset, fade = _overlay_motion(box_w)
+    en = f"enable='between(t,{OVERLAY_IN},{OVERLAY_OUT})'"
+
+    # The panel is an overlaid colour source rather than drawbox: ffmpeg 4.4's
+    # drawbox accepts arithmetic in x but silently ignores the `t` variable, so
+    # a drawbox panel cannot move and simply fails to draw. overlay honours `t`.
+    # shortest=1 belongs only here -- the colour source never ends, and putting
+    # it on the avatar overlay would truncate the clip to that single frame.
     return (
         f'"[1:v]scale=-2:{av_h}[av];'
-        f"[0:v]drawbox={en}:x=0:y=(ih)-{box_off}:h={box_h}:w={box_w}:color=black@0.7:t=fill,"
-        f"drawtext={en}:x={cb_x}:y=(h)-{cb_off}:fontfile='{safe_font}':fontsize={cb_fs}:fontcolor=white@0.4:text='clip by',"
-        f"drawtext={en}:x={au_x}:y=(h)-{au_off}:fontfile='{safe_font}':fontsize={au_fs}:fontcolor=white@0.9:text='{safe_author}'[base];"
-        f'[base][av]overlay={en}:x={av_x}:y=H-{av_off}[overlay]"'
+        f"color=c=black@0.7:s={box_w}x{box_h},format=yuva420p[panel];"
+        f"[0:v][panel]overlay={en}:x='{offset}':y=H-{box_off}:shortest=1[bg];"
+        f"[bg]drawtext={en}:x='{cb_x}+{offset}':y=(h)-{cb_off}:fontfile='{safe_font}':fontsize={cb_fs}"
+        f":fontcolor=white:alpha='0.4*{fade}':text='clip by',"
+        f"drawtext={en}:x='{au_x}+{offset}':y=(h)-{au_off}:fontfile='{safe_font}':fontsize={au_fs}"
+        f":fontcolor=white:alpha='0.9*{fade}':text='{safe_author}'[base];"
+        f"[base][av]overlay={en}:x='{av_x}+{offset}':y=H-{av_off}[overlay]\""
     )
 
 

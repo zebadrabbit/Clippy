@@ -100,3 +100,95 @@ def test_explicit_codec_choice_skips_detection(monkeypatch):
         pipeline, "detect_encoder", lambda _bin: pytest.fail("should not probe ffmpeg")
     )
     assert pipeline._current_encoder_params().video_codec == "h264_nvenc"
+
+
+def _eval_ffmpeg_expr(expr: str, t: float) -> float:
+    """Evaluate the subset of ffmpeg expression syntax used by the credit motion.
+
+    ``if`` is a Python keyword and cannot be called, so it is renamed before
+    evaluation. Both branches are evaluated eagerly, which is harmless for these
+    expressions.
+    """
+    import math
+
+    env = {
+        "t": t,
+        "if_": lambda cond, a, b: a if cond else b,
+        "lt": lambda a, b: a < b,
+        "pow": math.pow,
+        "min": min,
+        "max": max,
+    }
+    return float(eval(expr.replace("if(", "if_("), {"__builtins__": {}}, env))  # noqa: S307
+
+
+class TestCreditAnimation:
+    """The credit slides in from the left, holds, then slides back out.
+
+    Timing comes from OVERLAY_IN / OVERLAY_OUT / OVERLAY_SLIDE, so the maths is
+    checked here and the rendering was verified against real ffmpeg frames.
+    """
+
+    DIST = 1000
+
+    def _motion(self):
+        return pipeline._overlay_motion(self.DIST)
+
+    def test_starts_fully_off_screen(self):
+        offset, _ = self._motion()
+        assert _eval_ffmpeg_expr(offset, pipeline.OVERLAY_IN) == pytest.approx(-self.DIST)
+
+    def test_reaches_its_resting_place(self):
+        offset, _ = self._motion()
+        settled = pipeline.OVERLAY_IN + pipeline.OVERLAY_SLIDE
+        assert _eval_ffmpeg_expr(offset, settled) == pytest.approx(0, abs=1e-9)
+
+    def test_holds_still_in_the_middle(self):
+        offset, _ = self._motion()
+        midpoint = (pipeline.OVERLAY_IN + pipeline.OVERLAY_OUT) / 2
+        assert _eval_ffmpeg_expr(offset, midpoint) == 0
+
+    def test_leaves_by_the_way_it_came(self):
+        offset, _ = self._motion()
+        assert _eval_ffmpeg_expr(offset, pipeline.OVERLAY_OUT) == pytest.approx(-self.DIST)
+
+    def test_motion_is_monotonic_on_the_way_in(self):
+        """Easing may decelerate, but it must never travel backwards."""
+        offset, _ = self._motion()
+        steps = [
+            _eval_ffmpeg_expr(offset, pipeline.OVERLAY_IN + i * pipeline.OVERLAY_SLIDE / 10)
+            for i in range(11)
+        ]
+        assert steps == sorted(steps)
+
+    def test_fade_runs_from_zero_to_one_and_back(self):
+        _, fade = self._motion()
+        assert _eval_ffmpeg_expr(fade, pipeline.OVERLAY_IN) == pytest.approx(0)
+        assert _eval_ffmpeg_expr(fade, (pipeline.OVERLAY_IN + pipeline.OVERLAY_OUT) / 2) == 1
+        assert _eval_ffmpeg_expr(fade, pipeline.OVERLAY_OUT) == pytest.approx(0)
+
+    def test_fade_never_leaves_zero_to_one(self):
+        _, fade = self._motion()
+        for i in range(0, 140):
+            value = _eval_ffmpeg_expr(fade, i / 10)
+            assert 0.0 <= value <= 1.0
+
+    def test_panel_is_overlaid_not_drawbox(self):
+        """drawbox in ffmpeg 4.4 ignores `t`, so a drawbox panel cannot move."""
+        f = pipeline._overlay_filter("Bob", "/f.ttf", "1920x1080")
+        assert "drawbox" not in f
+        assert "color=c=black@0.7" in f
+        # Defined once and consumed once: a dangling label is an invalid graph.
+        assert f.count("[panel]") == 2
+
+    def test_shortest_is_only_on_the_panel_overlay(self):
+        """On the avatar overlay it would truncate the clip to one frame."""
+        f = pipeline._overlay_filter("Bob", "/f.ttf", "1920x1080")
+        assert f.count("shortest=1") == 1
+        assert "shortest=1[bg]" in f
+
+    def test_every_element_shares_one_offset(self):
+        """Panel, both text lines and the avatar must move as a single object."""
+        f = pipeline._overlay_filter("Bob", "/f.ttf", "1920x1080")
+        offset, _ = pipeline._overlay_motion(1000)
+        assert f.count(offset) == 4
