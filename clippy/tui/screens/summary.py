@@ -41,9 +41,9 @@ class SummaryScreen(Screen):
 
         with VerticalScroll(classes="screen-container"):
             yield Static(
-                "[bold green]Pipeline Complete[/]",
-                classes="screen-title",
-                markup=True,
+                " CLIPPY ── BUILD COMPLETE ────────────────────────────────",
+                classes="bbs-titlebar",
+                markup=False,
             )
 
             # --- Output files ---

@@ -7,88 +7,91 @@ from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import Button, Checkbox, Input, Label, Static
 
 from clippy.runtime import save_env
+from clippy.tui.bbs import BBSScreen
 
 
-class CredentialsScreen(Screen):
+class CredentialsScreen(BBSScreen):
     """Step 2: Enter credentials."""
+
+    STEP = 2
+    STEP_TITLE = "Credentials"
+    KEYS = "[TAB] field   [ENTER] continue   [ESC] back   [Q] quit"
+
+    HINTS = {
+        "client-id": "client id: from your app at dev.twitch.tv/console/apps",
+        "client-secret": "client secret: paired with the client id; never shown again by Twitch",
+        "discord-token": "bot token: from the Discord Developer Portal",
+        "discord-channel-id": "channel id: right-click the channel > Copy ID (needs Developer Mode)",
+        "save-env": "write the credentials to .env so you are not asked again",
+    }
+    DEFAULT_HINT = "Credentials are read from .env or the environment when present."
 
     def compose(self) -> ComposeResult:
         source = self.app.workflow.get("source", "twitch")
 
+        yield self.title_bar()
         with Vertical(classes="screen-container"):
-            yield Static("Step 2 of 6 — Credentials", classes="screen-title")
+            yield Static("", classes="bbs-gap")
+            yield Static("── TWITCH ──", classes="bbs-section")
 
-            yield Label("Twitch Client ID")
-            yield Input(
-                value=os.getenv("TWITCH_CLIENT_ID", ""),
-                placeholder="Enter Twitch Client ID",
-                password=True,
-                id="client-id",
-            )
-            yield Static(
-                "Your Twitch application's Client ID from dev.twitch.tv.",
-                classes="help-text",
-            )
-
-            yield Label("Twitch Client Secret")
-            yield Input(
-                value=os.getenv("TWITCH_CLIENT_SECRET", ""),
-                placeholder="Enter Twitch Client Secret",
-                password=True,
-                id="client-secret",
-            )
-            yield Static(
-                "The secret key paired with your Client ID. "
-                "Pre-filled from .env or environment variables if available.",
-                classes="help-text",
-            )
+            with Horizontal(classes="bbs-row"):
+                yield Label("Client ID    ")
+                yield Input(
+                    value=os.getenv("TWITCH_CLIENT_ID", ""),
+                    placeholder="dev.twitch.tv",
+                    password=True,
+                    id="client-id",
+                    classes="w-wide",
+                )
+            with Horizontal(classes="bbs-row"):
+                yield Label("Client secret")
+                yield Input(
+                    value=os.getenv("TWITCH_CLIENT_SECRET", ""),
+                    placeholder="paired secret",
+                    password=True,
+                    id="client-secret",
+                    classes="w-wide",
+                )
 
             if source == "discord":
-                yield Label("Discord Bot Token")
-                yield Input(
-                    value=os.getenv("DISCORD_TOKEN", ""),
-                    placeholder="Enter Discord bot token",
-                    password=True,
-                    id="discord-token",
-                )
-                yield Static(
-                    "Bot token from the Discord Developer Portal.",
-                    classes="help-text",
-                )
-                yield Label("Discord Channel ID")
-                yield Input(
-                    value=str(self.app.config.discord.channel_id or ""),
-                    placeholder="Enter Discord channel ID",
-                    id="discord-channel-id",
-                )
-                yield Static(
-                    "Right-click the channel in Discord and Copy ID (Developer Mode must be on). "
-                    "Pre-filled from clippy.yaml if available.",
-                    classes="help-text",
-                )
+                yield Static("", classes="bbs-gap")
+                yield Static("── DISCORD ──", classes="bbs-section")
+                with Horizontal(classes="bbs-row"):
+                    yield Label("Bot token    ")
+                    yield Input(
+                        value=os.getenv("DISCORD_TOKEN", ""),
+                        placeholder="bot token",
+                        password=True,
+                        id="discord-token",
+                        classes="w-wide",
+                    )
+                with Horizontal(classes="bbs-row"):
+                    yield Label("Channel ID   ")
+                    yield Input(
+                        value=str(self.app.config.discord.channel_id or ""),
+                        placeholder="right-click > Copy ID",
+                        id="discord-channel-id",
+                        classes="w-wide",
+                    )
 
-            yield Static("")
+            yield Static("", classes="bbs-gap")
             yield Checkbox(
-                "Save credentials to .env for next time",
+                "Save credentials to .env",
                 value=not Path(".env").is_file(),
                 id="save-env",
             )
-            yield Static(
-                "Writes API credentials (Client ID, Secret, Discord token) to .env. "
-                "Channel ID and other settings are saved in clippy.yaml.",
-                classes="help-text",
-            )
-
             yield Static("", id="validation-status")
+            yield self.progress_bar()
 
             with Horizontal(classes="button-bar"):
-                yield Button("← Back", id="back-btn")
+                yield Button("< Back", id="back-btn")
                 yield Button("Validate", id="validate-btn")
-                yield Button("Next →", variant="primary", id="next-btn")
+                yield Button("Next >", variant="primary", id="next-btn")
+
+        yield from self.status_bar()
 
     def on_mount(self) -> None:
         """Auto-skip if credentials are already available from env / .env."""

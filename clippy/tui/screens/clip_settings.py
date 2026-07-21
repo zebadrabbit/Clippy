@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
-from textual.widgets import Button, Input, Label, RadioButton, RadioSet, Static, Switch
+from textual.widgets import Button, Checkbox, Input, Label, RadioButton, RadioSet, Static
+
+from clippy.tui.bbs import BBSScreen
 
 
 def _safe_int(value: str, default: int, minimum: int | None = None) -> int:
@@ -28,129 +29,98 @@ def _safe_float(value: str, default: float, minimum: float | None = None) -> flo
     return parsed
 
 
-class ClipSettingsScreen(Screen):
+class ClipSettingsScreen(BBSScreen):
     """Step 3: Configure clip selection."""
+
+    STEP = 3
+    STEP_TITLE = "Clip Settings"
+
+    HINTS = {
+        "broadcaster": "broadcaster: the Twitch channel to pull clips from",
+        "start-date": "start date: MM/DD/YYYY, YYYY-MM-DD or RFC3339; blank = last 3 days",
+        "end-date": "end date: blank = now",
+        "min-views": "min views: only clips with at least this many views (0 = all)",
+        "clips-per-comp": "clips per compilation",
+        "compilations": "how many compilation videos to produce",
+        "target-duration": "target minutes per compilation; clips are added until reached",
+        "compilations-dur": "how many compilation videos to produce",
+        "sizing-mode": "size compilations by a clip count or by an approximate length",
+        "auto-expand": "auto-expand: reach outside the date range to fill a shortfall",
+        "nostalgia-mode": "nostalgia: mix in random clips older than 6 months",
+    }
 
     def compose(self) -> ComposeResult:
         cfg = self.app.config
 
+        yield self.title_bar()
         with Vertical(classes="screen-container"):
-            yield Static("Step 3 of 6 — Clip Settings", classes="screen-title")
+            yield Static("", classes="bbs-gap")
 
-            yield Label("Broadcaster Name")
-            yield Input(
-                value=cfg.identity.broadcaster,
-                placeholder="e.g. somechannel",
-                id="broadcaster",
-            )
-            yield Static(
-                "The Twitch channel name to fetch clips from.",
-                classes="help-text",
-            )
+            with Horizontal(classes="bbs-row"):
+                yield Label("Broadcaster  ")
+                yield Input(
+                    value=cfg.identity.broadcaster,
+                    placeholder="somechannel",
+                    id="broadcaster",
+                    classes="w-wide",
+                )
 
-            with Horizontal():
-                with Vertical(classes="form-group"):
-                    yield Label("Start Date (MM/DD/YYYY)")
-                    yield Input(placeholder="Leave blank for last 3 days", id="start-date")
-                with Vertical(classes="form-group"):
-                    yield Label("End Date (MM/DD/YYYY)")
-                    yield Input(placeholder="Leave blank for today", id="end-date")
-            yield Static(
-                "Date range to search for clips. Leave both blank to use the last 3 days.",
-                classes="help-text",
-            )
+            with Horizontal(classes="bbs-row"):
+                yield Label("Start date   ")
+                yield Input(placeholder="blank=last 3d", id="start-date", classes="w-med")
+                yield Label("  End date ")
+                yield Input(placeholder="blank=now", id="end-date", classes="w-med")
 
-            yield Label("Min Views")
-            yield Input(value=str(cfg.selection.min_views), id="min-views")
-            yield Static(
-                "Only include clips with at least this many views. Set to 0 for all clips.",
-                classes="help-text",
-            )
+            with Horizontal(classes="bbs-row"):
+                yield Label("Min views    ")
+                yield Input(value=str(cfg.selection.min_views), id="min-views", classes="w-sm")
 
-            # ---- Sizing mode: by clip count or by duration ----
-            yield Static("")
-            yield Label("Compilation sizing")
+            yield Static("", classes="bbs-gap")
+            yield Static("── SIZING ──", classes="bbs-section")
             yield RadioSet(
                 RadioButton("By clip count", value=True, id="mode-count"),
-                RadioButton("By target duration (approx.)", id="mode-duration"),
+                RadioButton("By target duration", id="mode-duration"),
                 id="sizing-mode",
             )
-            yield Static(
-                "Choose whether to build compilations by a fixed number of clips "
-                "or by an approximate target video length.",
-                classes="help-text",
-            )
 
-            # Count-based fields (shown by default)
             with Vertical(id="count-fields"):
-                with Horizontal():
-                    with Vertical(classes="form-group"):
-                        yield Label("Clips per Compilation")
-                        yield Input(
-                            value=str(cfg.selection.clips_per_compilation),
-                            id="clips-per-comp",
-                        )
-                        yield Static(
-                            "How many clips in each compilation video.",
-                            classes="help-text",
-                        )
-                    with Vertical(classes="form-group"):
-                        yield Label("Number of Compilations")
-                        yield Input(
-                            value=str(cfg.selection.compilations),
-                            id="compilations",
-                        )
-                        yield Static(
-                            "How many separate compilation videos to produce.",
-                            classes="help-text",
-                        )
+                with Horizontal(classes="bbs-row"):
+                    yield Label("Clips/comp   ")
+                    yield Input(
+                        value=str(cfg.selection.clips_per_compilation),
+                        id="clips-per-comp",
+                        classes="w-sm",
+                    )
+                    yield Label("  Comps    ")
+                    yield Input(
+                        value=str(cfg.selection.compilations),
+                        id="compilations",
+                        classes="w-sm",
+                    )
 
-            # Duration-based fields (hidden by default)
             with Vertical(id="duration-fields", classes="hidden"):
-                with Horizontal():
-                    with Vertical(classes="form-group"):
-                        yield Label("Target length per compilation (minutes)")
-                        yield Input(
-                            value="10",
-                            placeholder="e.g. 10",
-                            id="target-duration",
-                        )
-                        yield Static(
-                            "Clips are added until this length is reached. "
-                            "Actual duration depends on individual clip lengths.",
-                            classes="help-text",
-                        )
-                    with Vertical(classes="form-group"):
-                        yield Label("Number of Compilations")
-                        yield Input(
-                            value=str(cfg.selection.compilations),
-                            id="compilations-dur",
-                        )
-                        yield Static(
-                            "How many separate compilation videos to produce.",
-                            classes="help-text",
-                        )
+                with Horizontal(classes="bbs-row"):
+                    yield Label("Minutes/comp ")
+                    yield Input(value="10", id="target-duration", classes="w-sm")
+                    yield Label("  Comps    ")
+                    yield Input(
+                        value=str(cfg.selection.compilations),
+                        id="compilations-dur",
+                        classes="w-sm",
+                    )
 
-            with Horizontal():
-                yield Label("Auto-expand to fill quantity")
-                yield Switch(value=True, id="auto-expand")
-            yield Static(
-                "When enabled, fetches clips from outside the date range (newest first) "
-                "to fill any shortfall in the requested quantity.",
-                classes="help-text",
-            )
+            yield Static("", classes="bbs-gap")
+            with Horizontal(classes="bbs-row"):
+                yield Checkbox("Auto-expand", value=True, id="auto-expand")
+                yield Checkbox("Nostalgia", value=False, id="nostalgia-mode")
 
-            with Horizontal():
-                yield Label("Nostalgia Mode")
-                yield Switch(value=False, id="nostalgia-mode")
-            yield Static(
-                "Mixes in random older clips (>6 months old) for variety.",
-                classes="help-text",
-            )
+            yield self.progress_bar()
 
             with Horizontal(classes="button-bar"):
-                yield Button("← Back", id="back-btn")
-                yield Button("Next →", variant="primary", id="next-btn")
+                yield Button("< Back", id="back-btn")
+                yield Button("Next >", variant="primary", id="next-btn")
+
+        yield from self.status_bar()
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         if event.radio_set.id != "sizing-mode":
@@ -174,8 +144,8 @@ class ClipSettingsScreen(Screen):
             "start": self.query_one("#start-date", Input).value.strip(),
             "end": self.query_one("#end-date", Input).value.strip(),
             "min_views": _safe_int(self.query_one("#min-views", Input).value or "0", 0, 0),
-            "auto_expand": self.query_one("#auto-expand", Switch).value,
-            "nostalgia_mode": self.query_one("#nostalgia-mode", Switch).value,
+            "auto_expand": self.query_one("#auto-expand", Checkbox).value,
+            "nostalgia_mode": self.query_one("#nostalgia-mode", Checkbox).value,
             "sizing_mode": "duration" if by_duration else "count",
         }
 

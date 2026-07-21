@@ -136,7 +136,9 @@ class ProgressScreen(Screen):
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="screen-container"):
-            yield Static("Processing", classes="screen-title")
+            yield Static(
+                " CLIPPY ── BUILDING ──────────────────────────────────", classes="bbs-titlebar"
+            )
 
             with Vertical(classes="progress-section"):
                 yield Label("Overall Progress")

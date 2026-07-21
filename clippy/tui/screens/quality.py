@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
 from textual.widgets import Button, Input, Label, OptionList, Select, Static
 from textual.widgets.option_list import Option
 
 from clippy.ffmpeg import EncoderParams
 from clippy.presets import PRESETS, list_presets
+from clippy.tui.bbs import BBSScreen
 
 
 def _clamp_int(value: str, default: int, minimum: int, maximum: int) -> int:
@@ -20,137 +20,93 @@ def _clamp_int(value: str, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, parsed))
 
 
-class QualityScreen(Screen):
+class QualityScreen(BBSScreen):
     """Step 4: Choose encoding preset and customize parameters."""
 
+    STEP = 4
+    STEP_TITLE = "Quality & Encoding"
+
+    HINTS = {
+        "preset-list": "pick a preset to fill every parameter below, then tweak",
+        "codec-select": "nvenc encodes on the GPU; libx264 is the CPU fallback",
+        "cq-input": "constant quality: lower = better and larger. typical 16-28",
+        "bitrate-input": "peak bitrate cap, e.g. 12M. limits spikes in busy scenes",
+        "preset-select": "encoder speed/quality trade-off",
+        "resolution-select": "output resolution; clips are scaled to fit",
+        "fps-select": "60 for gameplay, 30 for smaller files",
+        "audio-bitrate-input": "AAC audio bitrate, e.g. 192k",
+        "container-select": "mp4 for compatibility, mkv for lossless container features",
+    }
+    DEFAULT_HINT = "Choose a preset, or set the encoder parameters by hand."
+
     def compose(self) -> ComposeResult:
+        yield self.title_bar()
         with Vertical(classes="screen-container"):
-            yield Static("Step 4 of 6 — Quality & Encoding", classes="screen-title")
+            yield Static("── PRESET ──", classes="bbs-section")
+            yield OptionList(
+                *[Option(f"{name} — {desc}", id=name) for name, desc in list_presets()],
+                id="preset-list",
+                classes="preset-list",
+            )
 
-            with Horizontal():
-                # Left panel: preset selector
-                with Vertical(id="preset-panel"):
-                    yield Label("Encoding Preset")
-                    yield OptionList(
-                        *[Option(f"{name} — {desc}", id=name) for name, desc in list_presets()],
-                        id="preset-list",
-                    )
-                    yield Static(
-                        "Pick a preset to auto-fill the parameters, then tweak as needed.",
-                        classes="help-text",
-                    )
+            yield Static("── PARAMETERS ──", classes="bbs-section")
+            with Horizontal(classes="bbs-row"):
+                yield Label("Codec ")
+                yield Select(
+                    [("nvenc (GPU)", "h264_nvenc"), ("libx264 (CPU)", "libx264")],
+                    value="h264_nvenc",
+                    id="codec-select",
+                    classes="w-med",
+                )
+                yield Label("  CQ ")
+                yield Input(value="19", id="cq-input", classes="w-tiny")
+                yield Label("  Rate ")
+                yield Input(value="12M", id="bitrate-input", classes="w-sm")
 
-                # Right panel: parameter builder
-                with Vertical(id="builder-panel"):
-                    yield Label("Parameters (editable)")
+            with Horizontal(classes="bbs-row"):
+                yield Label("Speed ")
+                yield Select(
+                    [("slow", "slow"), ("medium", "medium"), ("fast", "fast")],
+                    value="slow",
+                    id="preset-select",
+                    classes="w-med",
+                )
+                yield Label("  Res ")
+                yield Select(
+                    [
+                        ("1920x1080", "1920x1080"),
+                        ("2560x1440", "2560x1440"),
+                        ("1280x720", "1280x720"),
+                    ],
+                    value="1920x1080",
+                    id="resolution-select",
+                    classes="w-med",
+                )
 
-                    with Horizontal():
-                        with Vertical(classes="form-group"):
-                            yield Label("Codec")
-                            yield Select(
-                                [("h264_nvenc (GPU)", "h264_nvenc"), ("libx264 (CPU)", "libx264")],
-                                value="h264_nvenc",
-                                id="codec-select",
-                            )
-                            yield Static(
-                                "NVENC uses your GPU for fast encoding. "
-                                "libx264 is a CPU fallback.",
-                                classes="help-text",
-                            )
-                        with Vertical(classes="form-group"):
-                            yield Label("CQ (quality)")
-                            yield Input(value="19", id="cq-input")
-                            yield Static(
-                                "Constant quality level. Lower = better quality, larger files. "
-                                "Typical range: 16-28.",
-                                classes="help-text",
-                            )
+            with Horizontal(classes="bbs-row"):
+                yield Label("FPS   ")
+                yield Select(
+                    [("60", "60"), ("30", "30")], value="60", id="fps-select", classes="w-tiny"
+                )
+                yield Label("  Audio ")
+                yield Input(value="192k", id="audio-bitrate-input", classes="w-sm")
+                yield Label("  Fmt ")
+                yield Select(
+                    [("mp4", "mp4"), ("mkv", "mkv")],
+                    value="mp4",
+                    id="container-select",
+                    classes="w-sm",
+                )
 
-                    with Horizontal():
-                        with Vertical(classes="form-group"):
-                            yield Label("Max Bitrate")
-                            yield Input(value="12M", id="bitrate-input")
-                            yield Static(
-                                "Peak bitrate cap (e.g. 12M, 8M). "
-                                "Prevents spikes in complex scenes.",
-                                classes="help-text",
-                            )
-                        with Vertical(classes="form-group"):
-                            yield Label("Preset")
-                            yield Select(
-                                [
-                                    ("slow", "slow"),
-                                    ("medium", "medium"),
-                                    ("fast", "fast"),
-                                ],
-                                value="slow",
-                                id="preset-select",
-                            )
-                            yield Static(
-                                "Encoder speed/quality trade-off. "
-                                "Slow = best quality, Fast = quicker encode.",
-                                classes="help-text",
-                            )
-
-                    with Horizontal():
-                        with Vertical(classes="form-group"):
-                            yield Label("Resolution")
-                            yield Select(
-                                [
-                                    ("1920x1080", "1920x1080"),
-                                    ("2560x1440", "2560x1440"),
-                                    ("1280x720", "1280x720"),
-                                ],
-                                value="1920x1080",
-                                id="resolution-select",
-                            )
-                            yield Static(
-                                "Output video resolution. Clips are scaled to fit.",
-                                classes="help-text",
-                            )
-                        with Vertical(classes="form-group"):
-                            yield Label("FPS")
-                            yield Select(
-                                [("60", "60"), ("30", "30")],
-                                value="60",
-                                id="fps-select",
-                            )
-                            yield Static(
-                                "Frames per second. 60 for smooth gameplay, 30 for smaller files.",
-                                classes="help-text",
-                            )
-
-                    with Horizontal():
-                        with Vertical(classes="form-group"):
-                            yield Label("Audio Bitrate")
-                            yield Input(value="192k", id="audio-bitrate-input")
-                            yield Static(
-                                "AAC audio bitrate (e.g. 192k, 128k). "
-                                "Higher = better audio quality.",
-                                classes="help-text",
-                            )
-                        with Vertical(classes="form-group"):
-                            yield Label("Container")
-                            yield Select(
-                                [("mp4", "mp4"), ("mkv", "mkv")],
-                                value="mp4",
-                                id="container-select",
-                            )
-                            yield Static(
-                                "MP4 for broad compatibility, MKV for lossless container features.",
-                                classes="help-text",
-                            )
-
-            # Bottom: command preview
-            yield Label("ffmpeg Command Preview")
             yield Static("", id="command-preview", classes="command-preview")
-
-            # Warnings
             yield Static("", id="warnings")
+            yield self.progress_bar()
 
             with Horizontal(classes="button-bar"):
-                yield Button("← Back", id="back-btn")
-                yield Button("Next →", variant="primary", id="next-btn")
+                yield Button("< Back", id="back-btn")
+                yield Button("Next >", variant="primary", id="next-btn")
+
+        yield from self.status_bar()
 
     def on_mount(self) -> None:
         self._update_preview()

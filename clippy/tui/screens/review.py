@@ -4,20 +4,27 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
-from textual.widgets import Button, DataTable, Static
+from textual.widgets import Button, DataTable
+
+from clippy.tui.bbs import BBSScreen
 
 
-class ReviewScreen(Screen):
+class ReviewScreen(BBSScreen):
     """Step 6: Review all settings and start processing."""
 
+    STEP = 6
+    STEP_TITLE = "Review & Start"
+    KEYS = "[ENTER] start   [ESC] back   [Q] quit"
+    DEFAULT_HINT = "Check the settings, then start the build."
+
     def compose(self) -> ComposeResult:
+        yield self.title_bar()
         with Vertical(classes="screen-container"):
-            yield Static("Step 6 of 6 — Review & Start", classes="screen-title")
             yield DataTable(id="review-table")
             with Horizontal(classes="button-bar"):
-                yield Button("← Back", id="back-btn")
-                yield Button("Start Processing", variant="primary", id="start-btn")
+                yield Button("< Back", id="back-btn")
+                yield Button("START", variant="primary", id="start-btn")
+        yield from self.status_bar()
 
     def on_mount(self) -> None:
         table = self.query_one("#review-table", DataTable)

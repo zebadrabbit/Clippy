@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
-from textual.widgets import Button, Input, Label, Static, Switch
+from textual.widgets import Button, Checkbox, Input, Label, Static
+
+from clippy.tui.bbs import BBSScreen
 
 
 def _resolve_transitions_path() -> str:
@@ -65,151 +66,109 @@ def _available_transitions_text(path: str) -> str:
     return "Detected transition clips: " + ", ".join(names)
 
 
-class TransitionsScreen(Screen):
+class TransitionsScreen(BBSScreen):
     """Step 5: Configure transitions, intro/outro, and audio settings."""
+
+    STEP = 5
+    STEP_TITLE = "Transitions"
+
+    HINTS = {
+        "transitions-dir": "folder holding your transition clips and static.mp4",
+        "transition-mode": "explicit = listed only / discover = scan transition_*.mp4 / hybrid = both",
+        "selected-transitions": "allowlist; in explicit mode only these files are eligible",
+        "transition-exclude": "denylist applied after selection and discovery",
+        "transition-prob": "chance of a transition between clips: 0.0 never, 1.0 always",
+        "transition-cooldown": "do not repeat a transition within the last N picks (0 = off)",
+        "no-random": "turn off random transitions; the static bumper is still inserted",
+        "audio-normalize": "EBU R128 loudness match for transition/intro/outro clips",
+        "audio-normalize-clips": "EBU R128 loudness match for every Twitch clip",
+        "silence-static": "mute the static.mp4 bumper",
+        "no-overlay": "skip the 'clip by' credit overlay on each clip",
+    }
+    DEFAULT_HINT = "Transitions and audio levelling."
 
     def compose(self) -> ComposeResult:
         cfg = self.app.config
 
+        yield self.title_bar()
         with Vertical(classes="screen-container"):
-            yield Static("Step 5 of 6 — Transitions", classes="screen-title")
-
-            yield Label("Transitions Directory")
-            yield Input(
-                value=_resolve_transitions_path(),
-                placeholder="Path to transitions directory",
-                id="transitions-dir",
-            )
-            yield Static(
-                "Folder containing transition .mp4 clips and the static bumper.",
-                classes="help-text",
-            )
+            with Horizontal(classes="bbs-row"):
+                yield Label("Directory ")
+                yield Input(
+                    value=_resolve_transitions_path(),
+                    placeholder="./transitions",
+                    id="transitions-dir",
+                    classes="w-wide",
+                )
             yield Static(
                 _available_transitions_text(_resolve_transitions_path()),
-                classes="help-text",
                 id="available-transitions",
+                classes="bbs-dim",
             )
 
-            with Horizontal():
-                with Vertical(classes="form-group"):
-                    yield Label("Transition Selection Mode")
-                    yield Input(
-                        value=str(getattr(cfg.sequencing, "transition_mode", "explicit")),
-                        placeholder="explicit | discover | hybrid",
-                        id="transition-mode",
-                    )
-                    yield Static(
-                        "explicit = only listed files, discover = scan for transition_*.mp4, "
-                        "hybrid = combine both.",
-                        classes="help-text",
-                    )
-                with Vertical(classes="form-group"):
-                    yield Label("Selected transitions (comma-separated)")
-                    yield Input(
-                        value=", ".join(getattr(cfg.assets, "transitions", [])),
-                        placeholder="transition_01.mp4, transition_02.mp4",
-                        id="selected-transitions",
-                    )
-                    yield Static(
-                        "Use this allowlist to be selective. In explicit mode, only these files are eligible.",
-                        classes="help-text",
-                    )
+            yield Static("── SELECTION ──", classes="bbs-section")
+            with Horizontal(classes="bbs-row"):
+                yield Label("Mode  ")
+                yield Input(
+                    value=str(getattr(cfg.sequencing, "transition_mode", "explicit")),
+                    placeholder="explicit|discover|hybrid",
+                    id="transition-mode",
+                    classes="w-med",
+                )
+                yield Label("  Prob ")
+                yield Input(
+                    value=str(cfg.sequencing.transition_probability),
+                    id="transition-prob",
+                    classes="w-tiny",
+                )
+                yield Label("  Cooldown ")
+                yield Input(
+                    value=str(cfg.sequencing.transition_cooldown),
+                    id="transition-cooldown",
+                    classes="w-tiny",
+                )
 
-            with Horizontal():
-                with Vertical(classes="form-group"):
-                    yield Label("Excluded transitions (comma-separated)")
-                    yield Input(
-                        value=", ".join(getattr(cfg.sequencing, "transition_exclude", [])),
-                        placeholder="transition_03.mp4",
-                        id="transition-exclude",
-                    )
-                    yield Static(
-                        "Optional denylist applied after selection/discovery.",
-                        classes="help-text",
-                    )
+            with Horizontal(classes="bbs-row"):
+                yield Label("Use   ")
+                yield Input(
+                    value=", ".join(getattr(cfg.assets, "transitions", [])),
+                    placeholder="transition_01.mp4, ...",
+                    id="selected-transitions",
+                    classes="w-wide",
+                )
+            with Horizontal(classes="bbs-row"):
+                yield Label("Skip  ")
+                yield Input(
+                    value=", ".join(getattr(cfg.sequencing, "transition_exclude", [])),
+                    placeholder="transition_03.mp4",
+                    id="transition-exclude",
+                    classes="w-wide",
+                )
 
-            with Horizontal():
-                with Vertical(classes="form-group"):
-                    yield Label("Transition Probability (0.0 - 1.0)")
-                    yield Input(
-                        value=str(cfg.sequencing.transition_probability),
-                        id="transition-prob",
-                    )
-                    yield Static(
-                        "Chance of inserting a random transition between each pair of clips. "
-                        "0.0 = never, 1.0 = always.",
-                        classes="help-text",
-                    )
-                with Vertical(classes="form-group"):
-                    yield Label("Transition Cooldown")
-                    yield Input(
-                        value=str(cfg.sequencing.transition_cooldown),
-                        id="transition-cooldown",
-                    )
-                    yield Static(
-                        "Avoid repeating the same transition within the last N picks. "
-                        "Set to 0 to disable.",
-                        classes="help-text",
-                    )
+            yield Static("── AUDIO & OVERLAY ──", classes="bbs-section")
+            with Horizontal(classes="bbs-row"):
+                yield Checkbox(
+                    "No random", value=cfg.sequencing.no_random_transitions, id="no-random"
+                )
+                yield Checkbox(
+                    "Level assets",
+                    value=cfg.audio.audio_normalize_transitions,
+                    id="audio-normalize",
+                )
+            with Horizontal(classes="bbs-row"):
+                yield Checkbox(
+                    "Level clips", value=cfg.audio.audio_normalize_clips, id="audio-normalize-clips"
+                )
+                yield Checkbox("Mute static", value=cfg.audio.silence_static, id="silence-static")
+            with Horizontal(classes="bbs-row"):
+                yield Checkbox("No overlay", value=not cfg.behavior.enable_overlay, id="no-overlay")
 
-            with Horizontal():
-                with Vertical(classes="form-group"):
-                    yield Label("Disable random transitions")
-                    yield Switch(
-                        value=cfg.sequencing.no_random_transitions,
-                        id="no-random",
-                    )
-                    yield Static(
-                        "Turns off all random transitions between clips. "
-                        "The static bumper is still inserted.",
-                        classes="help-text",
-                    )
-                with Vertical(classes="form-group"):
-                    yield Label("Normalize transition audio")
-                    yield Switch(
-                        value=cfg.audio.audio_normalize_transitions,
-                        id="audio-normalize",
-                    )
-                    yield Static(
-                        "Apply EBU R128 loudness normalization to transition/intro/outro clips "
-                        "so they match clip audio levels.",
-                        classes="help-text",
-                    )
-
-            with Horizontal():
-                with Vertical(classes="form-group"):
-                    yield Label("Normalize clip audio")
-                    yield Switch(
-                        value=cfg.audio.audio_normalize_clips,
-                        id="audio-normalize-clips",
-                    )
-                    yield Static(
-                        "Apply EBU R128 loudness normalization to every Twitch clip. "
-                        "Prevents jarring volume jumps between loud and quiet clips.",
-                        classes="help-text",
-                    )
-                with Vertical(classes="form-group"):
-                    yield Label("Silence static bumper")
-                    yield Switch(
-                        value=cfg.audio.silence_static,
-                        id="silence-static",
-                    )
-                    yield Static(
-                        "Mute the audio on the static.mp4 bumper clip inserted between clips.",
-                        classes="help-text",
-                    )
-                with Vertical(classes="form-group"):
-                    yield Label("Disable clip overlay")
-                    yield Switch(value=not cfg.behavior.enable_overlay, id="no-overlay")
-                    yield Static(
-                        "Skip the 'clip by' text overlay on each clip. "
-                        "Useful for a cleaner look.",
-                        classes="help-text",
-                    )
-
+            yield self.progress_bar()
             with Horizontal(classes="button-bar"):
-                yield Button("← Back", id="back-btn")
-                yield Button("Next →", variant="primary", id="next-btn")
+                yield Button("< Back", id="back-btn")
+                yield Button("Next >", variant="primary", id="next-btn")
+
+        yield from self.status_bar()
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "transitions-dir":
@@ -242,10 +201,10 @@ class TransitionsScreen(Screen):
                     1,
                     0,
                 ),
-                "no_random_transitions": self.query_one("#no-random", Switch).value,
-                "audio_normalize_clips": self.query_one("#audio-normalize-clips", Switch).value,
-                "audio_normalize_transitions": self.query_one("#audio-normalize", Switch).value,
-                "silence_static": self.query_one("#silence-static", Switch).value,
-                "no_overlay": self.query_one("#no-overlay", Switch).value,
+                "no_random_transitions": self.query_one("#no-random", Checkbox).value,
+                "audio_normalize_clips": self.query_one("#audio-normalize-clips", Checkbox).value,
+                "audio_normalize_transitions": self.query_one("#audio-normalize", Checkbox).value,
+                "silence_static": self.query_one("#silence-static", Checkbox).value,
+                "no_overlay": self.query_one("#no-overlay", Checkbox).value,
             }
             self.app.advance_to("review")

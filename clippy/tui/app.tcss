@@ -1,106 +1,269 @@
-/* Clippy TUI Stylesheet — BBS-inspired cyan/blue/gray palette */
+/* Clippy TUI — 90s BBS.
+ *
+ * Palette is the 16 ANSI colours only, so the board inherits whatever theme the
+ * user's terminal already uses instead of fighting it.
+ *
+ * Density rule: nothing here may add vertical space that is not load-bearing.
+ * Every screen has to fit in 80x24, so margins are 0, inputs are 1 row with no
+ * border, and per-field help lives in the status bar instead of under the field.
+ */
 
 Screen {
-    background: $surface;
+    background: ansi_blue;
+    color: ansi_bright_white;
+    scrollbar-size: 0 0;
 }
 
-Header {
-    color: $text;
-    background: $primary-background;
+/* The app-level Header/Footer are replaced by our own bars. */
+Header, Footer {
+    display: none;
 }
 
-Footer {
-    color: $text-muted;
+/* -- chrome ------------------------------------------------------------- */
+
+.bbs-titlebar {
+    background: ansi_cyan;
+    color: ansi_black;
+    text-style: bold;
+    width: 100%;
+    height: 1;
 }
 
-/* Common screen layout */
+.bbs-progress {
+    color: ansi_bright_cyan;
+    height: 1;
+}
+
+.bbs-hint {
+    dock: bottom;
+    height: 1;
+    offset: 0 -1;
+    background: ansi_blue;
+    color: ansi_bright_yellow;
+    padding: 0 1;
+}
+
+.bbs-keys {
+    dock: bottom;
+    height: 1;
+    background: ansi_cyan;
+    color: ansi_black;
+    padding: 0 1;
+}
+
+/* -- layout ------------------------------------------------------------- */
+
 .screen-container {
-    padding: 1 2;
+    padding: 0 2;
     height: 100%;
 }
 
-.screen-title {
-    text-style: bold;
-    color: $accent;
-    margin-bottom: 1;
+/* A row of fields sharing one line. */
+.bbs-row {
+    height: 1;
+    width: 100%;
 }
 
-.form-group {
-    margin-bottom: 1;
+/* A bare Vertical defaults to 1fr, which eats all remaining height and pushes
+ * everything after it off screen. Wrapper groups size to their content. */
+.screen-container > Vertical {
     height: auto;
 }
 
-.form-label {
-    color: $text;
-    margin-bottom: 0;
+/* Field widths. */
+.w-tiny  { width: 6; }
+.w-sm    { width: 10; }
+.w-med   { width: 16; }
+.w-wide  { width: 30; }
+
+/* Blank spacer where the design genuinely needs breathing room. */
+.bbs-gap {
+    height: 1;
+}
+
+.bbs-dim {
+    color: ansi_bright_black;
+    height: 1;
+}
+
+.bbs-section {
+    color: ansi_bright_cyan;
+    text-style: bold;
+    height: 1;
+}
+
+/* -- fields ------------------------------------------------------------- */
+
+Label {
+    color: ansi_bright_white;
+    height: 1;
+    padding: 0 1 0 0;
+}
+
+/* Inputs default to 1fr, which makes the first field on a row swallow the
+ * whole line and push its neighbours off screen. Width is always explicit. */
+Input {
+    height: 1;
+    width: 18;
+    border: none;
+    background: ansi_black;
+    color: ansi_bright_green;
+    padding: 0 1;
+}
+
+Input:focus {
+    background: ansi_bright_black;
+    color: ansi_bright_white;
+}
+
+/* BBS checkboxes: [X] label, one row, no chrome. */
+Checkbox {
+    height: 1;
+    border: none;
+    background: ansi_blue;
+    padding: 0;
+}
+
+Checkbox:focus {
+    color: ansi_bright_yellow;
+    text-style: bold;
+}
+
+RadioSet {
+    height: auto;
+    border: none;
+    background: ansi_blue;
+    padding: 0;
+}
+
+RadioButton {
+    height: 1;
+    background: ansi_blue;
+    padding: 0 2 0 0;
+}
+
+/* Select renders a bordered box by default, which is 3 rows tall; inside a
+ * 1-row field row that clips away the value and leaves only the border. */
+Select {
+    height: 1;
+    border: none;
+    background: ansi_black;
+    color: ansi_bright_green;
+}
+
+Select:focus {
+    background: ansi_bright_black;
+    color: ansi_bright_white;
+}
+
+SelectCurrent {
+    border: none;
+    height: 1;
+    padding: 0 1;
+}
+
+Select > SelectOverlay {
+    border: none;
+    background: ansi_black;
+    color: ansi_bright_cyan;
+}
+
+Checkbox {
+    padding: 0 2 0 0;
+}
+
+OptionList {
+    border: none;
+    background: ansi_black;
+    color: ansi_bright_cyan;
+    padding: 0;
+}
+
+OptionList > .option-list--option-highlighted {
+    background: ansi_cyan;
+    color: ansi_black;
+    text-style: bold;
+}
+
+/* -- buttons ------------------------------------------------------------ */
+
+Button {
+    height: 1;
+    min-width: 12;
+    border: none;
+    background: ansi_bright_black;
+    color: ansi_bright_white;
+    text-style: none;
+}
+
+Button:focus {
+    background: ansi_cyan;
+    color: ansi_black;
+    text-style: bold;
+}
+
+#next-btn {
+    background: ansi_green;
+    color: ansi_black;
+}
+
+#next-btn:focus {
+    background: ansi_bright_green;
+    color: ansi_black;
+    text-style: bold;
 }
 
 .button-bar {
     dock: bottom;
-    height: auto;
-    min-height: 3;
+    height: 1;
+    offset: 0 -2;
     align: right middle;
-    padding: 0 2;
+    padding: 0 1;
 }
 
 .button-bar Button {
-    margin-left: 1;
+    margin-left: 2;
 }
 
-#next-btn {
-    background: $accent;
-}
+/* -- screen-specific ---------------------------------------------------- */
 
-/* Preset selector */
 .preset-list {
-    height: 12;
-    border: solid $primary-background;
-    margin-bottom: 1;
+    height: 6;
 }
 
-/* Command preview */
 .command-preview {
-    height: 8;
-    border: solid $primary-background;
-    padding: 1;
-    background: $surface-darken-1;
+    height: 3;
+    background: ansi_black;
+    color: ansi_bright_black;
     overflow-y: auto;
-}
-
-/* Progress screen */
-.progress-section {
-    height: auto;
-    margin-bottom: 1;
 }
 
 .log-panel {
     height: 1fr;
-    border: solid $primary-background;
+    border: none;
+    background: ansi_black;
+    color: ansi_bright_white;
+    padding: 0 1;
 }
 
-.help-text {
-    color: $text-muted;
-    margin: 0 0 1 2;
+.progress-section {
+    height: auto;
 }
 
-/* Summary screen */
 .section-header {
     text-style: bold;
-    color: $accent;
-    margin-top: 1;
+    color: ansi_bright_cyan;
+    height: 1;
 }
 
-/* Transition file picker */
 #transition-list {
     height: 1fr;
-    min-height: 8;
-    max-height: 16;
-    border: solid $primary-background;
-    margin-bottom: 1;
+    min-height: 4;
+    background: ansi_black;
 }
 
 .transition-row {
-    height: 3;
+    height: 1;
     align: left middle;
 }
 
@@ -109,20 +272,15 @@ Footer {
 }
 
 .weight-input {
-    width: 10;
+    width: 8;
 }
 
 #select-bar {
-    height: auto;
-    margin-bottom: 1;
+    height: 1;
 }
 
 #select-bar Button {
-    margin-right: 1;
-}
-
-#scan-btn {
-    margin-bottom: 1;
+    margin-right: 2;
 }
 
 /* Utility */
