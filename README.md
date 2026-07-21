@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)](https://github.com/zebadrabbit/Clippy)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Create highlight compilations directly from Twitch clips. Audio is ON by default for intros, static, transitions, and outros. All non-clip assets are normalized to H.264 (yuv420p) with AAC 48 kHz stereo to keep concatenation stable.
+Turn your Twitch clips into highlight reels — automatically. Clippy pulls clips, stitches them together with intros, transitions, and outros, and renders a polished compilation ready to upload. Under the hood, every asset gets normalized to a consistent codec (H.264/AAC) so concatenation never breaks mid-render.
 
 ## Features
 
