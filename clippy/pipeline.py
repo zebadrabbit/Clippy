@@ -112,6 +112,11 @@ OVERLAY_SLIDE = 0.28  # how long each slide takes
 # spends half the time crawling through the last eighth of the distance, which
 # reads as sluggish, so this stays quadratic.
 OVERLAY_EASE = 2
+# How long the text takes to fade. This deliberately does not share the slide's
+# window: the text enters from off-screen, so a fade tied to the slide is more
+# than half spent before the text is even visible, and what is left happens
+# while it is still moving. Fading after it lands is the part you can see.
+OVERLAY_FADE = 0.22
 
 
 def _overlay_motion(distance: int) -> tuple[str, str]:
@@ -119,8 +124,10 @@ def _overlay_motion(distance: int) -> tuple[str, str]:
 
     ffmpeg evaluates these per frame, so the animation is done by the filter
     rather than by generating frames ourselves. The offset decelerates into
-    place; the fade runs over the same window so the text reaches full strength
-    exactly as the panel settles rather than well before it.
+    place. The fade runs on its own schedule: it starts once the text has
+    cleared the left edge and finishes after the panel lands, so the whole of it
+    happens in view. On the way out the text is gone before the panel moves, so
+    the two read as separate beats instead of a smear.
 
     Both are single-quoted where they are used: they contain commas, which would
     otherwise be read as filtergraph separators.
@@ -135,10 +142,19 @@ def _overlay_motion(distance: int) -> tuple[str, str]:
         f"-{distance}*pow(1-(t-{OVERLAY_IN})/{d},{OVERLAY_EASE}),"
         f"if(lt(t,{out_start}),0,-{distance}*pow((t-{out_start})/{d},{OVERLAY_EASE})))"
     )
-    # 0 -> 1 -> 0 over the same windows, clamped so rounding cannot overshoot.
+
+    # Fade window: begins partway through the slide, once the text is on screen,
+    # and ends after the panel has settled. Reversed for the exit.
+    fi0 = OVERLAY_IN + d * 0.6
+    fi1 = fi0 + OVERLAY_FADE
+    fo1 = out_start
+    fo0 = fo1 - OVERLAY_FADE
     fade = (
-        f"min(1,max(0,if(lt(t,{in_end}),(t-{OVERLAY_IN})/{d},"
-        f"if(lt(t,{out_start}),1,({OVERLAY_OUT}-t)/{d}))))"
+        f"min(1,max(0,"
+        f"if(lt(t,{fi0}),0,"
+        f"if(lt(t,{fi1}),(t-{fi0})/{OVERLAY_FADE},"
+        f"if(lt(t,{fo0}),1,"
+        f"if(lt(t,{fo1}),({fo1}-t)/{OVERLAY_FADE},0))))))"
     )
     return offset, fade
 

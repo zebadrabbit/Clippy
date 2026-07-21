@@ -249,3 +249,45 @@ class TestMotionFeel:
         three_quarters = pipeline.OVERLAY_IN + pipeline.OVERLAY_SLIDE * 0.75
         assert _eval_ffmpeg_expr(fade, three_quarters) < 1.0
         assert _eval_ffmpeg_expr(offset, three_quarters) != 0
+
+
+class TestFadeIsVisible:
+    """The fade has to happen where it can be seen.
+
+    Sharing the slide's window looked like no fade at all: the text enters from
+    off-screen, so it was already at ~50% alpha by the time it crossed the left
+    edge, and the rest completed while it was still moving.
+    """
+
+    DIST = 572  # a representative panel width
+    TEXT_X = 198  # where the author line sits inside the panel
+
+    def _at(self, expr, t):
+        return _eval_ffmpeg_expr(expr, t)
+
+    def test_text_is_invisible_until_it_is_on_screen(self):
+        offset, fade = pipeline._overlay_motion(self.DIST)
+        # Walk the entry; alpha must stay at 0 while the text is off the left edge.
+        for i in range(40):
+            t = pipeline.OVERLAY_IN + i * pipeline.OVERLAY_SLIDE / 40
+            if self.TEXT_X + self._at(offset, t) < 0:
+                assert self._at(fade, t) == 0, f"fading at t={t} while still off-screen"
+
+    def test_most_of_the_fade_happens_after_the_panel_lands(self):
+        _, fade = pipeline._overlay_motion(self.DIST)
+        landed = pipeline.OVERLAY_IN + pipeline.OVERLAY_SLIDE
+        assert self._at(fade, landed) < 0.75, "the fade is mostly over before you can see it"
+
+    def test_fade_finishes_after_the_slide(self):
+        _, fade = pipeline._overlay_motion(self.DIST)
+        landed = pipeline.OVERLAY_IN + pipeline.OVERLAY_SLIDE
+        assert self._at(fade, landed + pipeline.OVERLAY_FADE) == pytest.approx(1)
+
+    def test_text_is_gone_before_the_panel_leaves(self):
+        offset, fade = pipeline._overlay_motion(self.DIST)
+        leaves = pipeline.OVERLAY_OUT - pipeline.OVERLAY_SLIDE
+        assert self._at(fade, leaves) == pytest.approx(0, abs=1e-9)
+        assert self._at(offset, leaves) == 0, "the panel should not have moved yet"
+
+    def test_the_fade_is_long_enough_to_perceive(self):
+        assert pipeline.OVERLAY_FADE >= 0.15, "a shorter fade reads as a pop"
