@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Clippy — see it in action</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0d1013;
+    --panel: #14181d;
+    --panel-2: #191e24;
+    --ink: #e7ece9;
+    --ink-dim: #8b968f;
+    --accent: #6fe7c8;
+    --accent-dim: #3d7d6e;
+    --amber: #e7b76f;
+    --rule: #262c32;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+    padding: 48px 20px 64px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  @media (prefers-reduced-motion: reduce){
+    * { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+  }
+
+  .wrap{ width:100%; max-width: 760px; }
+
+  .eyebrow{
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-dim);
+    margin: 0 0 10px;
+  }
+  h1{
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: clamp(28px, 5vw, 38px);
+    line-height: 1.1;
+    margin: 0 0 12px;
+    color: var(--ink);
+  }
+  h1 span{ color: var(--accent); }
+  .sub{
+    font-family: 'Space Grotesk', sans-serif;
+    color: var(--ink-dim);
+    font-size: 15px;
+    max-width: 60ch;
+    margin: 0 0 28px;
+    line-height: 1.5;
+  }
+
+  /* Scenario tab switcher, styled like a set of terminal tabs */
+  .tabs{
+    display:flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    margin-bottom: 0;
+  }
+  .tab{
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-dim);
+    background: var(--panel-2);
+    border: 1px solid var(--rule);
+    border-bottom: none;
+    padding: 9px 16px 8px;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    opacity: 0.6;
+  }
+  .tab.active{
+    background: var(--panel);
+    color: var(--ink);
+    opacity: 1;
+    position: relative;
+  }
+  .tab.active::after{
+    content:"";
+    position:absolute;
+    left:0; right:0; bottom:-1px;
+    height:1px;
+    background: var(--panel);
+  }
+  .tab:not(.active):hover{ opacity: 0.85; }
+
+  /* Terminal window */
+  .term{
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 0 var(--radius) var(--radius) var(--radius);
+    overflow: hidden;
+    box-shadow: 0 30px 60px -30px rgba(0,0,0,0.6);
+  }
+  .term-bar{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--panel-2);
+  }
+  .dot{ width:10px; height:10px; border-radius:50%; background: var(--rule); }
+  .term-title{
+    margin-left: 8px;
+    font-size: 12px;
+    color: var(--ink-dim);
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  .term-body{
+    padding: 20px 22px 26px;
+    min-height: 340px;
+    max-height: 460px;
+    overflow-y: auto;
+    font-size: 13.5px;
+    line-height: 1.65;
+  }
+  .line{ white-space: pre-wrap; word-break: break-word; }
+  .prompt{ color: var(--accent); }
+  .path{ color: var(--amber); }
+  .cmd{ color: var(--ink); }
+  .out{ color: var(--ink-dim); }
+  .out.hi{ color: var(--ink); }
+  .out.ok{ color: var(--accent); }
+  .out.warn{ color: var(--amber); }
+  .cursor{
+    display:inline-block;
+    width: 7px;
+    height: 14px;
+    background: var(--ink);
+    vertical-align: -2px;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink{ 50%{ opacity: 0; } }
+
+  .controls{
+    display:flex;
+    justify-content: space-between;
+    align-items:center;
+    margin-top: 14px;
+  }
+  .hint{ font-size: 12px; color: var(--ink-dim); font-family: 'Space Grotesk', sans-serif; }
+  .replay{
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid var(--rule);
+    padding: 8px 16px;
+    border-radius: 7px;
+    cursor: pointer;
+    display:flex;
+    align-items:center;
+    gap: 8px;
+  }
+  .replay:hover{ border-color: var(--accent-dim); color: var(--accent); }
+  .replay:focus-visible, .tab:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Live demo</p>
+  <h1>Watch <span>Clippy</span> work,<br>no terminal required.</h1>
+  <p class="sub">A simulated session — pick a scenario, then sit back. Nothing here is really running; it's a scripted replay of real Clippy output so it always looks exactly like this.</p>
+
+  <div class="tabs" role="tablist" aria-label="Choose scenario">
+    <button class="tab active" data-scenario="install" role="tab" aria-selected="true">Install</button>
+    <button class="tab" data-scenario="setup" role="tab" aria-selected="false">Guided setup</button>
+    <button class="tab" data-scenario="run" role="tab" aria-selected="false">Everyday run</button>
+    <button class="tab" data-scenario="headless" role="tab" aria-selected="false">Headless &amp; JSON</button>
+    <button class="tab" data-scenario="discord" role="tab" aria-selected="false">Discord clips</button>
+  </div>
+
+  <div class="term" id="term">
+    <div class="term-bar" id="termBar">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      <div class="term-title" id="termTitle">clippy deps</div>
+    </div>
+    <div class="term-body" id="termBody" aria-live="polite"></div>
+  </div>
+
+  <div class="controls">
+    <p class="hint" id="hint">Playing automatically…</p>
+    <button class="replay" id="replayBtn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+      Replay
+    </button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   Every command/output string below is taken verbatim (or lightly
+   trimmed for length) from Clippy's real CLI: clippy/cli.py,
+   clippy/deps.py, clippy/wizard.py, clippy/run.py, README.md.
+   The TUI (`clippy tui`) is intentionally not demoed here — it's
+   a full-screen Textual app that can't be reproduced as a stdout
+   transcript. This only shows the plain-CLI surface.
+
+   Step shapes:
+     { cmd }                      -> typed at the shell prompt
+     { input: {label, value} }    -> app prints `label`, "user" types `value`
+     { output: [{text, cls?}] }   -> printed lines (cls: out|hi|ok|warn)
+     { blank: true }              -> blank spacer line
+     { wait: ms }                 -> extra pause with no visible line,
+                                      stands in for real work (auth, encode, download)
+============================================================ */
+const PROMPT = '<span class="prompt">$</span> ';
+
+const SCENARIOS = {
+  install: {
+    title: "clippy deps && clippy doctor",
+    steps: [
+      { cmd: "clippy deps" },
+      { wait: 700 },
+      { output: [
+        { text: "Downloading ffmpeg — GPL (gyan.dev essentials build, includes libx264)", cls:"out" },
+      ]},
+      { wait: 900 },
+      { output: [
+        { text: "  installed ffmpeg.exe, ffprobe.exe to bin", cls:"out" },
+        { text: "Downloading yt-dlp — Unlicense", cls:"out" },
+      ]},
+      { wait: 600 },
+      { output: [
+        { text: "  installed yt-dlp.exe to bin", cls:"out" },
+        { text: "› Done. Run 'clippy doctor' to confirm.", cls:"hi" },
+      ]},
+      { blank: true },
+      { cmd: "clippy doctor" },
+      { wait: 500 },
+      { output: [
+        { text: "✓ All preflight checks passed — you're good to go.", cls:"ok" },
+      ]},
+    ]
+  },
+  setup: {
+    title: "clippy setup",
+    steps: [
+      { cmd: "clippy setup" },
+      { wait: 300 },
+      { output: [
+        { text: "==============================================", cls:"out" },
+        { text: "Clippy Setup Wizard  (v0.6.0)", cls:"hi" },
+        { text: "This will help you get set up with Twitch credentials and sensible defaults.", cls:"out" },
+        { text: "You can re-run this anytime; it writes your .env and clippy.yaml.", cls:"out" },
+        { text: "==============================================", cls:"out" },
+      ]},
+      { blank: true },
+      { output: [
+        { text: "Step 0: Choose your clip source", cls:"hi" },
+        { text: "Sources:", cls:"out" },
+        { text: "  1) Twitch (Helix) — fetch recent clips for a broadcaster", cls:"out" },
+        { text: "  2) Discord channel — users paste clip links; we'll read and resolve them", cls:"out" },
+      ]},
+      { input: { label: "Select source [1/2]: ", value: "1" } },
+      { blank: true },
+      { output: [{ text: "Step 1: Twitch Client ID & Secret", cls:"hi" }] },
+      { input: { label: "Twitch Client ID: ", value: "••••••••••••••••" } },
+      { input: { label: "Twitch Client Secret: ", value: "••••••••••••••••" } },
+      { blank: true },
+      { output: [{ text: "Step 3: Clip selection & identity", cls:"hi" }] },
+      { input: { label: "Minimum views to include a clip [1]: ", value: "5" } },
+      { input: { label: "Clips per compilation [12]: ", value: "12" } },
+      { input: { label: "Number of compilations per run [2]: ", value: "2" } },
+      { input: { label: "Default broadcaster (Twitch username): ", value: "theflood" } },
+      { blank: true },
+      { output: [{ text: "Step 4: Output quality & format", cls:"hi" }, { text: "  1) balanced  2) high  3) max", cls:"out" }] },
+      { input: { label: "Quality [1]: ", value: "2" } },
+      { input: { label: "Resolution (e.g., 1920x1080) [1920x1080]: ", value: "" } },
+      { input: { label: "Framerate (e.g., 60) [60]: ", value: "" } },
+      { blank: true },
+      { wait: 500 },
+      { output: [
+        { text: "Wrote .env", cls:"out" },
+        { text: "Wrote clippy.yaml", cls:"out" },
+        { text: "All set! Next steps:", cls:"ok" },
+        { text: "  python .\\main.py --broadcaster theflood -y", cls:"hi" },
+        { text: "Check output/ for your compiled videos and manifest.json", cls:"out" },
+      ]},
+    ]
+  },
+  run: {
+    title: "clippy --profile theflood -y",
+    steps: [
+      { cmd: "clippy --profile theflood -y" },
+      { wait: 400 },
+      { output: [
+        { text: "========================================================", cls:"out" },
+        { text: " Run plan", cls:"hi" },
+        { text: "========================================================", cls:"out" },
+        { text: " Broadcaster    theflood", cls:"out" },
+        { text: " Time Window    2025-07-14T00:00:00Z -> 2025-07-21T00:00:00Z", cls:"out" },
+        { text: " Max fetch      100", cls:"out" },
+        { text: " Min views      5", cls:"out" },
+        { text: " Format         mp4 @ 1920x1080 60fps", cls:"out" },
+        { text: " Compilations   2", cls:"out" },
+        { text: " Cache dir      .cache", cls:"out" },
+        { text: " Output dir     output", cls:"out" },
+        { text: " Transitions    enabled", cls:"out" },
+        { text: " Overlay        on", cls:"out" },
+        { text: "========================================================", cls:"out" },
+      ]},
+      { input: { label: "Proceed? [Y/n]: ", value: "y" } },
+      { blank: true },
+      { wait: 500 },
+      { output: [{ text: "• Authenticating with Twitch...", cls:"out" }] },
+      { wait: 500 },
+      { output: [{ text: "› Authenticated successfully", cls:"hi" }] },
+      { output: [{ text: "• Fetching clips (window: 2025-07-14 → 2025-07-21)...", cls:"out" }] },
+      { wait: 900 },
+      { output: [
+        { text: "› Fetched 41 clips from Twitch", cls:"hi" },
+        { text: "› After view filter (>= 5): 23 clips", cls:"hi" },
+      ]},
+      { output: [{ text: "• Stage 1: Processing clips (download, normalize, overlay)...", cls:"out" }] },
+      { wait: 1800 },
+      { output: [{ text: "› Stage 1 complete", cls:"hi" }] },
+      { output: [{ text: "• Stage 2: Building compilations...", cls:"out" }] },
+      { wait: 1400 },
+      { output: [{ text: "› Stage 2 complete", cls:"hi" }] },
+      { output: [{ text: "• Finalizing outputs...", cls:"out" }] },
+      { wait: 500 },
+      { output: [
+        { text: "› Wrote manifest: output/manifest.json", cls:"hi" },
+      ]},
+      { blank: true },
+      { output: [
+        { text: "✓ Built 2 compilation(s):", cls:"ok" },
+        { text: "  theflood_2025-07-14_to_2025-07-21_part1.mp4", cls:"out" },
+        { text: "  theflood_2025-07-14_to_2025-07-21_part2.mp4", cls:"out" },
+      ]},
+    ]
+  },
+  headless: {
+    title: "clippy --headless --profile theflood --json",
+    steps: [
+      { cmd: "clippy --headless --profile theflood --json" },
+      { wait: 2600 },
+      { output: [
+        { text: "{", cls:"out" },
+        { text: '  "status": "ok",', cls:"out" },
+        { text: '  "exit_code": 0,', cls:"out" },
+        { text: '  "files": [', cls:"out" },
+        { text: '    "theflood_2025-07-14_to_2025-07-21_part1.mp4",', cls:"out" },
+        { text: '    "theflood_2025-07-14_to_2025-07-21_part2.mp4"', cls:"out" },
+        { text: '  ],', cls:"out" },
+        { text: '  "broadcaster": "theflood",', cls:"out" },
+        { text: '  "window": {', cls:"out" },
+        { text: '    "start": "2025-07-14T00:00:00Z",', cls:"out" },
+        { text: '    "end": "2025-07-21T00:00:00Z"', cls:"out" },
+        { text: '  },', cls:"out" },
+        { text: '  "compilations": 2,', cls:"out" },
+        { text: '  "version": "0.6.0"', cls:"out" },
+        { text: "}", cls:"out" },
+      ]},
+      { blank: true },
+      { cmd: "echo $?" },
+      { output: [{ text: "0", cls:"ok" }] },
+      { blank: true },
+      { output: [
+        { text: "# No prompts, no color, no banner — safe for cron/Task Scheduler:", cls:"out" },
+        { text: "0 6 * * 1  clippy --headless --profile theflood --json >> /var/log/clippy.log 2>&1", cls:"out" },
+      ]},
+    ]
+  },
+  discord: {
+    title: "clippy --discord --discord-channel-id ... -y",
+    steps: [
+      { cmd: "clippy --discord --discord-channel-id 123456789012345678 -y" },
+      { wait: 400 },
+      { output: [{ text: "• Reading Discord channel for clip links", cls:"out" }] },
+      { wait: 900 },
+      { output: [
+        { text: "› Discord channel: #clip-dump", cls:"hi" },
+        { text: "› Found 14 clip links", cls:"hi" },
+      ]},
+      { output: [{ text: "• Fetching clips by IDs from Helix", cls:"out" }] },
+      { wait: 900 },
+      { output: [{ text: "› Fetched 14 raw clips", cls:"hi" }] },
+      { blank: true },
+      { output: [
+        { text: "› Wrote manifest: output/manifest.json", cls:"hi" },
+        { text: "✓ Built 1 compilation(s):", cls:"ok" },
+        { text: "  clips_2025-07-14_to_2025-07-21_part1.mp4", cls:"out" },
+      ]},
+    ]
+  }
+};
+
+const termBody = document.getElementById('termBody');
+const termTitle = document.getElementById('termTitle');
+const hint = document.getElementById('hint');
+const tabs = document.querySelectorAll('.tab');
+const replayBtn = document.getElementById('replayBtn');
+
+let currentScenario = 'install';
+let playToken = 0; // increments to invalidate in-flight timers when switching/replaying
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function sleep(ms, token){
+  return new Promise(res => setTimeout(res, reduced ? 0 : ms)).then(() => token === playToken);
+}
+
+async function typeInto(prefixHtml, text, token, animate){
+  const lineEl = document.createElement('div');
+  lineEl.className = 'line';
+  lineEl.innerHTML = prefixHtml + '<span class="cmd"></span><span class="cursor"></span>';
+  termBody.appendChild(lineEl);
+  const cmdSpan = lineEl.querySelector('.cmd');
+  const cursor = lineEl.querySelector('.cursor');
+
+  if(reduced || !animate){
+    cmdSpan.textContent = text;
+    cursor.remove();
+    return true;
+  }
+
+  for(let i = 0; i < text.length; i++){
+    if(token !== playToken) return false;
+    cmdSpan.textContent += text[i];
+    const jitter = 18 + Math.random() * 42;
+    await new Promise(r => setTimeout(r, jitter));
+  }
+  await sleep(260, token);
+  cursor.remove();
+  return token === playToken;
+}
+
+function printLine(text, cls){
+  const el = document.createElement('div');
+  el.className = 'line out' + (cls === 'hi' ? ' hi' : cls === 'ok' ? ' ok' : cls === 'warn' ? ' warn' : '');
+  el.textContent = text;
+  termBody.appendChild(el);
+}
+
+async function playScenario(name){
+  const token = ++playToken;
+  termBody.innerHTML = '';
+  termTitle.textContent = SCENARIOS[name].title;
+  hint.textContent = 'Playing automatically…';
+
+  for(const step of SCENARIOS[name].steps){
+    if(token !== playToken) return;
+    if(step.cmd !== undefined){
+      const ok = await typeInto(PROMPT, step.cmd, token, true);
+      if(!ok) return;
+      await sleep(reduced ? 0 : 180, token);
+    } else if(step.input){
+      const ok = await typeInto('<span class="out">' + step.input.label + '</span>', step.input.value, token, true);
+      if(!ok) return;
+      await sleep(reduced ? 0 : 160, token);
+    } else if(step.output){
+      for(const o of step.output){
+        if(token !== playToken) return;
+        printLine(o.text, o.cls);
+        await sleep(reduced ? 0 : 90, token);
+      }
+    } else if(step.blank){
+      printLine('', undefined);
+    } else if(step.wait){
+      const ok = await sleep(step.wait, token);
+      if(!ok) return;
+    }
+    termBody.scrollTop = termBody.scrollHeight;
+  }
+  if(token === playToken){
+    hint.textContent = 'Done — hit replay, or switch scenarios above.';
+  }
+}
+
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    tabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
+    tab.classList.add('active');
+    tab.setAttribute('aria-selected','true');
+    currentScenario = tab.dataset.scenario;
+    playScenario(currentScenario);
+  });
+});
+
+replayBtn.addEventListener('click', () => playScenario(currentScenario));
+
+playScenario(currentScenario);
+</script>
+</body>
+</html>
