@@ -337,6 +337,9 @@ def load_merged_config(
     merged["default_broadcaster"] = _coerce_str(
         identity.get("broadcaster"), merged.get("default_broadcaster", "")
     )
+    merged["default_source"] = (
+        _coerce_str(identity.get("source"), merged.get("default_source", "")).strip().lower()
+    )
 
     # Discord
     try:

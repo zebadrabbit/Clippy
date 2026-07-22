@@ -541,7 +541,8 @@ def main():
     print("\n" + THEME.header("Step 7: Transitions directory"))
     print(
         THEME.text(
-            "  The tool requires transitions/static.mp4. Place one in transitions/ or set a custom directory."
+            "  The tool requires transitions/static.mp4. 'clippy deps' fetches the default "
+            "one, or place your own in transitions/ (or set a custom directory)."
         )
     )
     trans_dir = _prompt_str("Custom transitions directory (blank to skip)", "")
@@ -670,6 +671,14 @@ def main():
 
     # No longer generating run_clippy.ps1; rely on clippy.yaml defaults and CLI overrides
 
+    # Create the working directories a run needs, so a bare download is ready to go
+    for d in {cache_dir, output_dir, trans_dir or "transitions", "bin"}:
+        try:
+            Path(d).mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(THEME.warn(f"WARN: Failed to create {d}: {e}"))
+    print(THEME.text(f"  Created {cache_dir}, {output_dir}, {trans_dir or 'transitions'}, bin"))
+
     # Final checks & suggestions
     print("\n" + THEME.section("Final checks:"))
     statics = _find_static_candidates()
@@ -678,7 +687,8 @@ def main():
     else:
         print(
             THEME.warn(
-                "  static.mp4 not found in transitions/. Place one there or set --transitions-dir to a folder that contains it."
+                "  static.mp4 not found in transitions/. Run 'clippy deps' to fetch the "
+                "default one, or place your own (or set --transitions-dir)."
             )
         )
     print("\n" + THEME.header("All set! Next steps:"))

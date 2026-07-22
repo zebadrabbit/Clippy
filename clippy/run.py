@@ -79,12 +79,21 @@ from clippy.window import summarize as _summarize
 logger = logging.getLogger(__name__)
 
 try:
-    from clippy.theme import THEME, enable_windows_vt  # type: ignore
+    from clippy.theme import THEME, enable_windows_vt, hi, paint, tx  # type: ignore
 except ImportError:  # pragma: no cover
     THEME = None  # type: ignore
 
     def enable_windows_vt():  # type: ignore
         return
+
+    def hi(value):  # type: ignore
+        return str(value)
+
+    def tx(text):  # type: ignore
+        return str(text)
+
+    def paint(text, *styles):  # type: ignore
+        return str(text)
 
 
 def _fail(message: str, code: int):
@@ -148,6 +157,11 @@ def apply_cli_overrides(args):
             log(f"Could not apply profile {args.profile!r}: {exc}", 5)
 
     cfg = _cfg.get_config()
+
+    # A profile can default to Discord (identity.source: discord); --discord/
+    # --no-discord on the CLI always wins when passed explicitly.
+    if getattr(args, "discord", None) is None:
+        args.discord = cfg.identity.source == "discord"
 
     # Discord prefill: borrow the configured broadcaster for nicer summaries.
     if getattr(args, "discord", False) and not getattr(args, "broadcaster", None):
@@ -341,7 +355,10 @@ def display_confirmation(args, window):
         _resolution = _live.encoding.resolution
         _fps = _live.encoding.fps
         _bitrate = _live.encoding.bitrate
-        _cache = _live.paths.cache
+        _audio_bitrate = _live.encoding.audio_bitrate
+        _silence_static = _live.audio.silence_static
+        _norm_clips = _live.audio.audio_normalize_clips
+        _norm_trans = _live.audio.audio_normalize_transitions
         _output = _live.paths.output
         _overlay = _live.behavior.enable_overlay
         _rebuild = _live.behavior.rebuild
@@ -353,17 +370,47 @@ def display_confirmation(args, window):
         print(bar)
         print(title)
         print(bar)
+        _source = "Discord" if getattr(args, "discord", False) else "Helix"
+        print(f"{L('Source')}{S()}{V(_source)}")
+        if getattr(args, "discord", False):
+            _ch_id = getattr(args, "discord_channel_id", None) or _live.discord.channel_id
+            if _ch_id:
+                print(f"{L('Discord channel')}{S()}{V(str(_ch_id))}")
+        try:
+            import clippy.config as _cfg_mod
+
+            _profile_name = getattr(_cfg_mod, "active_profile", "") or "default"
+        except Exception:  # cosmetic; non-fatal
+            _profile_name = "default"
+        print(f"{L('Profile')}{S()}{V(_profile_name)}")
         print(f"{L('Broadcaster')}{S()}{V(str(args.broadcaster), True)}")
+
+        def _short_date(iso: Optional[str]) -> Optional[str]:
+            return iso.split("T", 1)[0] if iso and "T" in iso else iso
+
+        _start_s, _end_s = window
+        _span_txt = ""
+        try:
+            from datetime import datetime as _dt
+
+            if _start_s and _end_s:
+                _d0 = _dt.fromisoformat(_start_s.replace("Z", "+00:00"))
+                _d1 = _dt.fromisoformat(_end_s.replace("Z", "+00:00"))
+                _days = max(1, round((_d1 - _d0).total_seconds() / 86400))
+                _span_txt = f" ({_days} day{'s' if _days != 1 else ''})"
+        except (ValueError, TypeError):
+            _span_txt = ""
         print(
-            f"{L('Time Window')}{S()}{V(str(window[0] or 'ANY'), True)} {S('->')} {V(str(window[1] or 'NOW'), True)}"
+            f"{L('Time Window')}{S()}{V(_short_date(_start_s) or 'ANY', True)} "
+            f"{S('->')} {V(_short_date(_end_s) or 'NOW', True)}{S(_span_txt)}"
         )
-        print(f"{L('Max fetch')}{S()}{V(str(args.max_clips))}")
         print(f"{L('Min views')}{S()}{V(str(_min_views))}")
         print(
             f"{L('Format')}{S()}{V(_container_ext)} {S('(')}{V(_container_flags or 'no flags')}{S(')')}"
         )
         print(
-            f"{L('Resolution')}{S()}{V(_resolution)}  {L('FPS')}{S()}{V(str(_fps))}  {L('Bitrate')}{S()}{V(str(_bitrate))}"
+            f"{L('Resolution')}{S()}{V(_resolution)}  {L('FPS')}{S()}{V(str(_fps))}  "
+            f"{L('Bitrate')}{S()}{V(str(_bitrate))}  {L('Audio')}{S()}{V(str(_audio_bitrate))}"
         )
         comp_desc = f"{V(str(args.amountOfCompilations))} x {V(str(args.amountOfClips))}"
         if _total is not None:
@@ -376,14 +423,23 @@ def display_confirmation(args, window):
             print(f"{L('Auto-expand')}{S()}{V('enabled')}")
         if getattr(args, "nostalgia", False):
             print(f"{L('Nostalgia mode')}{S()}{V('enabled')}")
-        print(f"{L('Cache dir')}{S()}{V(str(_cache), True)}")
         print(f"{L('Output dir')}{S()}{V(str(_output), True)}")
         tr_desc = f"intro={len(_intro_list)}, trans={len(_transitions_list)}, outro={len(_outro_list)}, prob={_tprob}"
         if _norand:
             tr_desc += f" {S('[no-random]')}"
         print(f"{L('Transitions')}{S()}{V(tr_desc)}")
         print(f"{L('Overlay')}{S()}{V('enabled' if _overlay else 'disabled')}")
-        print(f"{L('Rebuild')}{S()}{V('true' if _rebuild else 'false')}")
+        if not _norm_clips or not _norm_trans or _silence_static:
+            notes = []
+            if not _norm_clips:
+                notes.append("clips not normalized")
+            if not _norm_trans:
+                notes.append("transitions not normalized")
+            if _silence_static:
+                notes.append("static.mp4 silenced")
+            print(f"{L('Audio notes')}{S()}{V(', '.join(notes))}")
+        if _rebuild:
+            print(f"{L('Rebuild')}{S()}{V('true')}")
         print(bar)
         # Prompt
         ans = input("Proceed? [Y/n]: ").strip().lower()
@@ -429,11 +485,19 @@ def ingest_clips(args, cid, token, window):
         import asyncio as _asyncio
 
         log("Reading Discord channel for clip links", 1)
-        clip_ids, _channel_disp = _asyncio.run(
-            fetch_recent_clip_ids(
-                d_token, int(ch_id), limit=int(args.discord_limit or _discord_limit)
+        try:
+            clip_ids, _channel_disp = _asyncio.run(
+                fetch_recent_clip_ids(
+                    d_token, int(ch_id), limit=int(args.discord_limit or _discord_limit)
+                )
             )
-        )
+        except ModuleNotFoundError as _imp_err:
+            # discord.py is imported lazily inside fetch_recent_clip_ids (so the URL
+            # parser works without it installed), so a missing install only surfaces
+            # here, not at the top-level `from clippy.discord_ingest import ...`.
+            log("Discord mode requires the optional dependency 'discord.py'", 5)
+            log("Install it with: pip install discord.py", 1)
+            _fail(str(_imp_err), exits.USAGE)
         try:
             if _channel_disp:
                 log("Discord channel: " + str(_channel_disp), 2)
@@ -444,10 +508,10 @@ def ingest_clips(args, cid, token, window):
         if not clip_ids:
             _fail("No clip links found in the specified Discord channel", exits.NO_CLIPS)
         try:
-            log("Found " + str(len(clip_ids)) + " clip links", 2)
+            log(tx("Found ") + hi(len(clip_ids)) + tx(" clip links"), 2)
         except Exception:  # logging; non-fatal
             pass
-        log("Fetching clips by IDs from Helix", 1)
+        log(tx("Fetching clips by IDs from ") + hi("Helix"), 1)
         clips = fetch_clips_by_ids(clip_ids, cid, token)
         # Broadcaster for naming: use the first clip's broadcaster_name/login if present, else fallback
         try:
@@ -467,7 +531,7 @@ def ingest_clips(args, cid, token, window):
             _fail("Broadcaster not found", exits.USAGE)
         broadcaster_id = user["id"]
         log("Resolved broadcaster id: " + str(broadcaster_id), 2)
-        log("Fetching clips from Helix", 1)
+        log(tx("Fetching clips from ") + hi("Helix"), 1)
         clips = fetch_clips(
             broadcaster_id=broadcaster_id,
             client_id=cid,
@@ -476,7 +540,7 @@ def ingest_clips(args, cid, token, window):
             ended_at=window[1],
             max_clips=args.max_clips,
         )
-    log("Fetched " + str(len(clips)) + " raw clips", 2)
+    log(tx("Fetched ") + hi(len(clips)) + tx(" raw clips"), 2)
     return clips, broadcaster_id
 
 
@@ -487,7 +551,10 @@ def filter_and_expand(clips, args, cid, token, broadcaster_id, window):
     min_views = get_config().selection.min_views
     # Filter by min views
     filtered = [c for c in clips if int(c.get("view_count", 0)) >= min_views]
-    log("Filtered to " + str(len(filtered)) + " clips (>= " + str(min_views) + " views)", 2)
+    log(
+        tx("Filtered to ") + hi(len(filtered)) + tx(" clips (>= ") + hi(min_views) + tx(" views)"),
+        2,
+    )
 
     # Compute target total — use duration estimate if --target-duration is set
     target_duration_min = getattr(args, "target_duration", 0) or 0
@@ -645,7 +712,7 @@ def run_pipeline(comps, args, window):
     _live = get_config()
     cache = _live.paths.cache
     output = _live.paths.output
-    log("Stage 1 (processing clips)", 1)
+    log(paint("Stage 1", "white", "bold") + tx(": Processing clips"), 1)
     stage_one(comps)
     # Verify concat lists were written for each expected compilation index.
     # If any concat file is missing, log and drop that compilation to avoid surprise.
@@ -675,7 +742,7 @@ def run_pipeline(comps, args, window):
     except Exception:
         # Non-fatal: continue and let stage_two handle any missing files
         pass
-    log("Stage 2 (concatenate)", 1)
+    log(paint("Stage 2", "white", "bold") + tx(": Concatenating"), 1)
     # Build the final filenames for display during compilation
     b_name = _sanitize_filename(args.broadcaster.lower()) or "broadcaster"
     start_iso, end_iso = window
@@ -997,19 +1064,63 @@ def console_main(argv: Optional[list[str]] = None) -> None:
         return
 
     if cmd in ("deps", "install-deps"):
-        from clippy.deps import advice, install, is_windows, missing_tools
+        from clippy.deps import (
+            ASSETS,
+            ASSETS_DEST,
+            advice,
+            install,
+            is_windows,
+            missing_assets,
+            missing_tools,
+        )
 
         _load_env_if_present()
         if not is_windows():
             log("Automatic download is Windows-only.", 2)
             log(advice(), 1)
             return
-        wanted = [a for a in args[1:] if not a.startswith("-")] or missing_tools()
-        if not wanted:
-            log("ffmpeg and yt-dlp are already available.", 1)
+        explicit = [a for a in args[1:] if not a.startswith("-")]
+        if explicit:
+            wanted_tools = [a for a in explicit if a in ("ffmpeg", "yt-dlp")]
+            wanted_assets = [a for a in explicit if a in ASSETS]
+        else:
+            wanted_tools = missing_tools()
+            wanted_assets = missing_assets()
+        if not wanted_tools and not wanted_assets:
+            log("ffmpeg, yt-dlp and static.mp4 are already available.", 1)
             return
+
+        from clippy.spinner import progress_bar, spinner_char
+
+        _spin_i = [0]
+
+        def _dl_progress(name: str, done: int, total: int) -> None:
+            spin = spinner_char(_spin_i)
+            mb_done = done / (1024 * 1024)
+            if total:
+                pct = max(0, min(100, int(done / total * 100)))
+                mb_total = total / (1024 * 1024)
+                sys.stdout.write(
+                    f"\r{spin}Downloading {name} {progress_bar(pct)} "
+                    f"({mb_done:.1f}/{mb_total:.1f} MB)   "
+                )
+                if done >= total:
+                    sys.stdout.write("\n")
+            else:
+                sys.stdout.write(f"\r{spin}Downloading {name} ({mb_done:.1f} MB)   ")
+            sys.stdout.flush()
+
         try:
-            install(wanted, log=lambda m: log(m, 1))
+            if wanted_tools:
+                install(wanted_tools, log=lambda m: log(m, 1), on_progress=_dl_progress)
+            if wanted_assets:
+                install(
+                    wanted_assets,
+                    dest=ASSETS_DEST,
+                    specs=ASSETS,
+                    log=lambda m: log(m, 1),
+                    on_progress=_dl_progress,
+                )
         except Exception as exc:
             log(str(exc), 5)
             raise SystemExit(exits.TOOL) from exc

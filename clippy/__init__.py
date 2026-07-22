@@ -4,4 +4,4 @@ This package contains helper modules extracted from main.py to keep the entrypoi
 """
 
 # Semantic version of the Clippy tool. Bump this for releases.
-__version__ = "0.6.1"
+__version__ = "0.7.0"

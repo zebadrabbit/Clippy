@@ -67,7 +67,10 @@ def _looks_like_path(val: str) -> bool:
         # Windows drive letter or contains path separators
         if len(v) >= 3 and v[1] == ":" and (v[2] == "\\" or v[2] == "/"):
             return True
-        if ("/" in v) or ("\\" in v):
+        # A real path separator has no whitespace around it ("output/foo.mp4",
+        # "C:\Clippy\bin"). A bare "/" or "\" check also matches things like a
+        # Discord "Guild Name / #channel" display string, which isn't a path.
+        if re.search(r"\S[/\\]\S", v):
             return True
         # common file-ish values
         if any(
@@ -484,7 +487,8 @@ def prep_work():
         static_path = os.path.join(transitions_dir, "static.mp4")
         if not os.path.exists(static_path):
             log(
-                "WARN transitions/static.mp4 not found. Place your transition clip in the transitions folder.",
+                "WARN transitions/static.mp4 not found. Run 'clippy deps' to fetch the "
+                "default one, or place your own in the transitions folder.",
                 1,
             )
     except OSError as e:

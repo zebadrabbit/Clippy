@@ -113,7 +113,7 @@ container_flags = globals().get("container_flags", "-movflags +faststart")
 # youtube-dl stuff (yt-dlp). Legacy variable names retained.
 youtubeDl = YTDL_BIN
 youtubeDlOptions = (
-    "--no-color --no-check-certificate --quiet --progress --retries 5 "
+    "--no-color --no-check-certificate --quiet --progress --retries 5 --socket-timeout 30 "
     "--ffmpeg-location {ffmpeg_path} "
     "--merge-output-format mp4 "
     "--format {yt_format} "

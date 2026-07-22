@@ -100,8 +100,8 @@ def _check_transitions() -> List[Issue]:
             Issue(
                 "error",
                 f"Transitions folder not found: {tdir}",
-                f"Create it and add {static_name} (a short clip shown between segments), "
-                "or pass --transitions-dir / set TRANSITIONS_DIR.",
+                f"Run 'clippy deps' to fetch {static_name}, or create the folder yourself "
+                "and add one (or pass --transitions-dir / set TRANSITIONS_DIR).",
             )
         )
     elif not os.path.isfile(static_path):
@@ -109,7 +109,7 @@ def _check_transitions() -> List[Issue]:
             Issue(
                 "error",
                 f"Required file missing: {static_name} in {tdir}",
-                f"Add a {static_name} to the transitions folder "
+                f"Run 'clippy deps' to fetch the default {static_name}, or add your own "
                 "(import one with scripts/import_media.py --type transition).",
             )
         )

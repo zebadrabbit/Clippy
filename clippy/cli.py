@@ -301,7 +301,17 @@ def parse_args() -> argparse.Namespace:
     g_discord.add_argument(
         "--discord",
         action="store_true",
-        help="Enable Discord mode: read clip links from a channel instead of Helix search",
+        default=None,
+        help=(
+            "Enable Discord mode: read clip links from a channel instead of Helix search. "
+            "Defaults to the active profile's identity.source when omitted."
+        ),
+    )
+    g_discord.add_argument(
+        "--no-discord",
+        dest="discord",
+        action="store_false",
+        help="Force Helix mode even if the active profile's identity.source is discord",
     )
     g_discord.add_argument(
         "--discord-channel-id",

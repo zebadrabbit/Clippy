@@ -59,6 +59,26 @@ class Theme:
 THEME = Theme()
 
 
+def hi(value: object) -> str:
+    """Highlight a dynamic value (id, count, name) the way ``Label: Value`` lines already do.
+
+    For building log lines that don't fit the automatic "Label: Value" split in
+    ``utils._style_label_value`` but still want the value to stand out.
+    """
+    try:
+        return THEME.value(str(value))
+    except Exception:  # theme/chalk may be unavailable
+        return str(value)
+
+
+def tx(text: str) -> str:
+    """The dim/default body style, for the non-highlighted parts of a line built with ``hi``."""
+    try:
+        return THEME.text(str(text))
+    except Exception:  # theme/chalk may be unavailable
+        return str(text)
+
+
 def paint(text: str, *styles: str) -> str:
     """Best-effort wrapper around chalk styles by name."""
     s = chalk

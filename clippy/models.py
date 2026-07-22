@@ -136,6 +136,9 @@ class DiscordConfig:
 @dataclass
 class IdentityConfig:
     broadcaster: str = ""
+    #: Default ingestion source when --discord/--no-discord isn't passed on
+    #: the CLI: "" (Helix) or "discord".
+    source: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +247,7 @@ class ClippyConfig:
             ),
             identity=IdentityConfig(
                 broadcaster=str(d.get("default_broadcaster", "")),
+                source=str(d.get("default_source", "")),
             ),
         )
 
@@ -308,6 +312,7 @@ class ClippyConfig:
             "discord_message_limit": self.discord.message_limit,
             # Identity
             "default_broadcaster": self.identity.broadcaster,
+            "default_source": self.identity.source,
         }
 
     def replace(self, **kwargs: Any) -> "ClippyConfig":

@@ -24,6 +24,11 @@ from typing import Callable, Iterable, Optional
 #: Where the binaries land. config.py already prefers ./bin over PATH.
 DEFAULT_DEST = "bin"
 
+#: static.mp4 is Clippy's own asset (not a third-party tool), so it downloads
+#: to transitions/ instead of bin/, and its checksum is pinned here rather
+#: than fetched from a publisher, since we are the publisher.
+ASSETS_DEST = "transitions"
+
 _UA = {"User-Agent": "clippy-installer"}
 
 TOOLS: dict[str, dict] = {
@@ -47,6 +52,17 @@ TOOLS: dict[str, dict] = {
     },
 }
 
+ASSETS: dict[str, dict] = {
+    "static.mp4": {
+        "url": "https://raw.githubusercontent.com/zebadrabbit/Clippy/main/transitions/static.mp4",
+        "checksum_format": "pinned",
+        "checksum": "ddd096b7d207288b36f3feeeb2c0852504fe961c930d4c1c7c7381364fc44fe1",
+        "archive": None,
+        "provides": ("static.mp4",),
+        "licence": "Clippy default asset",
+    },
+}
+
 
 def is_windows() -> bool:
     return os.name == "nt"
@@ -65,6 +81,13 @@ def missing_tools(dest: str | os.PathLike = DEFAULT_DEST) -> list[str]:
     return out
 
 
+def missing_assets(dest: str | os.PathLike = ASSETS_DEST) -> list[str]:
+    """Which of Clippy's own bundled assets aren't in *dest* yet."""
+    return [
+        name for name, spec in ASSETS.items() if not (Path(dest) / spec["provides"][0]).is_file()
+    ]
+
+
 def _fetch(url: str, timeout: int = 60) -> bytes:
     with urllib.request.urlopen(urllib.request.Request(url, headers=_UA), timeout=timeout) as r:
         return r.read()
@@ -72,6 +95,8 @@ def _fetch(url: str, timeout: int = 60) -> bytes:
 
 def _expected_checksum(spec: dict) -> Optional[str]:
     """The publisher's own hash for this download, or None if unavailable."""
+    if spec.get("checksum_format") == "pinned":
+        return spec.get("checksum")
     try:
         body = _fetch(spec["checksum_url"], timeout=30).decode("utf-8", "replace")
     except Exception:
@@ -125,6 +150,7 @@ def install(
     dest: str | os.PathLike = DEFAULT_DEST,
     on_progress: Optional[Callable[[str, int, int], None]] = None,
     log: Callable[[str], None] = print,
+    specs: dict[str, dict] = TOOLS,
 ) -> list[str]:
     """Download *names* into *dest*. Returns the files written.
 
@@ -134,8 +160,8 @@ def install(
     dest_path.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
 
-    for name in names or list(TOOLS):
-        spec = TOOLS.get(name)
+    for name in names or list(specs):
+        spec = specs.get(name)
         if spec is None:
             log(f"Unknown tool: {name}")
             continue

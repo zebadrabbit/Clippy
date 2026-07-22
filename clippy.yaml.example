@@ -6,6 +6,13 @@
 # Tip: keep secrets (client IDs, tokens) in .env or environment variables.
 # This file is for non-secret settings and preferences.
 
+identity:
+  # Default Twitch broadcaster login, used when --broadcaster is omitted
+  broadcaster: ""
+  # Default ingestion source when --discord/--no-discord is omitted: "" (Helix)
+  # or "discord". --discord/--no-discord on the CLI always overrides this.
+  source: ""
+
 selection:
   # Minimum views to include a clip
   min_views: 1
@@ -73,6 +80,8 @@ behavior:
   max_concurrency: 4
   # Skip a clip if it fails after retries (true) or abort run (false)
   skip_bad_clip: true
+  # Force rebuild even if intermediate files exist (same as --rebuild)
+  rebuild: false
   # Force rebuild of normalized non-clip assets (cache/_trans)
   transitions_rebuild: false
   # Enable overlay (avatar + text) on clips
@@ -134,9 +143,10 @@ discord:
 #   theflood:
 #     identity:
 #       broadcaster: theflood
+#       source: discord   # this streamer's clips always come from a Discord channel
 #     assets:
-#       intro: [intro_theflood.mp4]
-#       outro: [outro_theflood.mp4]
+#       intro: [intro.mp4]
+#       outro: [outro.mp4]
 #     selection:
 #       clips_per_compilation: 20
 #   someoneelse:

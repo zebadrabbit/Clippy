@@ -30,12 +30,18 @@ from typing import List, Optional
 from yachalk import chalk
 
 try:
-    from clippy.theme import THEME, enable_windows_vt  # type: ignore
+    from clippy.theme import THEME, enable_windows_vt, hi, tx  # type: ignore
 except ImportError:  # pragma: no cover
     THEME = None  # type: ignore
 
     def enable_windows_vt():  # type: ignore
         return
+
+    def hi(value):  # type: ignore
+        return str(value)
+
+    def tx(text):  # type: ignore
+        return str(text)
 
 
 import requests
@@ -51,6 +57,7 @@ from clippy.config import (
 )
 from clippy.ffmpeg import EncoderParams, detect_encoder
 from clippy.models import ClipRow
+from clippy.spinner import progress_bar, spinner_char
 from clippy.utils import (
     find_transition_file,
     log,
@@ -770,7 +777,7 @@ def create_compilations_from(
             compilations.append(eligible[:per])
             eligible = eligible[per:]
 
-    log(f"Created {len(compilations)} compilations", 2)
+    log(tx("Created ") + hi(len(compilations)) + tx(" compilations"), 2)
     return compilations
 
 
@@ -952,6 +959,7 @@ def prepare_clips_concurrent(compilation, max_workers):
 
     # Progress board: print N lines and update in-place
     _lock = threading.Lock()
+    _spin_i = [0]
 
     def _status_text(label: str) -> str:
         low = label.lower()
@@ -1034,11 +1042,17 @@ def prepare_clips_concurrent(compilation, max_workers):
 
         def _norm_progress(done: float, total: float):
             pct = max(0, min(100, int((done / total) * 100))) if total else 0
-            _update_line(pos, f"Normalizing {pct}% ({_fmt_time(done)}/{_fmt_time(total)})")
+            spin = spinner_char(_spin_i)
+            _update_line(
+                pos, f"{spin}Normalizing {progress_bar(pct)} ({_fmt_time(done)}/{_fmt_time(total)})"
+            )
 
         def _ovl_progress(done: float, total: float):
             pct = max(0, min(100, int((done / total) * 100))) if total else 0
-            _update_line(pos, f"Overlay {pct}% ({_fmt_time(done)}/{_fmt_time(total)})")
+            spin = spinner_char(_spin_i)
+            _update_line(
+                pos, f"{spin}Overlay {progress_bar(pct)} ({_fmt_time(done)}/{_fmt_time(total)})"
+            )
 
         _update_line(pos, "Normalizing")
         p_rc = _retry(
@@ -1235,7 +1249,7 @@ def write_concat_file(index: int, compilation: List[ClipRow]):
 
 def stage_one(compilations: List[List[ClipRow]]):
     for idx, comp in enumerate(compilations):
-        log(f"Concat list {idx}", 1)
+        log(tx("Concat list ") + hi(idx + 1), 1)
         write_concat_file(idx, comp)
 
 
@@ -1267,6 +1281,7 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
             cmd += " -progress pipe:2"
 
         total = _sum_concat_duration(idx)
+        _spin_i = [0]
 
         def _fmt_time(secs: float) -> str:
             try:
@@ -1284,25 +1299,20 @@ def stage_two(compilations: List[List[ClipRow]], final_names: Optional[List[str]
             if "out_time" not in info:
                 return
             done = float(info["out_time"])
+            spin = spinner_char(_spin_i)
+            try:
+                act = THEME.section("Concatenating") if THEME else chalk.cyan("Concatenating")
+                name = THEME.path(out_name) if THEME else chalk.white(out_name)
+            except Exception:  # broad catch: theme rendering safety
+                act = chalk.cyan("Concatenating")
+                name = chalk.white(out_name)
             if total and total > 0:
                 pct = max(0, min(100, int((done / total) * 100)))
-                try:
-                    act = THEME.section("Concatenating") if THEME else chalk.cyan("Concatenating")
-                    name = THEME.path(out_name) if THEME else chalk.white(out_name)
-                except Exception:  # broad catch: theme rendering safety
-                    act = chalk.cyan("Concatenating")
-                    name = chalk.white(out_name)
                 sys.stdout.write(
-                    f"\r{act} {name}: {pct}% ({_fmt_time(done)}/{_fmt_time(total)})   "
+                    f"\r{spin}{act} {name}: {progress_bar(pct)} ({_fmt_time(done)}/{_fmt_time(total)})   "
                 )
             else:
-                try:
-                    act = THEME.section("Concatenating") if THEME else chalk.cyan("Concatenating")
-                    name = THEME.path(out_name) if THEME else chalk.white(out_name)
-                except Exception:  # broad catch: theme rendering safety
-                    act = chalk.cyan("Concatenating")
-                    name = chalk.white(out_name)
-                sys.stdout.write(f"\r{act} {name}: {_fmt_time(done)}   ")
+                sys.stdout.write(f"\r{spin}{act} {name}: {_fmt_time(done)}   ")
             sys.stdout.flush()
 
         # Use cancellable runner for final concat as well

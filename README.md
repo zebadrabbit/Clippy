@@ -43,17 +43,20 @@ also needs **Python 3.10+**.
 Download `clippy.exe` from the [latest release](https://github.com/zebadrabbit/Clippy/releases/latest)
 and run it. Everything — the CLI, the TUI, the overlay font — is inside the one file.
 
-Then let Clippy fetch the two external tools it drives:
+Then let Clippy fetch what it needs: the two external tools it drives, and its
+default `static.mp4` transition clip:
 
 ```powershell
-clippy deps      # downloads ffmpeg and yt-dlp into bin
+clippy deps      # downloads ffmpeg + yt-dlp into bin, and static.mp4 into transitions
 clippy doctor    # confirms the setup
 ```
 
-`clippy deps` downloads each tool from its own publisher and checks it against the
-checksum they publish, so a truncated or tampered file is rejected rather than
-half-installed. Clippy itself ships neither: common Windows ffmpeg builds are GPL,
-and bundling one would push that licence onto this otherwise-MIT project.
+`clippy deps` downloads ffmpeg and yt-dlp from their own publishers and checks each
+against the checksum they publish, so a truncated or tampered file is rejected rather
+than half-installed. Clippy itself ships neither: common Windows ffmpeg builds are
+GPL, and bundling one would push that licence onto this otherwise-MIT project.
+`static.mp4` is Clippy's own asset, checked against a checksum pinned in the source —
+swap it out any time for your own branding.
 
 ### With pip
 

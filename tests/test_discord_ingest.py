@@ -21,6 +21,35 @@ from clippy.discord_ingest import (
 )
 
 
+class TestIngestClipsWithoutDiscordPy:
+    """discord.py imports lazily inside fetch_recent_clip_ids (so the URL parser
+    works without it installed) — that means a missing install only ever
+    surfaces there, not at ``from clippy.discord_ingest import ...``. Regression
+    for a crash where that ModuleNotFoundError went uncaught instead of exiting
+    cleanly with exits.USAGE.
+    """
+
+    def test_a_missing_discord_py_exits_with_the_usage_code(self, monkeypatch):
+        import clippy.discord_ingest as discord_ingest
+        import clippy.run as run
+
+        async def _boom(*args, **kwargs):
+            raise ModuleNotFoundError("No module named 'discord'")
+
+        monkeypatch.setattr(discord_ingest, "fetch_recent_clip_ids", _boom)
+
+        args = types.SimpleNamespace(
+            discord=True,
+            discord_channel_id=123456789012345678,
+            discord_token="faketoken",
+            discord_limit=None,
+            max_clips=100,
+        )
+        with pytest.raises(SystemExit) as exc:
+            run.ingest_clips(args, cid=None, token=None, window=(None, None))
+        assert exc.value.code == exits.USAGE
+
+
 class TestExtractClipIds:
     """Every URL shape people actually paste into a channel."""
 

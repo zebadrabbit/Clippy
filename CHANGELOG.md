@@ -1,5 +1,73 @@
 # Changelog
 
+## 2026-07-22 — v0.7.0 (terminal polish + Discord-default profiles)
+
+- Fix — two more mis-colored lines on the Discord ingestion path
+  - "Found N clip links" and "Fetching clips by IDs from Helix" didn't highlight
+    their dynamic values, same root cause as the earlier Helix-path fix, just
+    missed on this path. Also, `_looks_like_path()` treated any bare "/" as a
+    file path, so a Discord "Guild Name / #channel" display string rendered in
+    path color (cyan) instead of value color (white). Tightened to require no
+    whitespace around the separator, which is how every real path in this
+    codebase actually looks.
+
+- Fix — missing discord.py crashed with a raw traceback instead of exiting cleanly
+  - `discord.py`'s own recent fix moved `import discord` out of module scope (so
+    the URL parser works without the dependency installed), which had a side
+    effect: the guard around `from clippy.discord_ingest import ...` could no
+    longer catch a missing install, since that import now always succeeds. The
+    real `import discord` only happens later, inside `fetch_recent_clip_ids`,
+    uncaught. Now caught at the call site with the same "install discord.py"
+    message and `exits.USAGE` as before.
+
+- Fix — the "Run plan" confirmation panel was missing and cluttered in different places
+  - Added Source (Helix/Discord), Discord channel (when in Discord mode), Profile,
+    and Audio bitrate — none of these were shown before, so a profile that silently
+    defaults to Discord (or to a different broadcaster/branding) gave no visual
+    confirmation of what was about to run.
+  - Removed Max fetch and Cache dir (internal tuning knobs, not decision points).
+  - Rebuild now only appears when true, matching Auto-expand/Nostalgia's existing
+    conditional display. Same for a new "Audio notes" line, which only appears
+    when normalization or static-muting is off the sane default.
+  - Time Window now shows dates and a day-span (`2026-07-19 -> 2026-07-22 (3
+    days)`) instead of full RFC3339 timestamps down to the second.
+
+- Feature — a profile can default to Discord (`identity.source: discord`)
+  - Previously `--discord` had to be typed on every run regardless of the active
+    profile, even though the profile already held the channel ID. `--discord`/
+    `--no-discord` on the CLI still always win when passed explicitly.
+
+- Fix — inconsistent value highlighting in build logs
+  - "Resolved broadcaster id" highlighted its value; "Fetching clips from Helix",
+    "Fetched N raw clips", "Filtered to N clips", "Created N compilations" and
+    "Concat list N" did not, because the automatic Label:-Value styling only
+    fires on an exact colon split, not values embedded mid-sentence. Those lines
+    now explicitly highlight their dynamic parts. "Stage 1"/"Stage 2" headers
+    are now bold. Concat list numbering is now 1-based for humans (internal
+    file naming is unchanged).
+
+- Fix — a stalled download could hang a run forever
+  - yt-dlp had `--retries 5`, but that only retries after a request errors. A
+    connection that stalls without ever erroring (dead peer, black-holed route)
+    just blocked the socket read indefinitely, and nothing bounded that: no
+    timeout existed anywhere between Clippy and the subprocess. Added
+    `--socket-timeout 30`, so a stall now surfaces as an error yt-dlp's own
+    retries (and Clippy's `_retry` wrapper around it) can actually act on.
+
+- Fix — `clippy setup` left a bare download unusable
+  - The wizard wrote `.env` and `clippy.yaml` but never created `cache/`, `output/`,
+    `transitions/`, or `bin/`, so a fresh `clippy.exe` in an empty folder had nowhere
+    to put anything until the first real run created them lazily. Setup now creates
+    all four upfront.
+
+- Feature — `clippy deps` now also fetches `static.mp4`
+  - `static.mp4` is a required asset (Clippy inserts it between every clip) that
+    previously had to be supplied by hand even on a from-scratch install. `clippy deps`
+    now downloads Clippy's own default clip into `transitions/`, verified against a
+    checksum pinned in source rather than a third-party publisher's, since Clippy is
+    the publisher here. `clippy doctor` and the setup wizard now point at `clippy deps`
+    instead of just saying the file is missing.
+
 ## 2026-07-21 — v0.6.1 (Windows executable released)
 
 - Feature — Profiles: one install, several streamers
