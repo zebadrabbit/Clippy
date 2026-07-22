@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2026-07-21 — v0.6.1 (Windows executable released)
 
 - Feature — Profiles: one install, several streamers
   - `clippy profile` creates and edits a named profile in eight questions, with no

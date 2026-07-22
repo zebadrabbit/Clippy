@@ -7,6 +7,8 @@
 
 Turn your Twitch clips into highlight reels — automatically. Clippy pulls clips, stitches them together with intros, transitions, and outros, and renders a polished compilation ready to upload. Under the hood, every asset gets normalized to a consistent codec (H.264/AAC) so concatenation never breaks mid-render.
 
+**[See it in action →](https://zebadrabbit.github.io/Clippy/demo/)** — a simulated terminal walkthrough of install, guided setup, an everyday run, and headless/JSON mode. More detail lives on the [wiki](https://github.com/zebadrabbit/Clippy/wiki).
+
 ## Features
 
 - **Profiles**: one install, any number of channels. Each keeps its own branding —
@@ -44,7 +46,7 @@ and run it. Everything — the CLI, the TUI, the overlay font — is inside the 
 Then let Clippy fetch the two external tools it drives:
 
 ```powershell
-clippy deps      # downloads ffmpeg and yt-dlp into .in
+clippy deps      # downloads ffmpeg and yt-dlp into bin
 clippy doctor    # confirms the setup
 ```
 
