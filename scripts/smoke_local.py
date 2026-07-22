@@ -35,6 +35,11 @@ def main():
         "--overlay", action="store_true", help="Enable overlay stage (generates avatar.png)"
     )
     ap.add_argument(
+        "--watermark",
+        action="store_true",
+        help="Enable a logo watermark too (generates a small logo.png)",
+    )
+    ap.add_argument(
         "-y",
         "--yes",
         action="store_true",
@@ -86,16 +91,37 @@ def main():
             # If Pillow is not available in this environment, skip overlay
             args.overlay = False
 
-    # Configure the overlay toggle on the typed config, which is what the
-    # pipeline reads. rebuild stays off: the clip dir is wiped above, and
-    # forcing a rebuild makes write_concat_file re-download a clip that has no
-    # URL, which silently drops it from the compilation.
+    # Optionally create a small logo.png to exercise the watermark filter.
+    watermark_path = ""
+    if args.watermark:
+        try:
+            from PIL import Image, ImageDraw
+
+            logo = Image.new("RGBA", (200, 60), (0, 0, 0, 0))
+            d = ImageDraw.Draw(logo)
+            d.rectangle((0, 0, 199, 59), fill=(255, 0, 0, 180))
+            watermark_path = os.path.abspath(os.path.join(clip_dir, "logo.png"))
+            logo.save(watermark_path, "PNG")
+        except Exception:
+            args.watermark = False
+
+    # Configure the overlay/watermark toggles on the typed config, which is
+    # what the pipeline reads. rebuild stays off: the clip dir is wiped above,
+    # and forcing a rebuild makes write_concat_file re-download a clip that
+    # has no URL, which silently drops it from the compilation.
     _live = get_config()
     set_config(
         dataclasses.replace(
             _live,
             behavior=dataclasses.replace(
                 _live.behavior, enable_overlay=bool(args.overlay), rebuild=False
+            ),
+            assets=dataclasses.replace(
+                _live.assets,
+                watermark=watermark_path,
+                watermark_x="main_w-overlay_w-10",
+                watermark_y="10",
+                watermark_alpha=0.8,
             ),
         )
     )

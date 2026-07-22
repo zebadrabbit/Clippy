@@ -15,10 +15,11 @@ import clippy.twitch_ingest as ti
 
 
 class FakeResponse:
-    def __init__(self, status_code=200, payload=None, text=""):
+    def __init__(self, status_code=200, payload=None, text="", headers=None):
         self.status_code = status_code
         self._payload = payload if payload is not None else {}
         self.text = text or str(self._payload)
+        self.headers = headers or {}
 
     def json(self):
         return self._payload
@@ -140,15 +141,60 @@ class TestFetchClips:
         assert calls[0]["params"]["first"] == 2
         assert calls[1]["params"]["first"] == 1
 
-    def test_rate_limit_returns_what_was_collected(self, calls):
-        """A 429 partway through keeps the earlier pages rather than losing them."""
+    def test_rate_limit_returns_what_was_collected(self, calls, monkeypatch):
+        """429s that never recover exhaust their retries and keep the earlier
+        pages rather than losing them or raising."""
+        monkeypatch.setattr(ti.time, "sleep", lambda *_a, **_kw: None)
         calls.queue.extend(
             [
                 FakeResponse(200, {"data": [_clip(1)], "pagination": {"cursor": "AA"}}),
                 FakeResponse(429, {}, text="Too Many Requests"),
+                FakeResponse(429, {}, text="Too Many Requests"),
+                FakeResponse(429, {}, text="Too Many Requests"),
+                FakeResponse(429, {}, text="Too Many Requests"),
             ]
         )
         got = ti.fetch_clips("bid", "cid", "tok", max_clips=10, page_size=1)
+        assert [c["id"] for c in got] == ["clip1"]
+
+    def test_a_429_recovers_on_retry(self, calls, monkeypatch):
+        """A single transient 429 doesn't cost the page — the retry picks it up."""
+        monkeypatch.setattr(ti.time, "sleep", lambda *_a, **_kw: None)
+        calls.queue.extend(
+            [
+                FakeResponse(429, {}, text="Too Many Requests"),
+                FakeResponse(200, {"data": [_clip(1)]}),
+            ]
+        )
+        got = ti.fetch_clips("bid", "cid", "tok", max_clips=10, page_size=1)
+        assert [c["id"] for c in got] == ["clip1"]
+
+    def test_ratelimit_reset_header_is_respected(self, calls, monkeypatch):
+        sleeps = []
+        monkeypatch.setattr(ti.time, "sleep", lambda s: sleeps.append(s))
+        monkeypatch.setattr(ti.time, "time", lambda: 1000.0)
+        calls.queue.extend(
+            [
+                FakeResponse(
+                    429, {}, text="Too Many Requests", headers={"Ratelimit-Reset": "1012"}
+                ),
+                FakeResponse(200, {"data": [_clip(1)]}),
+            ]
+        )
+        ti.fetch_clips("bid", "cid", "tok", max_clips=10, page_size=1)
+        assert sleeps == [12.0]
+
+    def test_missing_ratelimit_reset_header_falls_back_to_backoff(self, calls, monkeypatch):
+        sleeps = []
+        monkeypatch.setattr(ti.time, "sleep", lambda s: sleeps.append(s))
+        calls.queue.extend(
+            [
+                FakeResponse(429, {}, text="Too Many Requests"),
+                FakeResponse(200, {"data": [_clip(1)]}),
+            ]
+        )
+        got = ti.fetch_clips("bid", "cid", "tok", max_clips=10, page_size=1)
+        assert sleeps == [1.5]
         assert [c["id"] for c in got] == ["clip1"]
 
     def test_expired_token_yields_no_clips_rather_than_raising(self, calls):

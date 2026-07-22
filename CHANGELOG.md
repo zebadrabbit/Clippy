@@ -1,5 +1,62 @@
 # Changelog
 
+## 2026-07-22 — v0.8.0 (Helix backoff, watermarks, hardware encoders)
+
+- Fix — `clippy doctor` never checked for yt-dlp
+  - Only ffmpeg/ffprobe were checked, despite yt-dlp being just as required
+    (the whole clip-download step depends on it). Doctor could report "all
+    checks passed" on a machine with no yt-dlp at all. Added, with its own
+    install-source hint (github.com/yt-dlp/yt-dlp, not ffmpeg.org).
+
+- Fix — a Twitch 429 gave up immediately instead of a short bounded wait
+  - A non-200 from Helix (including rate limiting) logged and returned
+    whatever clips were already collected — intentional graceful
+    degradation, not a bug, but a transient throttle cost the rest of the
+    page for no reason. Now retries up to 3 times on 429 specifically,
+    respecting Twitch's `Ratelimit-Reset` header when present (capped at
+    30s), before falling back to the same partial-results behavior as
+    before. Every other error status is untouched.
+
+- Feature — Windows CI coverage
+  - The test suite (pytest/ruff/black) ran on Ubuntu only, despite
+    `clippy.exe` — the primary distribution artifact — being built on
+    Windows by a separate workflow whose own check was two flags, not the
+    real suite. Windows-specific code (VT console mode, PyInstaller
+    packaging, path handling throughout wizard.py/deps.py/log.py/theme.py)
+    had no real CI coverage. Added a `windows-latest` (Python 3.12) leg
+    running pytest.
+
+- Feature — `credits.md` output + `--credits-file`
+  - The TUI's "copy for YouTube description" credits block (grouped by
+    author, `Title — clipped by Author`) only ever existed inside the
+    interactive TUI. The plain CLI now writes it to `credits.md` in the
+    output folder on every run (same precedent as `manifest.json`), with
+    `--credits-file PATH` to put it somewhere specific — useful for
+    headless/scripted runs. The path is also in the `--json` payload.
+
+- Feature — logo watermark, independent of the creator-credit overlay
+  - `assets.watermark` (a filename, resolved the same way as
+    static/intro/outro), plus `watermark_x`/`watermark_y` (raw ffmpeg
+    overlay expressions — e.g. `main_w-overlay_w-20` for a right-aligned
+    position with a margin) and `watermark_alpha`. Works with or without
+    `behavior.enable_overlay`'s avatar/name credit; when both are on they
+    compose into one filter graph, still a single encode. Verified against
+    real ffmpeg encodes for all three combinations (credit-only, watermark-
+    only, both).
+
+- Feature — AMD (AMF) / Intel (QSV) hardware encoder support
+  - Only NVENC or CPU-only libx264 existed end-to-end before — a real gap
+    for streamers without an NVIDIA GPU. `detect_encoder()` now probes
+    NVENC, then AMF, then QSV, each via a real trial encode, falling back to
+    libx264 if none work. Each encoder gets its own ffmpeg flag set (NVENC's
+    flags aren't valid for AMF/QSV and would be rejected). **Best-effort:**
+    the AMF/QSV flags are from ffmpeg documentation, not verified against
+    real AMD/Intel hardware in this environment — the detection/fallback
+    mechanics are confirmed working (both fail cleanly and fall through
+    correctly on hardware that lacks them), but the actual encode quality/
+    correctness on real AMD/Intel hardware is unverified. Flag if you hit
+    an issue on real hardware.
+
 ## 2026-07-22 — v0.7.0 (terminal polish + Discord-default profiles)
 
 - Fix — two more mis-colored lines on the Discord ingestion path

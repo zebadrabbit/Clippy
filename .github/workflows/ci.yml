@@ -38,6 +38,27 @@ jobs:
       - name: Pytest
         run: pytest -q
 
+  test-windows:
+    name: Test (windows, py3.12)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install project (with dev + tui extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,tui]"
+
+      - name: Pytest
+        run: pytest -q
+
   smoke:
     name: End-to-end pipeline smoke test
     runs-on: ubuntu-latest

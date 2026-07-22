@@ -125,6 +125,15 @@ class AssetsConfig:
             "transition_08.mp4",
         ]
     )
+    #: A logo watermark, independent of the creator-credit overlay. Empty
+    #: means off (same "presence means enabled" convention as intro/outro).
+    watermark: str = ""
+    #: Raw ffmpeg overlay x/y expressions (e.g. "main_w-overlay_w-20" for a
+    #: right-aligned position with a 20px margin) — passed straight through,
+    #: not parsed, so any expression the overlay filter accepts works.
+    watermark_x: str = "10"
+    watermark_y: str = "10"
+    watermark_alpha: float = 1.0
 
 
 @dataclass
@@ -236,6 +245,10 @@ class ClippyConfig:
                         "transition_08.mp4",
                     ],
                 ),
+                watermark=str(d.get("watermark", "")),
+                watermark_x=str(d.get("watermark_x", "10")),
+                watermark_y=str(d.get("watermark_y", "10")),
+                watermark_alpha=float(d.get("watermark_alpha", 1.0)),
             ),
             discord=DiscordConfig(
                 channel_id=(
@@ -307,6 +320,10 @@ class ClippyConfig:
             "intro": list(self.assets.intro),
             "outro": list(self.assets.outro),
             "transitions": list(self.assets.transitions),
+            "watermark": self.assets.watermark,
+            "watermark_x": self.assets.watermark_x,
+            "watermark_y": self.assets.watermark_y,
+            "watermark_alpha": self.assets.watermark_alpha,
             # Discord
             "discord_channel_id": self.discord.channel_id,
             "discord_message_limit": self.discord.message_limit,

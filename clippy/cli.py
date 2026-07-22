@@ -241,6 +241,12 @@ def parse_args() -> argparse.Namespace:
     g_cache.add_argument("--cache-dir", dest="cache_dir", type=str, help="Cache directory path")
     g_cache.add_argument("--output-dir", dest="output_dir", type=str, help="Output directory path")
     g_cache.add_argument(
+        "--credits-file",
+        dest="credits_file",
+        type=str,
+        help="Where to write the paste-ready credits file (default: <output-dir>/credits.md)",
+    )
+    g_cache.add_argument(
         "--keep-cache", action="store_true", help="Do not delete per-clip cache after finishing"
     )
     g_cache.add_argument(

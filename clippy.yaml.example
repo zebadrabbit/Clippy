@@ -105,6 +105,19 @@ assets:
   # Only files listed here are eligible for random insertion.
   # transitions: [transition_01.mp4, transition_02.mp4, transition_03.mp4]
 
+  # Optional logo watermark, independent of the creator-credit overlay above
+  # (behavior.enable_overlay) — works with or without it. Same convention as
+  # intro/outro: empty means off.
+  # watermark: logo.png
+  # x/y are raw ffmpeg overlay expressions, not parsed — any expression the
+  # overlay filter accepts works. A few common ones:
+  #   top-left, 10px margin:      watermark_x: "10"              watermark_y: "10"
+  #   bottom-right, 20px margin:  watermark_x: "main_w-overlay_w-20"
+  #                               watermark_y: "main_h-overlay_h-20"
+  # watermark_x: "10"
+  # watermark_y: "10"
+  # watermark_alpha: 1.0   # 0.0 (invisible) - 1.0 (opaque)
+
 discord:
   # Optional: used when running with --discord
   # Discord channel ID to read clip links from

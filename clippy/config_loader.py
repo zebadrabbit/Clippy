@@ -332,6 +332,12 @@ def load_merged_config(
     merged["transitions"] = _coerce_list_str(
         assets.get("transitions"), merged.get("transitions", [])
     )
+    merged["watermark"] = _coerce_str(assets.get("watermark"), merged.get("watermark", ""))
+    merged["watermark_x"] = _coerce_str(assets.get("watermark_x"), merged.get("watermark_x", "10"))
+    merged["watermark_y"] = _coerce_str(assets.get("watermark_y"), merged.get("watermark_y", "10"))
+    merged["watermark_alpha"] = _coerce_float(
+        assets.get("watermark_alpha"), merged.get("watermark_alpha", 1.0)
+    )
 
     # Identity
     merged["default_broadcaster"] = _coerce_str(

@@ -34,6 +34,13 @@ from clippy.utils import fix_ascii, log
 
 HelixHeaders = _t.Dict[str, str]
 
+#: A 429 mid-pagination is worth a short bounded wait before giving up and
+#: returning whatever was already collected (auto-expand's widening date
+#: windows can make many sequential requests in one run). Any other non-200
+#: status still fails fast, unchanged.
+_RATE_LIMIT_MAX_RETRIES = 3
+_RATE_LIMIT_SLEEP_CAP = 30.0
+
 AUTH_URL = "https://id.twitch.tv/oauth2/token"
 CLIPS_URL = "https://api.twitch.tv/helix/clips"
 USERS_URL = "https://api.twitch.tv/helix/users"
@@ -117,6 +124,24 @@ def fetch_clips(
         resp = requests.get(
             CLIPS_URL, params=params, headers=_headers(client_id, token), timeout=30
         )
+        retry_n = 0
+        while resp.status_code == 429 and retry_n < _RATE_LIMIT_MAX_RETRIES:
+            retry_n += 1
+            sleep_for = None
+            reset_hdr = resp.headers.get("Ratelimit-Reset")
+            if reset_hdr:
+                try:
+                    sleep_for = max(0.0, float(reset_hdr) - time.time())
+                except (ValueError, TypeError):
+                    sleep_for = None
+            if sleep_for is None:
+                sleep_for = 1.5 * retry_n
+            sleep_for = min(sleep_for, _RATE_LIMIT_SLEEP_CAP)
+            log(f"Rate limited by Twitch (429); retrying in {sleep_for:.1f}s", 2)
+            time.sleep(sleep_for)
+            resp = requests.get(
+                CLIPS_URL, params=params, headers=_headers(client_id, token), timeout=30
+            )
         if resp.status_code != 200:
             log(f"Error fetching clips: {resp.status_code} {resp.text[:120]}", 5)
             break

@@ -330,3 +330,82 @@ class TestAvatarFade:
         """fade cannot touch alpha on a format that has none."""
         f = self._filter()
         assert f.index("format=yuva420p") < f.index("fade=t=in:")
+
+
+class TestWatermarkFilter:
+    def test_uses_the_given_position_and_alpha(self):
+        f = pipeline._watermark_filter("10", "20", 0.5, watermark_input_idx=1)
+        assert "colorchannelmixer=aa=0.5" in f
+        assert "overlay=x='10':y='20'" in f
+
+    def test_reads_from_the_given_input_index(self):
+        f = pipeline._watermark_filter("10", "10", 1.0, watermark_input_idx=2)
+        assert f.startswith("[2:v]")
+
+    def test_no_shortest_needed_unlike_the_credit_panel(self):
+        """A plain single-frame image input already holds via ffmpeg's
+        overlay `repeatlast` default — unlike the credit panel's avatar,
+        which is deliberately looped into an endless stream."""
+        f = pipeline._watermark_filter("10", "10", 1.0, watermark_input_idx=1)
+        assert "shortest" not in f
+
+    def test_in_and_out_labels_are_composable(self):
+        f = pipeline._watermark_filter(
+            "10", "10", 1.0, watermark_input_idx=2, in_label="credit", out_label="overlay"
+        )
+        assert "[credit][wm]" in f
+        assert f.endswith("[overlay]")
+
+    def test_x_and_y_are_passed_through_as_raw_expressions(self):
+        """A user gets ffmpeg's own overlay variables for free, e.g. a
+        bottom-right corner with a margin — no preset system needed."""
+        f = pipeline._watermark_filter("main_w-overlay_w-20", "10", 1.0, watermark_input_idx=1)
+        assert "x='main_w-overlay_w-20'" in f
+
+
+class TestOverlayAndWatermarkComposition:
+    """The three shapes process_clip's overlay pass can take, depending on
+    which of the two independent branding features are active."""
+
+    def _build(self, do_credit, do_watermark, watermark_path="/logo.png"):
+        return pipeline._build_overlay_inputs_and_filter(
+            do_credit,
+            do_watermark,
+            "Bob",
+            "/f.ttf",
+            "1920x1080",
+            "/cache",
+            "clip1",
+            watermark_path,
+            "10",
+            "10",
+            1.0,
+        )
+
+    def test_credit_only_is_unchanged(self):
+        inputs, filt = self._build(do_credit=True, do_watermark=False)
+        assert '-i "/cache/clip1/avatar.png"' in inputs
+        assert "logo.png" not in inputs
+        assert filt.endswith("[overlay]")
+        assert filt == pipeline._overlay_filter("Bob", "/f.ttf", "1920x1080")
+
+    def test_watermark_only_has_no_avatar_input(self):
+        inputs, filt = self._build(do_credit=False, do_watermark=True)
+        assert "avatar.png" not in inputs
+        assert '-i "/logo.png"' in inputs
+        # Watermark reads straight from the normalized clip (input 0).
+        assert filt.startswith("[1:v]")
+        assert filt.endswith("[overlay]")
+
+    def test_both_compose_into_one_filter_graph_and_one_encode(self):
+        inputs, filt = self._build(do_credit=True, do_watermark=True)
+        assert '-i "/cache/clip1/avatar.png"' in inputs
+        assert '-i "/logo.png"' in inputs
+        # Credit panel's output feeds the watermark stage; only the final
+        # stage ends in [overlay], so -map "[overlay]" still finds exactly
+        # one thing.
+        assert filt.count("[overlay]") == 1
+        assert filt.endswith("[overlay]")
+        assert "[credit]" in filt
+        # Watermark is the third -i (index 2): normalized, avatar, watermark.
+        assert "[2:v]" in filt

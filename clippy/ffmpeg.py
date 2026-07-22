@@ -73,13 +73,33 @@ class EncoderParams:
     # -----------------------------------------------------------------------
 
     def video_flags(self) -> str:
-        """Return the video encoding flags as a single string."""
+        """Return the video encoding flags as a single string.
+
+        NVENC's flags (-rc, -cq, -rc-lookahead, -spatial_aq, ...) are specific
+        to that encoder and would be rejected by ffmpeg if sent to AMF or QSV,
+        so each hardware encoder gets its own branch rather than sharing one
+        "everything that isn't libx264" fallback. AMF/QSV intentionally ignore
+        ``self.preset`` (an NVENC-tuned value like "slow"/"p4") in favor of
+        their own hardcoded good-enough defaults below, rather than adding a
+        second preset-name validator alongside x264's.
+        """
         if self.video_codec == "libx264":
             # No -preset here: every caller appends it after these flags, and
             # emitting it twice put a duplicate in every libx264 command.
             return (
                 f"-c:v libx264 -crf {self.cq} -maxrate {self.max_bitrate} "
                 f"-bufsize {self.buf_size} -profile:v {self.profile}"
+            )
+        if self.video_codec == "h264_amf":
+            return (
+                f"-c:v h264_amf -quality balanced -rc cqp "
+                f"-qp_i {self.cq} -qp_p {self.cq} -maxrate {self.max_bitrate} "
+                f"-bufsize {self.buf_size} -profile:v {self.profile}"
+            )
+        if self.video_codec == "h264_qsv":
+            return (
+                f"-c:v h264_qsv -preset medium -global_quality {self.cq} "
+                f"-maxrate {self.max_bitrate} -bufsize {self.buf_size} -profile:v {self.profile}"
             )
         # NVENC (h264_nvenc)
         return (
@@ -189,18 +209,20 @@ class EncoderParams:
 # ---------------------------------------------------------------------------
 
 
-@lru_cache(maxsize=None)
-def detect_encoder(ffmpeg_bin: str = "ffmpeg") -> str:
-    """Probe whether this machine can actually encode with h264_nvenc.
+#: Hardware encoders to probe, in priority order, before falling back to the
+#: CPU. NVENC first (the only one with tuned flags today), then AMD AMF, then
+#: Intel QSV.
+_HW_ENCODER_PROBE_ORDER = ("h264_nvenc", "h264_amf", "h264_qsv")
 
-    Returns ``"h264_nvenc"`` if a real trial encode succeeds, else ``"libx264"``.
-    Cached: the answer cannot change within a run, and this is called per clip.
 
-    This runs a throwaway encode rather than reading ``ffmpeg -encoders``. Distro
-    ffmpeg builds are routinely compiled with NVENC support and list the encoder
-    even with no NVIDIA driver installed, so the listing says nothing about
-    whether encoding will work -- it fails later with "Cannot load libcuda.so.1"
-    once every clip has already been downloaded.
+def _trial_encode_succeeds(ffmpeg_bin: str, codec: str) -> bool:
+    """Run a throwaway encode with *codec*, rather than reading ``ffmpeg -encoders``.
+
+    Distro/vendor ffmpeg builds are routinely compiled with hardware encoder
+    support listed even with no matching GPU or driver installed, so the
+    listing says nothing about whether encoding will actually work -- it
+    fails later (e.g. "Cannot load libcuda.so.1") once every clip has already
+    been downloaded.
     """
     import subprocess
 
@@ -216,7 +238,7 @@ def detect_encoder(ffmpeg_bin: str = "ffmpeg") -> str:
                 "-i",
                 "nullsrc=s=256x256:d=0.1",
                 "-c:v",
-                "h264_nvenc",
+                codec,
                 "-f",
                 "null",
                 "-",
@@ -224,8 +246,22 @@ def detect_encoder(ffmpeg_bin: str = "ffmpeg") -> str:
             capture_output=True,
             timeout=30,
         )
-        if result.returncode == 0:
-            return "h264_nvenc"
+        return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        pass
+        return False
+
+
+@lru_cache(maxsize=None)
+def detect_encoder(ffmpeg_bin: str = "ffmpeg") -> str:
+    """Probe which hardware encoder this machine can actually use, if any.
+
+    Tries NVENC, then AMD AMF, then Intel QSV (``_HW_ENCODER_PROBE_ORDER``),
+    each via a real trial encode; the first that succeeds wins. Falls back to
+    ``"libx264"`` (CPU) if none do. Cached: the answer cannot change within a
+    run, and this is called once per process (not per clip — the result is
+    cached across every call).
+    """
+    for codec in _HW_ENCODER_PROBE_ORDER:
+        if _trial_encode_succeeds(ffmpeg_bin, codec):
+            return codec
     return "libx264"

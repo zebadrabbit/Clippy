@@ -41,6 +41,13 @@ def test_missing_ffmpeg_is_error(monkeypatch):
     assert ff and ff[0].level == "error"
 
 
+def test_missing_ytdlp_is_error(monkeypatch):
+    monkeypatch.setattr(cfg, "youtubeDl", "definitely-not-a-real-binary-xyz", raising=False)
+    issues = preflight.run_preflight(require_credentials=False, require_transitions=False)
+    yd = [i for i in issues if i.title.startswith("yt-dlp not found")]
+    assert yd and yd[0].level == "error"
+
+
 def test_missing_static_transition(monkeypatch, tmp_path):
     monkeypatch.setattr("clippy.utils.resolve_transitions_dir", lambda: str(tmp_path))
     issues = preflight.run_preflight(require_credentials=False)

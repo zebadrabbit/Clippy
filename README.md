@@ -18,19 +18,24 @@ Turn your Twitch clips into highlight reels — automatically. Clippy pulls clip
   scheduled job can build every week without you
 - **Two interfaces**: Interactive Textual TUI (`clippy tui`) for beginners, full CLI for power users
 - Twitch Helix ingestion with date windows, auto-expand lookback, and nostalgia mode
-- Discord channel ingestion (optional): read clip links curated by your community
+- Discord channel ingestion (optional): read clip links curated by your community —
+  a profile can default to it (`identity.source: discord`), no `--discord` flag needed
 - Duration-based sizing: request compilations by target length (`--target-duration 20`) instead of clip count
 - Auto-expand: fills missing clips from outside the date range (newest to oldest)
 - Nostalgia mode: mixes in random older clips (>6 months) for variety
 - 5 encoding presets (youtube_1080p60, discord_friendly, archive_hq, quick_preview, cpu_only)
 - Min-views filter, weighted selection, and themed colorized logs
-- Creator avatar overlay, transitions, and output finalization to `output/`
+- Creator avatar overlay, an independent logo watermark, transitions, and output
+  finalization to `output/`
 - yt-dlp downloads with retries; `.env` or env-based credentials
-- NVENC-based encoding tuned for fewer artifacts at transitions, with libx264 fallback
+- Hardware encoding auto-detected — NVENC, AMD AMF, or Intel QSV — with libx264
+  fallback on the CPU
 - Resilient audio: loudness normalization for assets, synthesize clean stereo audio if missing
 - Ctrl-C friendly: cooperative shutdown that stops workers and terminates ffmpeg cleanly
 - Save credentials to `.env` from the TUI or CLI (`--save-env`)
-- Summary screen with output paths, compilation lengths, and contributor credits
+- Summary screen with output paths, compilation lengths, and contributor credits;
+  the plain CLI writes the same paste-ready `credits.md` too (`--credits-file` to
+  put it somewhere specific)
 
 ## Install
 

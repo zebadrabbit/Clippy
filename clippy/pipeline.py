@@ -177,8 +177,20 @@ def _overlay_motion(distance: int) -> tuple[str, str]:
     return offset, fade
 
 
-def _overlay_filter(author: str, fontfile: str, resolution: str = "1920x1080") -> str:
-    """Build the drawtext/overlay filter graph for a clip.
+def _overlay_filter(
+    author: str,
+    fontfile: str,
+    resolution: str = "1920x1080",
+    in_label: str = "0:v",
+    out_label: str = "overlay",
+) -> str:
+    """Build the drawtext/overlay filter graph fragment for a clip's creator credit.
+
+    Returns the graph body only (no surrounding quotes) so callers can
+    compose it with other fragments — e.g. the watermark filter — into one
+    filter_complex string. ``in_label``/``out_label`` let the credit panel sit
+    anywhere in that chain instead of always reading ``[0:v]`` and writing
+    ``[overlay]``.
 
     The original coordinates were hand-tuned for 1080p; they are now scaled by
     ``height / 1080`` so the credit banner, text, and avatar keep their proportions
@@ -235,15 +247,84 @@ def _overlay_filter(author: str, fontfile: str, resolution: str = "1920x1080") -
     )
 
     return (
-        f'"{avatar}'
+        f"{avatar}"
         f"color=c=black@0.7:s={box_w}x{box_h},format=yuva420p[panel];"
-        f"[0:v][panel]overlay={en}:x='{offset}':y=H-{box_off}:shortest=1[bg];"
+        f"[{in_label}][panel]overlay={en}:x='{offset}':y=H-{box_off}:shortest=1[bg];"
         f"[bg]drawtext={en}:x='{cb_x}+{offset}':y=(h)-{cb_off}:fontfile='{safe_font}':fontsize={cb_fs}"
         f":fontcolor=white:alpha='0.4*{fade}':text='clip by',"
         f"drawtext={en}:x='{au_x}+{offset}':y=(h)-{au_off}:fontfile='{safe_font}':fontsize={au_fs}"
         f":fontcolor=white:alpha='0.9*{fade}':text='{safe_author}'[base];"
-        f"[base][av]overlay={en}:x='{av_x}+{offset}':y=H-{av_off}:shortest=1[overlay]\""
+        f"[base][av]overlay={en}:x='{av_x}+{offset}':y=H-{av_off}:shortest=1[{out_label}]"
     )
+
+
+def _watermark_filter(
+    x: str,
+    y: str,
+    alpha: float,
+    watermark_input_idx: int,
+    in_label: str = "0:v",
+    out_label: str = "overlay",
+) -> str:
+    """Build the overlay filter graph fragment for a static logo watermark.
+
+    Persistent for the clip's full duration — no fade, no motion. ``x``/``y``
+    are raw ffmpeg overlay expressions, passed straight through (a user who
+    wants a corner position writes e.g. ``main_w-overlay_w-20`` themselves).
+
+    Unlike the credit panel's avatar (deliberately looped into an endless
+    stream so its fade has a timeline, and so needs ``shortest=1`` to keep the
+    graph from hanging), a plain single-frame image input already holds via
+    ffmpeg overlay's own ``repeatlast`` default — no looping or ``shortest``
+    needed here.
+    """
+    return (
+        f"[{watermark_input_idx}:v]format=yuva420p,colorchannelmixer=aa={alpha}[wm];"
+        f"[{in_label}][wm]overlay=x='{x}':y='{y}'[{out_label}]"
+    )
+
+
+def _build_overlay_inputs_and_filter(
+    do_credit: bool,
+    do_watermark: bool,
+    author: str,
+    fontfile: str,
+    resolution: str,
+    cache_dir: str,
+    clip_id: str,
+    watermark_path: Optional[str],
+    watermark_x: str,
+    watermark_y: str,
+    watermark_alpha: float,
+) -> tuple[str, str]:
+    """Assemble the ``-i`` flags and filter_complex string for the overlay pass.
+
+    One of three shapes depending on which of the two independent branding
+    features are active (at least one is, by the time this is called):
+    credit only (today's unchanged behavior), watermark only, or both
+    composed into one filter graph so it's still a single encode.
+    """
+    inputs = f'-i "{cache_dir}/{clip_id}/normalized.mp4" '
+    if do_credit:
+        inputs += f'-i "{cache_dir}/{clip_id}/avatar.png" '
+    if do_watermark:
+        inputs += f'-i "{watermark_path}" '
+
+    if do_credit and do_watermark:
+        # Credit panel writes to an intermediate label; the watermark reads
+        # from it and produces the final [overlay] output.
+        filt = (
+            _overlay_filter(author, fontfile, resolution, out_label="credit")
+            + ";"
+            + _watermark_filter(
+                watermark_x, watermark_y, watermark_alpha, watermark_input_idx=2, in_label="credit"
+            )
+        )
+    elif do_credit:
+        filt = _overlay_filter(author, fontfile, resolution)
+    else:
+        filt = _watermark_filter(watermark_x, watermark_y, watermark_alpha, watermark_input_idx=1)
+    return inputs, filt
 
 
 SHUTDOWN_EVENT = threading.Event()
@@ -663,15 +744,32 @@ def process_clip(
         os.remove(os.path.join(clip_dir, "clip.mp4"))
     except FileNotFoundError:
         pass
-    if cfg.behavior.enable_overlay:
+    watermark_path = find_transition_file(cfg.assets.watermark) if cfg.assets.watermark else None
+    if cfg.assets.watermark and not watermark_path:
+        log(f"WARN watermark not found: {cfg.assets.watermark}", 2)
+    do_credit = cfg.behavior.enable_overlay
+    do_watermark = bool(watermark_path)
+    if do_credit or do_watermark:
         if not quiet:
             log("Overlay", 1)
         if SHUTDOWN_EVENT.is_set():
             return 1
+        _inputs, _filter = _build_overlay_inputs_and_filter(
+            do_credit,
+            do_watermark,
+            clip.author,
+            cfg.assets.fontfile,
+            enc.resolution,
+            cache,
+            clip.id,
+            watermark_path,
+            cfg.assets.watermark_x,
+            cfg.assets.watermark_y,
+            cfg.assets.watermark_alpha,
+        )
         _ovl_cmd = (
-            f'{ffmpeg} -i "{cache}/{clip.id}/normalized.mp4" '
-            f'-i "{cache}/{clip.id}/avatar.png" '
-            f"-filter_complex {_overlay_filter(clip.author, cfg.assets.fontfile, enc.resolution)} "
+            f"{ffmpeg} {_inputs}"
+            f'-filter_complex "{_filter}" '
             f'-map "[overlay]" -map "0:a" '
             f"{enc.sizing_flags()} "
             f"{enc.full_encoding_flags()} "
@@ -1061,7 +1159,9 @@ def prepare_clips_concurrent(compilation, max_workers):
                 quiet=True,
                 on_norm_progress=_norm_progress,
                 on_overlay_progress=(
-                    _ovl_progress if get_config().behavior.enable_overlay else None
+                    _ovl_progress
+                    if (get_config().behavior.enable_overlay or get_config().assets.watermark)
+                    else None
                 ),
             )
         )

@@ -25,7 +25,7 @@
     background: var(--bg);
     color: var(--ink);
     font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
-    padding: 48px 20px 64px;
+    padding: 28px 20px 32px;
     display:flex;
     flex-direction:column;
     align-items:center;
@@ -34,37 +34,38 @@
     * { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
   }
 
-  .wrap{ width:100%; max-width: 760px; }
+  .wrap{ width:100%; max-width: 860px; }
 
   .eyebrow{
     font-size: 12px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--accent-dim);
-    margin: 0 0 10px;
+    margin: 0 0 6px;
   }
   h1{
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 600;
-    font-size: clamp(28px, 5vw, 38px);
+    font-size: clamp(24px, 4vw, 32px);
     line-height: 1.1;
-    margin: 0 0 12px;
+    margin: 0 0 8px;
     color: var(--ink);
   }
   h1 span{ color: var(--accent); }
   .sub{
     font-family: 'Space Grotesk', sans-serif;
     color: var(--ink-dim);
-    font-size: 15px;
-    max-width: 60ch;
-    margin: 0 0 28px;
-    line-height: 1.5;
+    font-size: 14px;
+    max-width: 65ch;
+    margin: 0 0 16px;
+    line-height: 1.45;
   }
 
   /* Scenario tab switcher, styled like a set of terminal tabs */
   .tabs{
     display:flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: visible;
     gap: 2px;
     margin-bottom: 0;
   }
@@ -72,6 +73,8 @@
     font-family: 'Space Grotesk', sans-serif;
     font-size: 13px;
     font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
     color: var(--ink-dim);
     background: var(--panel-2);
     border: 1px solid var(--rule);
@@ -122,8 +125,7 @@
 
   .term-body{
     padding: 20px 22px 26px;
-    min-height: 340px;
-    max-height: 460px;
+    height: 480px;
     overflow-y: auto;
     font-size: 13.5px;
     line-height: 1.65;
@@ -150,7 +152,7 @@
     display:flex;
     justify-content: space-between;
     align-items:center;
-    margin-top: 14px;
+    margin-top: 10px;
   }
   .hint{ font-size: 12px; color: var(--ink-dim); font-family: 'Space Grotesk', sans-serif; }
   .replay{
@@ -179,7 +181,8 @@
 
   <div class="tabs" role="tablist" aria-label="Choose scenario">
     <button class="tab active" data-scenario="install" role="tab" aria-selected="true">Install</button>
-    <button class="tab" data-scenario="setup" role="tab" aria-selected="false">Guided setup</button>
+    <button class="tab" data-scenario="setup" role="tab" aria-selected="false">Setup (Twitch)</button>
+    <button class="tab" data-scenario="setup_discord" role="tab" aria-selected="false">Setup (Discord)</button>
     <button class="tab" data-scenario="run" role="tab" aria-selected="false">Everyday run</button>
     <button class="tab" data-scenario="headless" role="tab" aria-selected="false">Headless &amp; JSON</button>
     <button class="tab" data-scenario="discord" role="tab" aria-selected="false">Discord clips</button>
@@ -269,7 +272,11 @@ const SCENARIOS = {
       ]},
       { input: { label: "Select source [1/2]: ", value: "1" } },
       { blank: true },
-      { output: [{ text: "Step 1: Twitch Client ID & Secret", cls:"hi" }] },
+      { output: [
+        { text: "Step 1: Twitch Client ID & Secret", cls:"hi" },
+        { text: "  Get credentials: https://dev.twitch.tv/console/apps (create an application)", cls:"out" },
+        { text: "  Client Credentials flow is used; redirect URL is not required for clip fetching.", cls:"out" },
+      ]},
       { input: { label: "Twitch Client ID: ", value: "••••••••••••••••" } },
       { input: { label: "Twitch Client Secret: ", value: "••••••••••••••••" } },
       { blank: true },
@@ -291,6 +298,77 @@ const SCENARIOS = {
         { text: "All set! Next steps:", cls:"ok" },
         { text: "  python .\\main.py --broadcaster theflood -y", cls:"hi" },
         { text: "Check output/ for your compiled videos and manifest.json", cls:"out" },
+      ]},
+    ]
+  },
+  setup_discord: {
+    title: "clippy setup",
+    steps: [
+      { cmd: "clippy setup" },
+      { wait: 300 },
+      { output: [
+        { text: "==============================================", cls:"out" },
+        { text: "Clippy Setup Wizard  (v0.6.0)", cls:"hi" },
+        { text: "This will help you get set up with Twitch credentials and sensible defaults.", cls:"out" },
+        { text: "You can re-run this anytime; it writes your .env and clippy.yaml.", cls:"out" },
+        { text: "==============================================", cls:"out" },
+      ]},
+      { blank: true },
+      { output: [
+        { text: "Step 0: Choose your clip source", cls:"hi" },
+        { text: "Sources:", cls:"out" },
+        { text: "  1) Twitch (Helix) — fetch recent clips for a broadcaster", cls:"out" },
+        { text: "  2) Discord channel — users paste clip links; we'll read and resolve them", cls:"out" },
+      ]},
+      { input: { label: "Select source [1/2]: ", value: "2" } },
+      { blank: true },
+      { output: [
+        { text: "Step 1: Twitch Client ID & Secret", cls:"hi" },
+        { text: "  Get credentials: https://dev.twitch.tv/console/apps (create an application)", cls:"out" },
+        { text: "  Client Credentials flow is used; redirect URL is not required for clip fetching.", cls:"out" },
+      ]},
+      { input: { label: "Twitch Client ID: ", value: "••••••••••••••••" } },
+      { input: { label: "Twitch Client Secret: ", value: "••••••••••••••••" } },
+      { blank: true },
+      { output: [
+        { text: "Step 2: Discord setup", cls:"hi" },
+        { text: "  1) Enable Developer Mode in Discord: User Settings -> Advanced -> Developer Mode", cls:"out" },
+        { text: "  2) Right-click the target channel -> Copy Channel ID", cls:"out" },
+        { text: "  3) Create a bot at https://discord.com/developers/applications and copy the Bot Token (Bot tab)", cls:"out" },
+        { text: "  4) Ensure the 'Message Content Intent' is enabled for your bot", cls:"out" },
+        { text: "  5) Invite the bot to your server with permissions to read the channel", cls:"out" },
+      ]},
+      { input: { label: "Discord channel ID (numeric): ", value: "471185131730632716" } },
+      { input: { label: "Discord message scan limit [200]: ", value: "" } },
+      { input: { label: "Discord bot token (stored in .env): ", value: "••••••••••••••••••••••••••••••••••••" } },
+      { wait: 500 },
+      { output: [{ text: "  ✔ Discord token validated (login OK)", cls:"ok" }] },
+      { blank: true },
+      { output: [
+        { text: "Step 3: Clip selection & identity", cls:"hi" },
+        { text: "  Current default broadcaster: (none)", cls:"out" },
+        { text: "  Even in Discord mode, we use a broadcaster name for naming and defaults.", cls:"out" },
+        { text: "  Set a default to skip typing --broadcaster each run (leave blank to keep).", cls:"out" },
+      ]},
+      { input: { label: "Minimum views to include a clip [1]: ", value: "" } },
+      { input: { label: "Clips per compilation [12]: ", value: "12" } },
+      { input: { label: "Number of compilations per run [2]: ", value: "1" } },
+      { input: { label: "Default broadcaster (Twitch username): ", value: "theflood" } },
+      { blank: true },
+      { output: [{ text: "Step 4: Output quality & format", cls:"hi" }, { text: "  1) balanced  2) high  3) max", cls:"out" }] },
+      { input: { label: "Quality [1]: ", value: "2" } },
+      { input: { label: "Resolution (e.g., 1920x1080) [1920x1080]: ", value: "" } },
+      { input: { label: "Framerate (e.g., 60) [60]: ", value: "" } },
+      { blank: true },
+      { wait: 500 },
+      { output: [
+        { text: "Wrote .env", cls:"out" },
+        { text: "Wrote clippy.yaml", cls:"out" },
+        { text: "All set! Next steps:", cls:"ok" },
+        { text: "  1) Run a compile using Discord as the source:", cls:"out" },
+        { text: "     python .\\main.py --discord -y", cls:"hi" },
+        { text: "     (Override channel via --discord-channel-id if not set in clippy.yaml)", cls:"out" },
+        { text: "  2) Check output/ for your compiled videos and manifest.json", cls:"out" },
       ]},
     ]
   },
@@ -347,9 +425,9 @@ const SCENARIOS = {
     ]
   },
   headless: {
-    title: "clippy --headless --profile theflood --json",
+    title: "clippy --headless --profile theflood --json --credits-file output/credits.md",
     steps: [
-      { cmd: "clippy --headless --profile theflood --json" },
+      { cmd: "clippy --headless --profile theflood --json --credits-file output/credits.md" },
       { wait: 2600 },
       { output: [
         { text: "{", cls:"out" },
@@ -365,7 +443,8 @@ const SCENARIOS = {
         { text: '    "end": "2025-07-21T00:00:00Z"', cls:"out" },
         { text: '  },', cls:"out" },
         { text: '  "compilations": 2,', cls:"out" },
-        { text: '  "version": "0.6.0"', cls:"out" },
+        { text: '  "credits_file": "output/credits.md",', cls:"out" },
+        { text: '  "version": "0.7.0"', cls:"out" },
         { text: "}", cls:"out" },
       ]},
       { blank: true },
@@ -374,7 +453,8 @@ const SCENARIOS = {
       { blank: true },
       { output: [
         { text: "# No prompts, no color, no banner — safe for cron/Task Scheduler:", cls:"out" },
-        { text: "0 6 * * 1  clippy --headless --profile theflood --json >> /var/log/clippy.log 2>&1", cls:"out" },
+        { text: "# --credits-file is optional; omitted it still writes <output-dir>/credits.md.", cls:"out" },
+        { text: "0 6 * * 1  clippy --headless --profile theflood --json --credits-file output/credits.md >> /var/log/clippy.log 2>&1", cls:"out" },
       ]},
     ]
   },

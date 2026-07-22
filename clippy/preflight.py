@@ -32,18 +32,30 @@ def _binary_available(path: str) -> bool:
     return shutil.which(path) is not None
 
 
+#: Where to point someone who needs to install a binary by hand.
+_BINARY_SOURCE = {
+    "ffmpeg": "https://ffmpeg.org/download.html",
+    "ffprobe": "https://ffmpeg.org/download.html",
+    "yt-dlp": "https://github.com/yt-dlp/yt-dlp",
+}
+
+
 def _check_binaries() -> List[Issue]:
     from clippy import config as _cfg
 
     issues: List[Issue] = []
-    for name, path in (("ffmpeg", _cfg.ffmpeg), ("ffprobe", _cfg.ffprobe)):
+    for name, path in (
+        ("ffmpeg", _cfg.ffmpeg),
+        ("ffprobe", _cfg.ffprobe),
+        ("yt-dlp", _cfg.youtubeDl),
+    ):
         if not _binary_available(path):
             issues.append(
                 Issue(
                     "error",
                     f"{name} not found ({path!r})",
                     f"Run 'clippy deps' to download {name} into ./bin, or install it yourself "
-                    "and put it on your PATH. Source: https://ffmpeg.org/download.html",
+                    f"and put it on your PATH. Source: {_BINARY_SOURCE[name]}",
                 )
             )
     if not issues and _cfg.ffmpeg:

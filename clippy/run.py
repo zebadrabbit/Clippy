@@ -822,6 +822,18 @@ def run_pipeline(comps, args, window):
             "version": CLIPPY_VERSION,
             "files": finals,
         }
+    # Write the paste-ready credits file — always written, same precedent as
+    # manifest.json, defaulting into output/ unless --credits-file overrides it.
+    try:
+        from clippy.naming import build_credits_text
+
+        _credits_path = getattr(args, "credits_file", None) or os.path.join(output, "credits.md")
+        with open(_credits_path, "w", encoding="utf-8") as f:
+            f.write(build_credits_text(comps))
+        manifest["credits_file"] = _credits_path
+        log("Wrote credits: " + _credits_path.replace("\\", "/"), 1)
+    except (OSError, TypeError, ValueError) as e:
+        log("WARN Failed to write credits file: " + str(e), 2)
     log("Done", 2)
     return manifest
 
@@ -997,6 +1009,7 @@ def _emit_json(result: Optional[dict], code: int) -> None:
         "broadcaster": (result or {}).get("broadcaster"),
         "window": (result or {}).get("window"),
         "compilations": len((result or {}).get("files", []) or []),
+        "credits_file": (result or {}).get("credits_file"),
         "version": CLIPPY_VERSION,
     }
     print(_json.dumps(payload, indent=2))

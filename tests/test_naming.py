@@ -12,7 +12,19 @@ import time
 import pytest
 
 import clippy.config as cfg
-from clippy.naming import ensure_unique_names, finalize_outputs, sanitize_filename
+from clippy.models import ClipRow
+from clippy.naming import (
+    build_credits_text,
+    ensure_unique_names,
+    finalize_outputs,
+    sanitize_filename,
+)
+
+
+def _clip(id: str, title: str = "", author: str = "") -> ClipRow:
+    return ClipRow(
+        id=id, created_ts=0.0, author=author, avatar_url="", view_count=0, url="", title=title
+    )
 
 
 class TestSanitizeFilename:
@@ -24,6 +36,47 @@ class TestSanitizeFilename:
 
     def test_truncates_to_80_chars(self):
         assert len(sanitize_filename("x" * 200)) == 80
+
+
+class TestBuildCreditsText:
+    def test_single_compilation_has_no_part_header(self):
+        text = build_credits_text([[_clip("c1", "Title", "Author")]])
+        assert "Part 1" not in text
+        assert "Title — clipped by Author" in text
+
+    def test_multiple_compilations_get_part_headers(self):
+        text = build_credits_text(
+            [[_clip("c1", "Title A", "Author")], [_clip("c2", "Title B", "Author")]]
+        )
+        assert "Part 1" in text
+        assert "Part 2" in text
+        # Part 1's block comes before Part 2's
+        assert text.index("Part 1") < text.index("Title A") < text.index("Part 2")
+
+    def test_an_author_with_several_clips_is_grouped(self):
+        text = build_credits_text(
+            [[_clip("c1", "First", "Author"), _clip("c2", "Second", "Author")]]
+        )
+        assert "First — clipped by Author" in text
+        assert "Second — clipped by Author" in text
+
+    def test_missing_author_falls_back_to_unknown(self):
+        text = build_credits_text([[_clip("c1", "Title", "")]])
+        assert "Title — clipped by Unknown" in text
+
+    def test_missing_title_falls_back_to_clip_id(self):
+        text = build_credits_text([[_clip("c1", "", "Author")]])
+        assert "c1 — clipped by Author" in text
+
+    def test_contributors_line_lists_unique_authors(self):
+        text = build_credits_text([[_clip("c1", "A", "Streamer1"), _clip("c2", "B", "Streamer2")]])
+        assert "Contributors" in text
+        assert "Streamer1, Streamer2" in text
+
+    def test_ends_with_a_single_trailing_newline(self):
+        text = build_credits_text([[_clip("c1", "Title", "Author")]])
+        assert text.endswith("\n")
+        assert not text.endswith("\n\n")
 
 
 class TestEnsureUniqueNames:

@@ -92,6 +92,17 @@ class TestJsonOutput:
         assert doc["files"] == self.MANIFEST["files"]
         assert doc["compilations"] == 2
 
+    def test_reports_the_credits_file_when_present(self, monkeypatch):
+        manifest = dict(self.MANIFEST, credits_file="output/credits.md")
+        code, out = _console(monkeypatch, ["--json"], lambda: manifest)
+        doc = json.loads(out)
+        assert doc["credits_file"] == "output/credits.md"
+
+    def test_credits_file_is_null_when_absent(self, monkeypatch):
+        code, out = _console(monkeypatch, ["--json"], lambda: self.MANIFEST)
+        doc = json.loads(out)
+        assert doc["credits_file"] is None
+
     def test_a_failure_still_produces_a_document(self, monkeypatch):
         """One shape to parse, whatever happened."""
 

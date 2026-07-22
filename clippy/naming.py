@@ -7,6 +7,8 @@ import time
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
+from clippy.models import ClipRow
+
 
 def sanitize_filename(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", s)[:80]
@@ -43,6 +45,36 @@ def ensure_unique_names(base_names: List[str], out_dir: str, overwrite: bool) ->
                 break
             k += 1
     return result
+
+
+def build_credits_text(comps: List[List[ClipRow]]) -> str:
+    """Plain, paste-ready "Title — clipped by Author" credits.
+
+    Grouped by compilation part (only labeled when there's more than one),
+    then a unique-contributors line — same shape as the TUI's "copy for
+    YouTube description" summary screen, since that's exactly what this is
+    for: paste straight into a description box, no markdown to strip first.
+    """
+    lines: List[str] = []
+    for i, comp in enumerate(comps):
+        if len(comps) > 1:
+            lines.append(f"Part {i + 1}")
+        seen_authors: dict[str, list[str]] = {}
+        for clip in comp:
+            title = clip.title or clip.id
+            author = clip.author or "Unknown"
+            seen_authors.setdefault(author, []).append(title)
+        for author, titles in seen_authors.items():
+            for title in titles:
+                lines.append(f"{title} — clipped by {author}")
+        lines.append("")
+
+    all_authors = sorted({c.author for comp in comps for c in comp if c.author})
+    if all_authors:
+        lines.append("Contributors")
+        lines.append(", ".join(all_authors))
+
+    return "\n".join(lines).rstrip("\n") + "\n"
 
 
 def finalize_outputs(
