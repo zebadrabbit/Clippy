@@ -68,7 +68,7 @@ swap it out any time for your own branding.
 Grab the wheel from the [latest release](https://github.com/zebadrabbit/Clippy/releases/latest):
 
 ```powershell
-pip install https://github.com/zebadrabbit/Clippy/releases/latest/download/clippy-0.6.0-py3-none-any.whl
+pip install https://github.com/zebadrabbit/Clippy/releases/latest/download/clippy-0.8.0-py3-none-any.whl
 ```
 
 Add the TUI with `pip install "clippy[tui] @ <url>"`, or install the extras separately

@@ -1088,10 +1088,6 @@ def console_main(argv: Optional[list[str]] = None) -> None:
         )
 
         _load_env_if_present()
-        if not is_windows():
-            log("Automatic download is Windows-only.", 2)
-            log(advice(), 1)
-            return
         explicit = [a for a in args[1:] if not a.startswith("-")]
         if explicit:
             wanted_tools = [a for a in explicit if a in ("ffmpeg", "yt-dlp")]
@@ -1099,6 +1095,13 @@ def console_main(argv: Optional[list[str]] = None) -> None:
         else:
             wanted_tools = missing_tools()
             wanted_assets = missing_assets()
+        if wanted_tools and not is_windows():
+            # The tool downloads are Windows builds; assets are portable.
+            log("The ffmpeg/yt-dlp downloads are Windows-only builds.", 2)
+            log(advice(), 1)
+            wanted_tools = []
+            if not wanted_assets:
+                return
         if not wanted_tools and not wanted_assets:
             log("ffmpeg, yt-dlp and static.mp4 are already available.", 1)
             return

@@ -69,6 +69,11 @@ jobs:
             echo "Tag $GITHUB_REF_NAME does not match clippy.__version__ ($pkg)" >&2
             exit 1
           fi
+          # The README links the wheel by exact filename; a stale link 404s.
+          if ! grep -q "clippy-$pkg-py3-none-any.whl" README.md; then
+            echo "README.md still links a stale wheel — update it to clippy-$pkg-py3-none-any.whl" >&2
+            exit 1
+          fi
 
       - name: Fetch the Windows executable
         uses: actions/download-artifact@v4

@@ -48,6 +48,22 @@ def test_missing_ytdlp_is_error(monkeypatch):
     assert yd and yd[0].level == "error"
 
 
+def test_hw_encoder_present_is_not_warned(monkeypatch):
+    # AMF/QSV count as hardware encoders too — not just NVENC (v0.8.0).
+    monkeypatch.setattr(preflight, "_binary_available", lambda p: True)
+    monkeypatch.setattr("clippy.ffmpeg.detect_encoder", lambda ff: "h264_amf")
+    issues = preflight.run_preflight(require_credentials=False, require_transitions=False)
+    assert not any("libx264" in i.title for i in issues)
+
+
+def test_no_hw_encoder_warns_cpu_fallback(monkeypatch):
+    monkeypatch.setattr(preflight, "_binary_available", lambda p: True)
+    monkeypatch.setattr("clippy.ffmpeg.detect_encoder", lambda ff: "libx264")
+    issues = preflight.run_preflight(require_credentials=False, require_transitions=False)
+    warn = [i for i in issues if "libx264" in i.title]
+    assert warn and warn[0].level == "warning"
+
+
 def test_missing_static_transition(monkeypatch, tmp_path):
     monkeypatch.setattr("clippy.utils.resolve_transitions_dir", lambda: str(tmp_path))
     issues = preflight.run_preflight(require_credentials=False)
