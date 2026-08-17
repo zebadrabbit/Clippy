@@ -19,7 +19,9 @@ Usage (migration shim)::
 from __future__ import annotations
 
 import logging
+import logging.handlers
 import os
+import re
 import sys
 from typing import Optional
 
@@ -165,6 +167,42 @@ class ClippyFormatter(logging.Formatter):
 _logger: Optional[logging.Logger] = None
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+class _PlainFormatter(logging.Formatter):
+    """Timestamped, ANSI-free — some callers pass pre-styled messages."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return _ANSI_RE.sub("", super().format(record))
+
+
+def _add_file_handler(logger: logging.Logger) -> None:
+    """Attach the always-on DEBUG log file (``<cache>/clippy.log``).
+
+    ``CLIPPY_LOG_FILE`` overrides the path; set it empty to disable.
+    """
+    path = os.environ.get("CLIPPY_LOG_FILE")
+    if path is None:
+        try:
+            from clippy.config import cache
+        except Exception:  # config may not be importable yet
+            cache = "./cache"
+        path = os.path.join(cache, "clippy.log")
+    if not path.strip():
+        return
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        fh = logging.handlers.RotatingFileHandler(
+            path, maxBytes=4_000_000, backupCount=1, encoding="utf-8", delay=True
+        )
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(_PlainFormatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s"))
+        logger.addHandler(fh)
+    except OSError:  # read-only cache dir must not kill the run
+        pass
+
+
 def setup_logging(level: int = logging.INFO) -> logging.Logger:
     """Configure the ``clippy`` logger. Called once at startup."""
     global _logger
@@ -173,7 +211,9 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
         # Already configured
         _logger = logger
         return logger
-    logger.setLevel(level)
+    # DEBUG on the logger so the file handler sees everything; the console
+    # handler filters back down to `level` so terminal output is unchanged.
+    logger.setLevel(min(level, logging.DEBUG))
     # Force UTF-8 on Windows to avoid cp1252 encoding errors with Unicode symbols
     if hasattr(sys.stdout, "reconfigure"):
         try:
@@ -181,8 +221,10 @@ def setup_logging(level: int = logging.INFO) -> logging.Logger:
         except Exception:  # reconfigure may not be supported on all streams
             pass
     handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(level)
     handler.setFormatter(ClippyFormatter())
     logger.addHandler(handler)
+    _add_file_handler(logger)
     logger.propagate = False
     _logger = logger
     return logger

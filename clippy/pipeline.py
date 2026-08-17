@@ -617,7 +617,7 @@ def download_avatar(clip: ClipRow, quiet: bool = False) -> int:
     url = clip.avatar_url or "https://static-cdn.jtvnw.net/jtv_user_pictures/x.png"
     if not quiet:
         log(f"Avatar: {url}", 1)
-    resp = requests.get(url)
+    resp = requests.get(url, timeout=15)  # no timeout = a hung CDN hangs the run
     if resp.status_code >= 400:
         log("Avatar fetch failed; using placeholder", 2)
         return 1
@@ -644,6 +644,7 @@ def download_clip(clip: ClipRow, quiet: bool = False) -> int:
     cmd = youtubeDl + " " + replace_vars(youtubeDlOptions, clip) + " " + clip.url
     if SHUTDOWN_EVENT.is_set():
         return 1
+    t0 = time.time()
     rc, err = run_proc_cancellable(cmd, prefer_shell=False)
     if rc != 0:
         # Decode error for inspection
@@ -651,6 +652,15 @@ def download_clip(clip: ClipRow, quiet: bool = False) -> int:
             err.decode("utf-8", errors="ignore")
             if isinstance(err, (bytes, bytearray))
             else str(err)
+        )
+        # Always to clippy.log: the pipeline calls this with quiet=True, so the
+        # console path below is dead where it matters most.
+        logger.debug(
+            "yt-dlp rc=%s after %.1fs\ncmd: %s\n%s",
+            rc,
+            time.time() - t0,
+            cmd,
+            err_txt,
         )
         if not quiet:
             log("Clip download error", 5)

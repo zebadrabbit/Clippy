@@ -261,6 +261,7 @@ class ProgressScreen(Screen):
                 # one place and repeated lines can be collapsed.
                 self_ctx._handler = _TuiLogHandler(screen._log)
                 self_ctx._handler.setFormatter(logging.Formatter("%(message)s"))
+                self_ctx._handler.setLevel(logging.INFO)  # DEBUG is for clippy.log only
                 clippy_logger = logging.getLogger("clippy")
                 clippy_logger.addHandler(self_ctx._handler)
 
@@ -269,7 +270,11 @@ class ProgressScreen(Screen):
                 # AND TUI handler → RichLog)
                 self_ctx._disabled_handlers = []
                 for h in clippy_logger.handlers:
-                    if h is not self_ctx._handler and isinstance(h, logging.StreamHandler):
+                    if (
+                        h is not self_ctx._handler
+                        and isinstance(h, logging.StreamHandler)
+                        and not isinstance(h, logging.FileHandler)  # keep clippy.log writing
+                    ):
                         h.setLevel(logging.CRITICAL + 1)
                         self_ctx._disabled_handlers.append(h)
 
