@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import time
+
 import clippy.config as cfg
 from clippy import preflight
 
@@ -88,3 +91,37 @@ def test_report_returns_true_on_error(monkeypatch):
 def test_report_returns_false_when_only_warnings():
     issues = [preflight.Issue("warning", "heads up", "optional fix")]
     assert preflight.report(issues, log=lambda msg, level=0: None) is False
+
+
+def test_ytdlp_age_warns_when_stale(tmp_path, monkeypatch):
+    """A stale yt-dlp is the usual cause of confusing download failures."""
+    from clippy import preflight
+
+    binary = tmp_path / "yt-dlp.exe"
+    binary.write_text("x")
+    old = time.time() - 400 * 86400
+    os.utime(binary, (old, old))
+    monkeypatch.setattr("clippy.config.youtubeDl", str(binary))
+
+    issues = preflight._check_ytdlp_age()
+    assert len(issues) == 1
+    assert issues[0].level == "warning"
+    assert "400 days ago" in issues[0].title
+    assert "clippy deps yt-dlp" in issues[0].fix
+
+
+def test_ytdlp_age_quiet_when_fresh(tmp_path, monkeypatch):
+    from clippy import preflight
+
+    binary = tmp_path / "yt-dlp.exe"
+    binary.write_text("x")
+    monkeypatch.setattr("clippy.config.youtubeDl", str(binary))
+    assert preflight._check_ytdlp_age() == []
+
+
+def test_ytdlp_age_quiet_when_missing(monkeypatch):
+    """Absence is _check_binaries' job; don't double-report it."""
+    from clippy import preflight
+
+    monkeypatch.setattr("clippy.config.youtubeDl", "no-such-binary-anywhere")
+    assert preflight._check_ytdlp_age() == []

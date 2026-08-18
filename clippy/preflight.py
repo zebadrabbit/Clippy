@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import time
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -70,7 +71,41 @@ def _check_binaries() -> List[Issue]:
                     "hardware encoder enabled. Use --preset cpu_only to make it explicit.",
                 )
             )
+    issues += _check_ytdlp_age()
     return issues
+
+
+#: Warn once yt-dlp is this old. It ships roughly monthly and its extractors rot
+#: as sites change their APIs; a stale build fails with opaque errors, not "I'm old".
+_YTDLP_STALE_DAYS = 90
+
+
+def _check_ytdlp_age() -> List[Issue]:
+    """Warn about a stale yt-dlp — the usual cause of confusing download failures."""
+    from clippy import config as _cfg
+
+    path = _cfg.youtubeDl
+    if not path:
+        return []
+    if not (os.path.isabs(path) or os.sep in path):
+        path = shutil.which(path) or ""
+    try:
+        # ponytail: mtime, not `yt-dlp --version` — a subprocess on every run to
+        # produce a warning isn't worth it. Swap if the install date drifts from
+        # the release date in practice.
+        age = int((time.time() - os.path.getmtime(path)) / 86400)
+    except OSError:
+        return []
+    if age < _YTDLP_STALE_DAYS:
+        return []
+    return [
+        Issue(
+            "warning",
+            f"yt-dlp was installed {age} days ago — stale builds break on Twitch",
+            "Run 'clippy deps yt-dlp' to update. Symptom of an out-of-date build is a "
+            'fast-failing download with "An extractor error has occurred", not a timeout.',
+        )
+    ]
 
 
 def _check_credentials(discord_mode: bool) -> List[Issue]:
